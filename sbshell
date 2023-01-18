@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "Invoking root shell on $1."
+sbexecute --sandbox=$1 --shell --root

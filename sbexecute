@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+# BSD-3-Clause
+#
+# Sandbox Invocation Script - Copyright 2022-2023 Xavier (sapphirus@azorium.net)
+#
+# Redistribution and use in source and binary forms, with or without modification, 
+# are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice, 
+#  this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice, 
+#  this list of conditions and the following disclaimer in the documentation 
+#  and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors 
+#  may be used to endorse or promote products derived from this software without 
+#  specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
+# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+main () {
+	
+	parse_args "$@"
+
+	if [[ $SANDBOX == "" ]]; then
+		echo "Sandbox not specified."
+		exit 1
+	fi
+
+	INSTANCE_USER=user
+	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
+	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
+
+	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] || [[ ! -d $SANDBOX_BASE ]]; then
+		echo "Sandbox not found."
+		exit 1
+	fi
+
+	if [[ $SWITCH == *r* ]]; then
+		SANDBOX=fakeroot
+	fi
+
+	SANDBOX_SCRIPT="$XDG_DATA_HOME/sbscripts/$SANDBOX.sh"
+
+
+	if [[ ! -f $SANDBOX_SCRIPT ]]; then
+		echo "Script $SANDBOX_SCRIPT not found."
+		exit 1
+	fi
+	
+	case $SWITCH in 
+		ep)
+			nvim "$INSTANCE_ROOT/etc/pacman.conf"
+			;;
+		*rc*|*cr*) 
+			execute_sandbox fakeroot "${ARGS[@]}"	
+			;;		
+		*rs*|*sr*)	
+			execute_sandbox fakeroot bash
+			;;
+		s)
+			execute_sandbox bash			
+			;;
+		*)
+			execute_sandbox "${ARGS[@]}"	
+			;;
+	esac
+}
+
+parse_args () {
+	ARGS=()
+	for var in "$@"; do
+		case $var in 
+			--sandbox=*)	
+				SANDBOX=`echo $var | cut -c 11-`
+				;;
+			--root|-r)
+				SWITCH=r$SWITCH
+				;;
+			-s|--shell)
+				SWITCH=s$SWITCH
+				;;
+			--pacman)
+				SWITCH=p$SWITCH
+				;;
+			--exec)
+				SWITCH=rc$SWITCH
+				;;
+			--edit-pacman|-ep)
+				SWITCH=ep
+				;;
+			*)
+				ARGS+=("$var")
+				;;
+		esac
+	done
+}
+
+execute_sandbox () {
+	source $SANDBOX_SCRIPT
+}
+
+main $@

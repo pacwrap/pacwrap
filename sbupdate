@@ -1,0 +1,218 @@
+#!/bin/bash
+#
+# BSD-3-Clause
+#
+# Sandbox Update - Copyright 2022-2023 Xavier (sapphirus@azorium.net)
+#
+# Redistribution and use in source and binary forms, with or without modification, 
+# are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice, 
+#  this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice, 
+#  this list of conditions and the following disclaimer in the documentation 
+#  and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors 
+#  may be used to endorse or promote products derived from this software without 
+#  specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
+# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+SANDBOX_ROOT=$SANDBOX_BASE/root
+
+BOLD=$(tput bold)
+RED=$(tput setaf 1)
+RESET=$(tput sgr0)
+BAR="$BOLD$RED::$RESET$BOLD"
+PARAMS="--root --exec --sandbox="
+
+main () {
+	if [[ ! -d $SANDBOX_ROOT ]]; then
+		echo "$BOLD$RED Sandbox root is either missing or an environmental variable is misconfigured." 
+		exit
+	fi	
+	
+	BASE_LINK_LIST=$SANDBOX_BASE/hldb/list	
+
+	local list=$@
+	if [[ ! $list ]]; then
+		list=`ls -1F $SANDBOX_ROOT | grep -i "/" | tr -d "/"` 
+	fi
+
+	update $list
+
+	if [ ! "$(query_confirm "Invoke update on base dependency")" ]; then
+		invoke_update base	
+		update_base $list
+		update_link_db
+		update_link $list
+	fi
+
+}
+
+log () {
+	echo -e "$BAR $@ $RESET"
+	
+}
+
+update_link_db() {
+	local dir=$PWD
+	local source=$SANDBOX_BASE/root/base
+	local target=$SANDBOX_BASE/hldb/base
+
+	log "Synchronizing base link database..."
+
+	link_update $source/usr/share /tmp/usr/ > $target/share
+	link_update $source/usr/bin  /tmp/usr/ > $target/bin
+	link_update $source/usr/lib  /tmp/usr/ > $target/lib
+	
+	cd $target
+	
+	sha256sum lib > $target/lib.sha256
+	sha256sum bin > $target/bin.sha256
+	sha256sum share > $target/share.sha256
+	
+	cd $dir	
+}
+
+invoke_link() {
+	local dir=$PWD
+	local source=$1
+	local target=$2
+	
+	log "Synchronizing links for $2 in $3 sandbox..."
+	
+	link_create $source/usr/$target $root/usr/ $root > $link/$target
+	cd $link
+	sha256sum $target > $link/$target.sha256
+	cd $dir
+}
+
+link_update() {
+	local source=$source
+	parse_file_list $(rsync -av --dry-run --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
+}
+
+link_create() {
+	local source=$source
+	parse_file_list $(rsync -av --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
+}
+
+parse_file_list() {
+	local files=$@
+
+	for f in ${files[@]}; do
+		local file=${f%->*} 
+		local filepath=$source/usr/$file
+		if [[ -f $filepath ]] || [[ -L $filepath ]]; then
+			echo $file
+		fi
+	done
+}
+
+parse_delete_list() {
+	local fail=$1
+	local files=$(cat $link/$fail)
+	
+	for f in ${files[@]}; do
+		local file=${f%->*} 
+		local filepath=$root/usr/$file
+		if [[ -f $filepath ]] || [[ -L $filepath ]]; then
+			echo $filepath
+		fi
+	done	
+}
+
+checksum_link_files() {
+	local dir=$PWD
+	cd $link
+	local linkfiles=$(ls *.sha256)
+	for file in $linkfiles; do
+		$(cat $SANDBOX_BASE/hldb/base/$file | sha256sum --check --status);
+		local return=$?
+		if [[ $return == 1 ]]; then
+			echo -e "${file%.*} "
+		fi
+	done
+	cd $dir
+}
+
+update_link() {	
+	for sandbox in "$@"; do				
+		root=$SANDBOX_BASE/root/$sandbox
+		link=$SANDBOX_BASE/hldb/$sandbox
+
+		checksum_fail_list=$(checksum_link_files);
+
+		if [[ $checksum_fail_list == "" ]]; then
+			log "Link database is up-to-date for $sandbox sandbox!"
+			continue
+		fi
+
+		log "Preparing to resynchronize $sandbox's filesystem..."
+
+		for item in ${checksum_fail_list[@]}; do	
+			local files=`parse_delete_list $item`
+			#for file in $files; do
+				rm -f $files
+			#done
+		done
+
+		for item in ${checksum_fail_list[@]}; do
+			invoke_link $SANDBOX_BASE/root/base $item $sandbox
+		done
+
+	done
+}
+
+update_base() {
+	for var in "$@"; do				
+		([[ $var == *.* ]] || [[ $var == "base" ]]) && continue 		 
+		invoke_update $var --config=/etc/pacman.base.conf
+	done
+}
+
+
+update () {		
+	for var in "$@"; do				
+		([[ $var == *.* ]] || [[ $var == "base" ]]) && continue 		 
+		invoke_update $var
+	done
+	PACMAN_SYNC=1	
+}
+
+invoke_update() {
+	if [[ ! $PACMAN_SYNC ]]; then
+		sbexecute $PARAMS$1 pacman -Sy
+	fi
+	local result=$(sbexecute pacman -Qu $PARAMS$@)
+	if [[ ! $result ]]; then
+		log "Packages are up-to-date for $1 sandbox!"
+	 	return
+	fi	
+	echo -e "$BAR Packages to be installed or upgraded: $RESET \n\n$result\n"
+	[ "$(query_confirm "Confirm update on sandbox $var")" != "" ] && return
+	sbexecute pacman -Su $PARAMS$@ --noconfirm 2>/dev/null	 
+}
+
+query_confirm () {
+	read -rp "$BAR $@ [Y/n]$RESET " input
+	if [[ "$input" != "Y" ]] && 
+	   [[ "$input" != "y" ]] &&
+           [[ "$input" != "" ]]; then
+		echo 0
+	fi
+}
+
+main $@

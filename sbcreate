@@ -1,0 +1,170 @@
+#!/bin/bash
+#
+# BSD-3-Clause
+#
+# Sandbox Creation Utility Script (SBCreate) Copyright 2023 Xavier (sapphirus@azorium.net)
+#
+# Redistribution and use in source and binary forms, with or without modification, 
+# are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice, 
+#  this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice, 
+#  this list of conditions and the following disclaimer in the documentation 
+#  and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors 
+#  may be used to endorse or promote products derived from this software without 
+#  specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
+# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+main () {	
+
+	parse_args "$@"
+
+	if [[ $SANDBOX == "" ]]; then
+		echo "Sandbox not specified."
+		exit 1;
+	fi
+
+	PACMAN_CONFIG=pacman.base.conf
+	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
+	BASE_ROOT=$SANDBOX_BASE/root/base
+	INSTANCE_LINK=$SANDBOX_BASE/hldb/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
+	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
+
+	if [[ $SANDBOX == "base" ]]; then
+		PACMAN_CONFIG=pacman.conf
+	fi
+
+
+
+	if [[ -d $INSTANCE_ROOT ]] || [[ -d $INSTANCE_HOME ]]; then 
+		echo "Root or home directory for $SANDBOX exists. Aborting." 
+		exit 1
+	fi
+
+	echo "Pre-initialising structures.."
+
+	PARAMS="--sandbox=$SANDBOX --root --exec"
+	init_struct
+
+	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then 
+		echo "Directory creation failed." 
+		exit 1
+	fi
+
+	echo "Initialising chroot.."
+
+	init_chroot
+
+	if [[ $SANDBOX != "base" ]]; then
+	
+	echo "Initialising linker and link database.."
+
+	init_link	
+
+	fi
+
+	echo "Finalising chroot.."
+
+	finalise
+
+	echo "Cleaning up.."
+
+	cleanup
+
+	echo "Process complete! Use sbexecute to configure $SANDBOX."
+}
+
+
+init_struct () {
+	mkdir -p $INSTANCE_ROOT $INSTANCE_HOME \
+		$INSTANCE_ROOT/etc \
+		$INSTANCE_ROOT/var/lib/pacman \
+		$INSTANCE_ROOT/etc/pacman.d/
+	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
+	cp $SANDBOX_BASE/etc/pacman.base.conf $INSTANCE_ROOT/etc/pacman.base.conf
+	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	echo "en_CA.UTF-8 UTF-8" > $INSTANCE_ROOT/etc/locale.gen
+	echo "LANG=en_CA.UTF-8" > $INSTANCE_ROOT/etc/locale.conf
+	echo 'PS1="'$SANDBOX'> "' > $INSTANCE_HOME/.bashrc
+	cp $XDG_DATA_HOME/sbscripts/template $XDG_DATA_HOME/sbscripts/$SANDBOX
+	echo "$MACHINE_ID" > $INSTANCE_ROOT/etc/machine-id
+	mkdir -p $INSTANCE_LINK
+}
+
+init_chroot () {	
+	fakechroot fakeroot pacman -Syu \
+   	--root $INSTANCE_ROOT \
+    	--dbpath $INSTANCE_ROOT/var/lib/pacman \
+    	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
+	--cache /var/lib/cache/pacman/pkg \
+    	base --noconfirm 2>/dev/null
+}
+
+init_link() {
+	link_create "$BASE_ROOT/usr/lib" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/lib
+	link_create "$BASE_ROOT/usr/bin" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/bin
+	link_create "$BASE_ROOT/usr/share" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/share
+	local dir=$PWD
+	cd $INSTANCE_LINK
+	sha256sum lib > $INSTANCE_LINK/lib.sha256
+	sha256sum bin > $INSTANCE_LINK/bin.sha256
+	sha256sum share > $INSTANCE_LINK/share.sha256
+	cd $dir
+}
+
+
+link_create() {
+	local files=$(rsync -av --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
+	for f in $files; do
+		local file=${f%->*}
+		local filepath=$BASE_ROOT/usr/$file
+		if [[ -f $filepath ]] || [[ -L $filepath ]]; then
+			echo $file
+		fi
+	done
+}
+
+finalise () {
+	sbexecute $PARAMS pacman-key --init
+	sbexecute $PARAMS pacman-key --populate
+	sbexecute $PARAMS locale-gen
+	sbexecute $PARAMS update-ca-trust
+}
+
+cleanup () {
+	rm -v -r \
+	$INSTANCE_ROOT/boot \
+	$INSTANCE_ROOT/mnt \
+	$INSTANCE_ROOT/root \
+	$INSTANCE_ROOT/srv \
+	$INSTANCE_ROOT/sys \
+	$INSTANCE_ROOT/opt \
+	$INSTANCE_ROOT/run \
+	$INSTANCE_ROOT/dev
+}
+
+parse_args () {
+	ArGS=()
+	for var in "$@"; do
+		if [[ "$var" != *-* ]]; then 
+			SANDBOX=$var
+		fi
+	done
+}
+
+main $@
