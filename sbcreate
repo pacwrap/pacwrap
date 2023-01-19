@@ -68,9 +68,7 @@ main () {
 
 		init_link	
 
-		echo "Cleaning up pacman db.."
 
-		cleanup_db
 
 	fi
 
@@ -126,7 +124,6 @@ init_struct () {
 	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
 	cp $SANDBOX_BASE/etc/pacman.base.conf $INSTANCE_ROOT/etc/pacman.base.conf
 	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
-	
 	echo "en_CA.UTF-8 UTF-8" > $INSTANCE_ROOT/etc/locale.gen
 	echo "LANG=en_CA.UTF-8" > $INSTANCE_ROOT/etc/locale.conf
 	echo 'PS1="'$SANDBOX'> "' > $INSTANCE_HOME/.bashrc
@@ -142,18 +139,22 @@ init_chroot () {
     	--dbpath $INSTANCE_ROOT/var/lib/pacman \
     	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
 	--cache /var/lib/cache/pacman/pkg \
-    	base --noconfirm 2>/dev/null
+    	base lib32-glibc --noconfirm 2>/dev/null
 }
 
 init_link() {
 	link_create "$BASE_ROOT/usr/lib" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_lib
+	link_create "$BASE_ROOT/usr/lib32" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_lib32
 	link_create "$BASE_ROOT/usr/bin" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_bin
 	link_create "$BASE_ROOT/usr/share" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_share
+	
 	local dir=$PWD
 	cd $INSTANCE_LINK
 	sha256sum base_lib > $INSTANCE_LINK/base_lib.sha256
 	sha256sum base_bin > $INSTANCE_LINK/base_bin.sha256
 	sha256sum base_share > $INSTANCE_LINK/base_share.sha256
+	sha256sum base_lib32 > $INSTANCE_LINK/base_lib32.sha256
+
 	cd $dir
 }
 
@@ -172,16 +173,12 @@ link_create() {
 	done
 }
 
-
-cleanup_db() {
-	sbexecute $PARAMS pacman -Rsc base --dbonly
-}
-
 finalise () {
 	sbexecute $PARAMS pacman-key --init
 	sbexecute $PARAMS pacman-key --populate
 	sbexecute $PARAMS locale-gen
 	sbexecute $PARAMS update-ca-trust
+	mkdir -p /usr/lib32/
 }
 
 cleanup () {
@@ -193,8 +190,7 @@ cleanup () {
 	$INSTANCE_ROOT/sys \
 	$INSTANCE_ROOT/opt \
 	$INSTANCE_ROOT/run \
-	$INSTANCE_ROOT/dev \
-	$INSTANCE_ROOT/etc/pacman.base.conf
+	$INSTANCE_ROOT/dev
 }
 
 main $@

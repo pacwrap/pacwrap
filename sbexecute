@@ -45,11 +45,13 @@ main () {
 		exit 1
 	fi
 
-	if [[ $SWITCH == *r* ]]; then
-		SANDBOX=fakeroot
+	local sandbox=$SANDBOX
+	if [[ $SWITCH == *r* ]] || [[ $SWITCH == *ep* ]]; then
+		sandbox=fakeroot
+		
 	fi
 
-	SANDBOX_SCRIPT="$XDG_DATA_HOME/sbscripts/$SANDBOX.sh"
+	SANDBOX_SCRIPT="$XDG_DATA_HOME/sbscripts/$sandbox.sh"
 
 
 	if [[ ! -f $SANDBOX_SCRIPT ]]; then
@@ -58,12 +60,15 @@ main () {
 	fi
 	
 	case $SWITCH in 
-		ep)
+		*ep*)
 			nvim "$INSTANCE_ROOT/etc/pacman.conf"
 			;;
 		*rc*|*cr*) 
 			execute_sandbox fakeroot "${ARGS[@]}"	
 			;;		
+		*rp*|*pr*) 
+			execute_sandbox fakeroot pacman ${ARGS[@]} $(cat $SANDBOX_BASE/etc/db/$SANDBOX/vpkgs)
+			;;	
 		*rs*|*sr*)	
 			execute_sandbox fakeroot bash
 			;;
@@ -107,13 +112,13 @@ parse_args () {
 				SWITCH=d$SWITCH
 				;;	
 			--pacman)
-				SWITCH=p$SWITCH
+				SWITCH=rp$SWITCH
 				;;
 			--exec)
 				SWITCH=rc$SWITCH
 				;;
 			--edit-pacman|-ep)
-				SWITCH=ep
+				SWITCH=ep$SWITCH
 				;;
 			*)
 				ARGS+=("$var")
