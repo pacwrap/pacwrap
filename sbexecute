@@ -38,10 +38,7 @@ main () {
 		exit 1
 	fi
 
-	INSTANCE_USER=user
-	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
-	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
-	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
+	init_vars
 
 	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] || [[ ! -d $SANDBOX_BASE ]]; then
 		echo "Sandbox not found."
@@ -79,6 +76,20 @@ main () {
 	esac
 }
 
+init_vars () {
+	INSTANCE_USER=user
+	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
+	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
+
+	if [[ $SWITCH == *d* ]]; then
+		INSTANCE_ROOT=$SANDBOX_BASE/deps/root/$SANDBOX
+		INSTANCE_HOME=$SANDBOX_BASE/deps/home/$SANDBOX
+	
+	fi	
+}
+
+
 parse_args () {
 	ARGS=()
 	for var in "$@"; do
@@ -86,12 +97,15 @@ parse_args () {
 			--sandbox=*)	
 				SANDBOX=`echo $var | cut -c 11-`
 				;;
-			--root|-r)
+			--root)
 				SWITCH=r$SWITCH
 				;;
-			-s|--shell)
+			--shell)
 				SWITCH=s$SWITCH
 				;;
+			--dep)
+				SWITCH=d$SWITCH
+				;;	
 			--pacman)
 				SWITCH=p$SWITCH
 				;;

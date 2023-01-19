@@ -29,27 +29,20 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
+	
+BASE_ROOT=$SANDBOX_BASE/deps/root/base
+
 main () {	
 
 	parse_args "$@"
 
-	if [[ $SANDBOX == "" ]]; then
+	if [[ ! $SANDBOX ]]; then
 		echo "Sandbox not specified."
 		exit 1;
 	fi
 
-	PACMAN_CONFIG=pacman.base.conf
-	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
-	BASE_ROOT=$SANDBOX_BASE/root/base
-	INSTANCE_LINK=$SANDBOX_BASE/hldb/$SANDBOX
-	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
-	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
-
-	if [[ $SANDBOX == "base" ]]; then
-		PACMAN_CONFIG=pacman.conf
-	fi
-
-
+	init_vars
 
 	if [[ -d $INSTANCE_ROOT ]] || [[ -d $INSTANCE_HOME ]]; then 
 		echo "Root or home directory for $SANDBOX exists. Aborting." 
@@ -57,8 +50,7 @@ main () {
 	fi
 
 	echo "Pre-initialising structures.."
-
-	PARAMS="--sandbox=$SANDBOX --root --exec"
+	
 	init_struct
 
 	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then 
@@ -72,9 +64,13 @@ main () {
 
 	if [[ $SANDBOX != "base" ]]; then
 	
-	echo "Initialising linker and link database.."
+		echo "Initialising linker and link database.."
 
-	init_link	
+		init_link	
+
+		echo "Cleaning up pacman db.."
+
+		cleanup_db
 
 	fi
 
@@ -89,21 +85,55 @@ main () {
 	echo "Process complete! Use sbexecute to configure $SANDBOX."
 }
 
+parse_args () {
+	ArGS=()
+	for var in "$@"; do
+		if [[ "$var" != *-* ]]; then 
+			SANDBOX=$var
+		elif [[ "$var" ==  "--dep" ]]; then
+			SWITCH=d$SWITCH
+		fi
+	done
+}
+
+init_vars () {
+	PACMAN_CONFIG=pacman.base.conf	
+	PARAMS="--sandbox=$SANDBOX --root --exec"	
+	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
+	INSTANCE_DEP_LIST=$SANDBOX_BASE/etc/deps/$SANDBOX
+	INSTANCE_LINK=$SANDBOX_BASE/etc/db/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
+
+	if [[ $SWITCH == *d* ]]; then
+		INSTANCE_ROOT=$SANDBOX_BASE/deps/root/$SANDBOX
+		INSTANCE_HOME=$SANDBOX_BASE/deps/home/$SANDBOX	
+		PARAMS="--dep $PARAMS"
+	fi
+	if [[ $SANDBOX == "base" ]]; then
+		PACMAN_CONFIG=pacman.conf
+	fi
+	
+}
+
 
 init_struct () {
 	mkdir -p $INSTANCE_ROOT $INSTANCE_HOME \
 		$INSTANCE_ROOT/etc \
 		$INSTANCE_ROOT/var/lib/pacman \
 		$INSTANCE_ROOT/etc/pacman.d/
+
 	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
 	cp $SANDBOX_BASE/etc/pacman.base.conf $INSTANCE_ROOT/etc/pacman.base.conf
 	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	
 	echo "en_CA.UTF-8 UTF-8" > $INSTANCE_ROOT/etc/locale.gen
 	echo "LANG=en_CA.UTF-8" > $INSTANCE_ROOT/etc/locale.conf
 	echo 'PS1="'$SANDBOX'> "' > $INSTANCE_HOME/.bashrc
-	cp $XDG_DATA_HOME/sbscripts/template $XDG_DATA_HOME/sbscripts/$SANDBOX
+	#cp $XDG_DATA_HOME/sbscripts/template.new.sh $XDG_DATA_HOME/sbscripts/$SANDBOX.new.sh
 	echo "$MACHINE_ID" > $INSTANCE_ROOT/etc/machine-id
 	mkdir -p $INSTANCE_LINK
+	echo "base" > $INSTANCE_DEP_LIST
 }
 
 init_chroot () {	
@@ -116,14 +146,14 @@ init_chroot () {
 }
 
 init_link() {
-	link_create "$BASE_ROOT/usr/lib" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/lib
-	link_create "$BASE_ROOT/usr/bin" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/bin
-	link_create "$BASE_ROOT/usr/share" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/share
+	link_create "$BASE_ROOT/usr/lib" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_lib
+	link_create "$BASE_ROOT/usr/bin" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_bin
+	link_create "$BASE_ROOT/usr/share" "$INSTANCE_ROOT/usr/" > $INSTANCE_LINK/base_share
 	local dir=$PWD
 	cd $INSTANCE_LINK
-	sha256sum lib > $INSTANCE_LINK/lib.sha256
-	sha256sum bin > $INSTANCE_LINK/bin.sha256
-	sha256sum share > $INSTANCE_LINK/share.sha256
+	sha256sum base_lib > $INSTANCE_LINK/base_lib.sha256
+	sha256sum base_bin > $INSTANCE_LINK/base_bin.sha256
+	sha256sum base_share > $INSTANCE_LINK/base_share.sha256
 	cd $dir
 }
 
@@ -134,9 +164,17 @@ link_create() {
 		local file=${f%->*}
 		local filepath=$BASE_ROOT/usr/$file
 		if [[ -f $filepath ]] || [[ -L $filepath ]]; then
+			if [[ $file == "bin/[" ]]; then
+				continue
+			fi
 			echo $file
 		fi
 	done
+}
+
+
+cleanup_db() {
+	sbexecute $PARAMS pacman -Rsc base --dbonly
 }
 
 finalise () {
@@ -155,16 +193,8 @@ cleanup () {
 	$INSTANCE_ROOT/sys \
 	$INSTANCE_ROOT/opt \
 	$INSTANCE_ROOT/run \
-	$INSTANCE_ROOT/dev
-}
-
-parse_args () {
-	ArGS=()
-	for var in "$@"; do
-		if [[ "$var" != *-* ]]; then 
-			SANDBOX=$var
-		fi
-	done
+	$INSTANCE_ROOT/dev \
+	$INSTANCE_ROOT/etc/pacman.base.conf
 }
 
 main $@

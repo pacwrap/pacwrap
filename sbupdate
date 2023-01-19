@@ -30,6 +30,8 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 SANDBOX_ROOT=$SANDBOX_BASE/root
+SANDBOX_DEP_ROOT=$SANDBOX_BASE/deps/root
+SANDBOX_DB_ROOT=$SANDBOX_BASE/etc/db
 
 BOLD=$(tput bold)
 RED=$(tput setaf 1)
@@ -37,28 +39,34 @@ RESET=$(tput sgr0)
 BAR="$BOLD$RED::$RESET$BOLD"
 PARAMS="--root --exec --sandbox="
 
+
+
 main () {
 	if [[ ! -d $SANDBOX_ROOT ]]; then
 		echo "$BOLD$RED Sandbox root is either missing or an environmental variable is misconfigured." 
 		exit
 	fi	
-	
-	BASE_LINK_LIST=$SANDBOX_BASE/hldb/list	
+
 
 	local list=$@
 	if [[ ! $list ]]; then
 		list=`ls -1F $SANDBOX_ROOT | grep -i "/" | tr -d "/"` 
 	fi
+	local deps=`ls -1F $SANDBOX_DEP_ROOT | grep -i "/" | tr -d "/"` 	
+	if [[ ! $deps ]]; then
+		log "Something has gone extremely WRONG here."
+	fi
+	#update $list
 
-	update $list
-
-	if [ ! "$(query_confirm "Invoke update on base dependency")" ]; then
-		invoke_update base	
-		update_base $list
-		update_link_db
+	if [ ! "$(query_confirm "Invoke update on dependencies")" ]; then
+		update_deps $deps
+		update_link_db $deps
+		update_link $deps
 		update_link $list
+	
 	fi
 
+	update $list
 }
 
 log () {
@@ -68,45 +76,69 @@ log () {
 
 update_link_db() {
 	local dir=$PWD
-	local source=$SANDBOX_BASE/root/base
-	local target=$SANDBOX_BASE/hldb/base
+	local output="/tmp/usr/"
+	local deps=$@	
 
-	log "Synchronizing base link database..."
+	for dep in ${deps[@]}; do
+		local source=$SANDBOX_DEP_ROOT/$dep
+		local target=$SANDBOX_DB_ROOT/$dep
 
-	link_update $source/usr/share /tmp/usr/ > $target/share
-	link_update $source/usr/bin  /tmp/usr/ > $target/bin
-	link_update $source/usr/lib  /tmp/usr/ > $target/lib
+		log "Synchronizing $dep file database..."
+
+		if [[ ! -d $source ]] || [[ ! -d $target ]]; then
+			log "Missing dependency directory structures. Aborting."
+			exit
+		fi
+		
+		if [[ $dep != "base" ]]; then
+			link_update $source/usr/share $output --exclude-from=$target/base_share > "$target/"$dep"_share"
+			link_update $source/usr/bin  $output --exclude-from=$target/base_bin > "$target/"$dep"_bin"
+			link_update $source/usr/lib  $output --exclude-from=$target/base_lib > "$target/"$dep"_lib"		
+		else		
+			link_update $source/usr/share $output > "$target/"$dep"_share"
+			link_update $source/usr/bin  $output > "$target/"$dep"_bin"
+			link_update $source/usr/lib  $output > "$target/"$dep"_lib"		
+		fi
+
+
+		cd $target
+		
+		sha256sum $dep"_lib" > "$target/"$dep"_lib.sha256"
+		sha256sum $dep"_bin" > "$target/"$dep"_bin.sha256"
+		sha256sum $dep"_share" > "$target/"$dep"_share.sha256"
 	
-	cd $target
-	
-	sha256sum lib > $target/lib.sha256
-	sha256sum bin > $target/bin.sha256
-	sha256sum share > $target/share.sha256
-	
+	done
 	cd $dir	
 }
 
 invoke_link() {
 	local dir=$PWD
-	local source=$1
+	local dep=$1
+	local source=$SANDBOX_DEP_ROOT/$dep
 	local target=$2
-	
+	local exclude_params=
+
 	log "Synchronizing links for $2 in $3 sandbox..."
+
+	if [[ $dep != "base" ]]; then
+		exclude_params="--exclude-from=$SANDBOX_DB_ROOT/base/base_$target"
+	fi
 	
-	link_create $source/usr/$target $root/usr/ $root > $link/$target
+	link_create $source/usr/$target $root/usr/ $exclude_params > $link/$dep"_"$target
 	cd $link
-	sha256sum $target > $link/$target.sha256
+	sha256sum $dep"_"$target > $link/$dep"_"$target.sha256
 	cd $dir
 }
 
 link_update() {
 	local source=$source
-	parse_file_list $(rsync -av --dry-run --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
+	parse_file_list $(rsync -av --dry-run $3 --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
 }
+
 
 link_create() {
 	local source=$source
-	parse_file_list $(rsync -av --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
+	parse_file_list $(rsync -av $3 --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
 }
 
 parse_file_list() {
@@ -116,6 +148,9 @@ parse_file_list() {
 		local file=${f%->*} 
 		local filepath=$source/usr/$file
 		if [[ -f $filepath ]] || [[ -L $filepath ]]; then
+			if [[ $file == "bin/[" ]]; then
+				continue
+			fi
 			echo $file
 		fi
 	done
@@ -125,6 +160,7 @@ parse_delete_list() {
 	local fail=$1
 	local files=$(cat $link/$fail)
 	
+
 	for f in ${files[@]}; do
 		local file=${f%->*} 
 		local filepath=$root/usr/$file
@@ -137,9 +173,14 @@ parse_delete_list() {
 checksum_link_files() {
 	local dir=$PWD
 	cd $link
-	local linkfiles=$(ls *.sha256)
+
+	local linkfiles=$1"_bin.sha256 "$1"_lib.sha256 "$1"_share.sha256"
 	for file in $linkfiles; do
-		$(cat $SANDBOX_BASE/hldb/base/$file | sha256sum --check --status);
+		if [[ ! -f $link/$file ]]; then
+			echo -e "${file%.*} "
+			continue
+		fi
+		$(cat $SANDBOX_DB_ROOT/$1/$file | sha256sum --check --status);
 		local return=$?
 		if [[ $return == 1 ]]; then
 			echo -e "${file%.*} "
@@ -148,38 +189,66 @@ checksum_link_files() {
 	cd $dir
 }
 
-update_link() {	
-	for sandbox in "$@"; do				
-		root=$SANDBOX_BASE/root/$sandbox
-		link=$SANDBOX_BASE/hldb/$sandbox
 
-		checksum_fail_list=$(checksum_link_files);
+invoke_link_update() {
 
-		if [[ $checksum_fail_list == "" ]]; then
-			log "Link database is up-to-date for $sandbox sandbox!"
+	local not_found=
+
+	checksum_fail_list=$(checksum_link_files $dep);
+
+	if [[ $checksum_fail_list == "" ]]; then
+		log "Link database $dep is up-to-date for $sandbox sandbox!"
+		return
+	fi
+
+	log "Preparing to resynchronize $dep in $sandbox's filesystem..."
+
+			
+	for item in ${checksum_fail_list[@]}; do	
+		if [[ ! -f $link/$item ]]; then
+			not_found=1		
 			continue
 		fi
-
-		log "Preparing to resynchronize $sandbox's filesystem..."
-
-		for item in ${checksum_fail_list[@]}; do	
-			local files=`parse_delete_list $item`
-			#for file in $files; do
-				rm -f $files
-			#done
+		local files=`parse_delete_list $item`
+		for file in $files; do
+			rm -f $files
+			done
 		done
 
-		for item in ${checksum_fail_list[@]}; do
-			invoke_link $SANDBOX_BASE/root/base $item $sandbox
-		done
+	if [[ $not_found ]]; then
+		log "Syncing $dep in $sandbox's filesystem for the first time!"
+	fi
 
+	for item in ${checksum_fail_list[@]}; do
+		invoke_link $dep ${item##*_} $sandbox
 	done
 }
 
-update_base() {
+update_link() {	
+	for sandbox in "$@"; do				
+		root=$SANDBOX_ROOT/$sandbox
+		if [[ ! -d $root ]]; then
+			root=$SANDBOX_DEP_ROOT/$sandbox
+		fi
+
+		if [[ ! -d $root ]]; then
+			log "Weird..  $sandbox not found."
+		fi
+
+		link=$SANDBOX_DB_ROOT/$sandbox
+		local deps=$(cat $SANDBOX_BASE/etc/deps/$sandbox)
+
+		for dep in ${deps[@]}; do
+			invoke_link_update
+		done
+	done
+}
+
+
+update_deps () {		
 	for var in "$@"; do				
-		([[ $var == *.* ]] || [[ $var == "base" ]]) && continue 		 
-		invoke_update $var --config=/etc/pacman.base.conf
+		([[ $var == *.* ]]) && continue 		 
+		invoke_update $var "--dep"
 	done
 }
 
@@ -189,13 +258,10 @@ update () {
 		([[ $var == *.* ]] || [[ $var == "base" ]]) && continue 		 
 		invoke_update $var
 	done
-	PACMAN_SYNC=1	
 }
 
 invoke_update() {
-	if [[ ! $PACMAN_SYNC ]]; then
-		sbexecute $PARAMS$1 pacman -Sy
-	fi
+	sbexecute $PARAMS$@ pacman -Sy
 	local result=$(sbexecute pacman -Qu $PARAMS$@)
 	if [[ ! $result ]]; then
 		log "Packages are up-to-date for $1 sandbox!"
