@@ -66,9 +66,6 @@ main () {
 		*rc*|*cr*) 
 			execute_sandbox fakeroot "${ARGS[@]}"	
 			;;		
-		*rp*|*pr*) 
-			execute_sandbox fakeroot pacman ${ARGS[@]} $(cat $SANDBOX_BASE/etc/db/$SANDBOX/vpkgs)
-			;;	
 		*rs*|*sr*)	
 			execute_sandbox fakeroot bash
 			;;
@@ -83,13 +80,13 @@ main () {
 
 init_vars () {
 	INSTANCE_USER=user
-	INSTANCE_ROOT=$SANDBOX_BASE/root/$SANDBOX
-	INSTANCE_HOME=$SANDBOX_BASE/home/$SANDBOX
+	INSTANCE_ROOT=$SANDBOX_BASE/base/root/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/base/home/$SANDBOX
 	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
 
 	if [[ $SWITCH == *d* ]]; then
-		INSTANCE_ROOT=$SANDBOX_BASE/deps/root/$SANDBOX
-		INSTANCE_HOME=$SANDBOX_BASE/deps/home/$SANDBOX
+		INSTANCE_ROOT=$SANDBOX_BASE/dep/root/$SANDBOX
+		INSTANCE_HOME=$SANDBOX_BASE/dep/home/$SANDBOX
 	
 	fi	
 }
@@ -111,9 +108,6 @@ parse_args () {
 			--dep)
 				SWITCH=d$SWITCH
 				;;	
-			--pacman)
-				SWITCH=rp$SWITCH
-				;;
 			--exec)
 				SWITCH=rc$SWITCH
 				;;
