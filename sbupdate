@@ -69,7 +69,7 @@ main () {
 	if [ ! "$(query_confirm "Proceed with update?")" ]; then
 		update_deps $deps
 		if [[ $SYNCREQUIRED ]]; then
-			log $BAR "Synchronizization required for sandboxes..."
+			log $BAR "Synchronization required for sandboxes..."
 			update_links $deps
 			update_links $list
 			log $BAR_GREEN "Synchronization complete!"
