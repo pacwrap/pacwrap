@@ -166,7 +166,7 @@ update_links() {
 		done
 		for item in ${linkfiles[@]}; do
 			invoke_link_creation $dep ${item##*_} $sandbox
-			log " Synchronization complete for $BOLD$item$RESET in $BOLD$sandbox$RESET!"
+			log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
 		done	
 	done
 }
