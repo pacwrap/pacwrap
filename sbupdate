@@ -68,7 +68,7 @@ main () {
 	log $BAR "Update on sandbox dependencies \n\n$deps\n"
 	if [ ! "$(query_confirm "Proceed with update?")" ]; then
 		update_deps $deps
-		if [[ $SYNCREQUIRED ]]; then
+		if [[ $SYNCREQ ]]; then
 			log $BAR "Synchronization required for sandboxes..."
 			update_links $deps
 			update_links $list
@@ -87,7 +87,7 @@ parse_args () {
 	for var in "$@"; do
 		case $var in 
 			--sync|-s)
-				SYNCREQUIRED=1
+				SYNCREQ=1
 				;;
 			*)
 				ARGS+=("$var")
@@ -229,9 +229,9 @@ invoke_update() {
 	echo -e "$BAR Packages to be installed or upgraded: $RESET \n\n$result\n"
 	[ "$(query_confirm "Confirm update and database synchronization on sandbox $var")" != "" ] && return
 	SYNCREQ=1
-	sbexecute pacman $PARAMS$@ -Su --noconfirm 2>/dev/null	 
+	sbexecute pacman $PARAMS$@ -Su --noconfirm 2>/dev/null | grep -v "not permitted" 
 	log $BAR "Synchronizing pacman database for foreign packages..."
-	sbexecute pacman $PARAMS$@ -Su --dbonly --noconfirm --quiet --config=/etc/pacman.base.conf 2>/dev/null		
+	sbexecute pacman $PARAMS$@ -Su --dbonly --noconfirm --quiet --config=/etc/pacman.base.conf 2>/dev/null | grep -v "not permitted"
 	log $BAR_GREEN "Synchronisation and upgrades are complete!"
 }
 
