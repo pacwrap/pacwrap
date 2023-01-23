@@ -71,7 +71,8 @@ main () {
 		if [[ $SYNCREQ ]]; then
 			log $BAR "Synchronization required for sandboxes..."
 			update_links $deps
-			update_links $list
+			update_links $list		
+			update_link_lists $deps
 			log $BAR_GREEN "Synchronization complete!"
 		fi
 	fi
@@ -101,17 +102,16 @@ log () {
 }
  
 invoke_link_creation() {
-	local dir=$PWD
-	local dep=$1
+	local target=${item##*_}
 	local source=$SANDBOX_DEP_ROOT/$dep
-	local target=$2
-	local exclude_params=
-	link_create $source/usr/$target $root/usr/ > $link/$dep"_"$target
-}
+	local src=$source/usr/$target 
+	local dest=$root/usr/
 
-link_create() {
-	local source=$source
-	parse_file_list $(rsync -av --link-dest="$1" "$1" "$2" | head -n -3 | tail -n +3 | tr -d ' ')
+	if [[ ! $1 ]]; then
+		rsync -a --link-dest="$src" "$src" "$dest"
+	else
+		parse_file_list $(rsync -avn --link-dest="$src" "$src" "/tmp/usr/" | head -n -3 | tail -n +3 | tr -d ' ') > $link/$dep"_"$target		
+	fi
 }
 
 parse_file_list() {
@@ -139,11 +139,27 @@ invoke_link_deletion() {
 	cd $pwd
 }
 
+function invoke_link_update() {
+	local linkfiles=("$dep${LINKFILES[0]}" 
+			 "$dep${LINKFILES[1]}" 
+			 "$dep${LINKFILES[2]}" 
+			 "$dep${LINKFILES[3]}")
+
+	if [[ ! $1 ]]; then
+		for item in ${linkfiles[@]}; do
+			invoke_link_deletion
+		done
+	fi
+	for item in ${linkfiles[@]}; do
+		invoke_link_creation $1
+		log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
+	done
+}
+	
 update_links() {	
 	for sandbox in "$@"; do				
 		local root=$SANDBOX_ROOT/$sandbox
-		local link=$SANDBOX_DB_ROOT/$sandbox
-	
+		
 		if [[ ! -d $root ]]; then
 			root=$SANDBOX_DEP_ROOT/$sandbox
 		fi
@@ -156,21 +172,26 @@ update_links() {
 		fi
 
 		local dep=$(cat $SANDBOX_BASE/etc/deps/$sandbox | tail -n 1)
-		local linkfiles=("$dep${LINKFILES[0]}" 
-				 "$dep${LINKFILES[1]}" 
-				 "$dep${LINKFILES[2]}" 
-				 "$dep${LINKFILES[3]}")
+		local link=$SANDBOX_DB_ROOT/$dep
 		log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET sandbox...$RESET"
-		for item in ${linkfiles[@]}; do
-			invoke_link_deletion $dep ${item##*_} $sandbox
-		done
-		for item in ${linkfiles[@]}; do
-			invoke_link_creation $dep ${item##*_} $sandbox
-			log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
-		done	
-	done
+		invoke_link_update
+	done	
 }
 
+update_link_lists() {	
+	for sandbox in "$@"; do				
+		local root=$SANDBOX_DEP_ROOT/$sandbox
+		local link=$SANDBOX_DB_ROOT/$sandbox
+		local dep=$sandbox
+
+		if [[ ! -d $root ]]; then
+			log "$sandbox not found."
+			continue
+		fi
+		log $ARROW "Synchronizing link list for dependency $BOLD$dep$RESET...$RESET"
+		invoke_link_update 1
+	done	
+}
 
 invoke_vdb () {	
 	if [[ $var == "base" ]]; then
@@ -178,25 +199,24 @@ invoke_vdb () {
 	fi
 
 	local sbroot=$SANDBOX_ROOT
-	
-	if [[ $2 ]]; then
-		sbroot=$SANDBOX_DEP_ROOT
-	fi
-
-	local deps=$(cat $SANDBOX_BASE/etc/deps/$1)	
 	local dep=$(cat $SANDBOX_BASE/etc/deps/$1 | tail -n 1)
 
-	echo -e "IgnorePkg =" > $SANDBOX_DB_ROOT/$1/vpkgs
-	sbexecute $PARAMS$dep --dep pacman -Qq >> $SANDBOX_DB_ROOT/$1/vpkgs
+	if [[ $2 ]]; then
+		sbroot=$SANDBOX_DEP_ROOT
+		dep=$1
+	fi
+
+	echo -e "IgnorePkg =" > /tmp/vpkgs
+	sbexecute $PARAMS$dep --dep pacman -Qq >> /tmp/vpkgs
 
 	rm $sbroot/$1/etc/pacman.conf
 	echo -e "## THIS /etc/pacman.conf WAS AUTOMATICALLY GENERATED on $(date "+%F %T"). \n## DO NOT EDIT  \n[options] " >> $sbroot/$1/etc/pacman.conf	
 
-	local ignore=$(cat $SANDBOX_DB_ROOT/$1/vpkgs)
-	sed -z "s/\n/ /g" $SANDBOX_DB_ROOT/$1/vpkgs >> $sbroot/$1/etc/pacman.conf
+	local ignore=$(cat /tmp/vpkgs)
+	sed -z "s/\n/ /g" /tmp/vpkgs >> $sbroot/$1/etc/pacman.conf
 	echo -e "\n## END OF AUTOMATED CONFIGURATION." >> $sbroot/$1/etc/pacman.conf
 	cat $SANDBOX_BASE/etc/pacman.d/pacman.$dep.conf >> $sbroot/$1/etc/pacman.conf
-	rm $SANDBOX_DB_ROOT/$1/vpkgs 2>/dev/null
+	rm /tmp/vpkgs 2>/dev/null
 
 	log "$BAR_GREEN Generated pacman.conf for $1."
 }
@@ -229,9 +249,9 @@ invoke_update() {
 	echo -e "$BAR Packages to be installed or upgraded: $RESET \n\n$result\n"
 	[ "$(query_confirm "Confirm update and database synchronization on sandbox $var")" != "" ] && return
 	SYNCREQ=1
-	sbexecute pacman $PARAMS$@ -Su --noconfirm 2>/dev/null | grep -v "not permitted" 
+	sbexecute pacman $PARAMS$@ -Su --noconfirm --noprogressbar 2>/dev/null | grep -v "not permitted" 
 	log $BAR "Synchronizing pacman database for foreign packages..."
-	sbexecute pacman $PARAMS$@ -Su --dbonly --noconfirm --quiet --config=/etc/pacman.base.conf 2>/dev/null | grep -v "not permitted"
+	sbexecute pacman $PARAMS$@ -Su --dbonly --noconfirm --noprogressbar --quiet --config=/etc/pacman.base.conf 2>/dev/null | grep -v "not permitted"
 	log $BAR_GREEN "Synchronisation and upgrades are complete!"
 }
 
