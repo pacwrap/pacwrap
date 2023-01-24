@@ -29,8 +29,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-SANDBOX_ROOT=$SANDBOX_BASE/base/root
-SANDBOX_DEP_ROOT=$SANDBOX_BASE/dep/root
+SANDBOX_ROOT=$SANDBOX_BASE/fs/root
+SANDBOX_DEP_ROOT=$SANDBOX_BASE/fs.dep/root
 SANDBOX_DB_ROOT=$SANDBOX_BASE/etc/db
 
 BOLD=$(tput bold)
@@ -91,6 +91,8 @@ main () {
 	fi
 }
 
+
+
 parse_args () {
 	ARGS=()
 	for var in "$@"; do
@@ -121,9 +123,11 @@ invoke_link_creation() {
 	local dest=$root/usr/
 
 	if [[ ! $1 ]]; then
-		rsync -a --link-dest="$src" "$src" "$dest"
+		#rsync -a --link-dest="$src" "$src" "$dest"
+		cp -lR $src $dest 2>/dev/null	
 	else
-		parse_file_list $(rsync -avn --link-dest="$src" "$src" "/tmp/usr/" | head -n -3 | tail -n +3 | tr -d ' ') > $link/$dep"_"$target		
+		#TODO see if it is at all possible to replace rsync with find $SANDBOX_BASE/$target/ -type f -links +1
+		parse_file_list $(rsync -avn --link-dest="$src" "$src" "/tmp/usr/" | head -n -3 | tail -n +3 | tr -d ' ') | zstd -fq -o $link/$dep"_"$target.zst
 	fi
 }
 
@@ -142,10 +146,10 @@ parse_file_list() {
 invoke_link_deletion() {
 	local pwd=$PWD
 	cd $root/usr
-	if [[ ! -f $link/$item ]]; then
+	if [[ ! -f $link/$item.zst ]]; then
 		return 1
 	fi
-	$(xargs rm -f < $link/$item) > /dev/null
+	zstd -fd < $link/$item.zst | xargs rm -f 2>/dev/null
 	cd $pwd
 }
 
@@ -220,17 +224,21 @@ invoke_vdb () {
 		return 1
 	fi
 
+	local template=$SANDBOX_BASE/etc/pacman.d/tpl/pacman.$dep.conf 
+	local pacmanconf=$SANDBOX_BASE/etc/pacman.d/pacman.$sandbox.conf
+
 	if [[ -f $root/.root ]]; then
+		cp $SANDBOX_BASE/etc/pacman.conf $pacmanconf
+		log "$BAR_GREEN Copied pacman.conf to $sandbox."	
 		return
-	fi
+	fi	
 
 	echo -e "IgnorePkg =" > /tmp/vpkgs
 	sbexecute $PARAMS$dep --dep pacman -Qq >> /tmp/vpkgs
-
-	echo -e "## THIS /etc/pacman.conf WAS AUTOMATICALLY GENERATED on $(date "+%F %T"). \n## DO NOT EDIT  \n[options] " > $root/etc/pacman.conf	
-	sed -z "s/\n/ /g" /tmp/vpkgs >> $root/etc/pacman.conf
-	echo -e "\n## END OF AUTOMATED CONFIGURATION." >> $root/etc/pacman.conf
-	cat $SANDBOX_BASE/etc/pacman.d/pacman.$dep.conf >> $root/etc/pacman.conf
+	echo -e "## THIS /etc/pacman.conf WAS AUTOMATICALLY GENERATED on $(date "+%F %T"). \n## DO NOT EDIT  \n[options] " > $pacmanconf
+	sed -z "s/\n/ /g" /tmp/vpkgs >> $pacmanconf
+	echo -e "\n## END OF AUTOMATED CONFIGURATION." >> $pacmanconf
+	cat $template >> $pacmanconf	
 	rm /tmp/vpkgs 2>/dev/null
 
 	log "$BAR_GREEN Generated pacman.conf for $sandbox."
