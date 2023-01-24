@@ -262,7 +262,7 @@ invoke_update() {
 	SYNCREQ=1
 	sbexecute pacman $params$sandbox -Su --noconfirm --noprogressbar 2>/dev/null | grep -v "not permitted" 
 	log $BAR "Synchronizing pacman database for foreign packages..."
-	sbexecute pacman $params$sandbox -Su --dbonly --noconfirm --noprogressbar --quiet --config=/etc/pacman.base.conf 2>/dev/null | grep -v "not permitted"
+	sbexecute pacman $params$sandbox -Su --dbonly --noconfirm --noprogressbar --quiet --config=/etc/pacman.dep.conf 2>/dev/null | grep -v "not permitted"
 	log $BAR_GREEN "Synchronisation and upgrades are complete!"
 }
 
