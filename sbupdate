@@ -123,11 +123,10 @@ invoke_link_creation() {
 	local dest=$root/usr/
 
 	if [[ ! $1 ]]; then
-		#rsync -a --link-dest="$src" "$src" "$dest"
 		cp -lR $src $dest 2>/dev/null	
 	else
-		#TODO see if it is at all possible to replace rsync with find $SANDBOX_BASE/$target/ -type f -links +1
-		parse_file_list $(rsync -avn --link-dest="$src" "$src" "/tmp/usr/" | head -n -3 | tail -n +3 | tr -d ' ') | zstd -fq -o $link/$dep"_"$target.zst
+		local srcpath=$(echo $source"/usr/" | sed -z "s/\// \\\ \/ /g" | sed -z "s/ //g")
+		find $src -type f,l -links +1 | sed -z "s/"$srcpath"//g" | zstd -fq -o $link/$dep"_"$target.zst
 	fi
 }
 
