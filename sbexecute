@@ -64,10 +64,10 @@ main () {
 			nvim "$INSTANCE_ROOT/etc/pacman.conf"
 			;;
 		*rc*|*cr*) 
-			execute_sandbox fakeroot "${ARGS[@]}"	
+			execute_sandbox fakechroot fakeroot "${ARGS[@]}"	
 			;;		
 		*rs*|*sr*)	
-			execute_sandbox fakeroot bash
+			execute_sandbox fakechroot fakeroot bash
 			;;
 		s)
 			execute_sandbox bash			
