@@ -127,10 +127,11 @@ init_struct () {
 		$INSTANCE_ROOT/etc \
 		$INSTANCE_ROOT/var/lib/pacman \
 		$INSTANCE_ROOT/etc/pacman.d/ \
-		$INSTANCE_ROOT/etc/fonts/conf.d
+		$INSTANCE_ROOT/etc/fonts/conf.d \
+ 		$SANDBOX_BASE/etc/db/$SANDBOX
 
 	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
-	#cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
+	cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
 	cp $SANDBOX_BASE/etc/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
 
 	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
@@ -153,7 +154,7 @@ init_struct () {
 		
 	if [[ $ISDEP ]]; then
 		cp $SANDBOX_BASE/etc/pacman.tpl.conf $SANDBOX_BASE/etc/pacman.d/tpl/pacman.$SANDBOX.conf
-		mkdir -p $SANDBOX_BASE/etc/db/$SANDBOX
+		mkdir -p
 		touch $INSTANCE_ROOT/.dep
 	fi
 	
@@ -166,7 +167,7 @@ init_chroot () {
     	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
 	--cache /var/lib/cache/pacman/pkg \
     	base lib32-glibc --noconfirm 2>/dev/null
-	sbupdate -bgs $SANDBOX
+	sbupdate -fbns $SANDBOX
 }
 
 finalise () {
@@ -186,6 +187,7 @@ finalise () {
 				sbexecute $PARAMS pacman -Su --dbonly --noconfirm $dbsyncpkgs 2>/dev/null
 			fi
 		fi
+		sbupdate -gb $SANDBOX
 	fi
 }
 
