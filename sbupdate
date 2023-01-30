@@ -205,9 +205,9 @@ update_link_lists() {
 		local link=$INSTANCE_DB_ROOT/$sandbox
 		local dep=$sandbox
 		local linkfiles=("$dep${LINKFILES[0]}" 
-			 "$dep${LINKFILES[1]}" 
-			 "$dep${LINKFILES[2]}" 
-			 "$dep${LINKFILES[3]}")
+				 "$dep${LINKFILES[1]}"
+				 "$dep${LINKFILES[2]}" 
+				 "$dep${LINKFILES[3]}")
 		
 		log $ARROW "Synchronizing link list for dependency $BOLD$dep$RESET...$RESET"
 
