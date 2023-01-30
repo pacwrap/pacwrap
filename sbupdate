@@ -48,7 +48,7 @@ ARROW_RED="$RED$BOLD->$RESET"
 
 PARAMS="--root --exec --sandbox="
 DEP_PARAMS="--dep --root --exec --sandbox="
-LINKFILES=("_bin" "_lib" "_lib32" "_share")
+LINKFILES=("bin" "lib" "lib32" "share")
 
 main () {
 	parse_args $@
@@ -76,10 +76,8 @@ main () {
 	fi
 
 	if [[ $SWITCH == *s* ]] || [[ $SYNCREQ == 1 ]]; then
-		log $BAR "Synchronization required for sandboxes..."
 		update_links $rootdeps$roots
 		update_link_lists $rootdeps
-		log $BAR_GREEN "Synchronization complete!"
 	fi
 
 	if [[ $SWITCH != *b* ]]; then
@@ -137,11 +135,13 @@ init_vars() {
 
 invoke_link_deletion() {
 	local pwd=$PWD
+	local file=$link/$item.zst
+	
 	cd $root/usr
-	if [[ ! -f $link/$item.zst ]]; then
+	if [[ ! -f $file ]]; then
 		return 1
 	fi
-	zstd -fd < $link/$item.zst | xargs rm -f
+	zstd -fd < $file | xargs rm -f
 	cd $pwd
 }
 
@@ -156,31 +156,28 @@ invoke_update_link() {
 		return
 	fi
 
-	local dest=$root/usr/
 	local dep=$(return_dependency)
 	local link=$INSTANCE_DB_ROOT/$dep
-	local linkfiles=("$dep${LINKFILES[0]}" 
-			 "$dep${LINKFILES[1]}" 
-			 "$dep${LINKFILES[2]}" 
-			 "$dep${LINKFILES[3]}")
+	local linkfiles=${LINKFILES[@]}
 	
 	log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET...$RESET"
-	for item in ${linkfiles[@]}; do
-		invoke_link_deletion
-	done
 	
 	for item in ${linkfiles[@]}; do
-		local target=${item##*_}
-		local source=$INSTANCE_ROOT/$dep
+		local root=$INSTANCE_ROOT/$sandbox
+		local source=$INSTANCE_ROOT/$dep		
+		local target=$item
 		local src=$source/usr/$target 
-
+		local dest=$root/usr/
+	
+		invoke_link_deletion	
 		cp -flR $src $dest 2>/dev/null
-		log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
+		log " Synchronization complete for $BOLD$item$RESET in $BOLD$sandbox$RESET!"
 	done
 	synced[$sandbox]=1
 }
 
 update_links() {
+	log $BAR "Synchronization event triggered..."
 	declare -A synced
 	for sandbox in "$@"; do				
 		check_root "link synchronization"
@@ -194,35 +191,36 @@ update_links() {
 		done
 		invoke_update_link $sandbox
 	done
+	log $BAR_GREEN "Synchronization complete!"
 }
 
 invoke_update_link_list() {
-	local root=$INSTANCE_ROOT/$sandbox
-	local link=$INSTANCE_DB_ROOT/$sandbox
 	local dep=$sandbox
-	local linkfiles=("$dep${LINKFILES[0]}" 
-			 "$dep${LINKFILES[1]}"
-			 "$dep${LINKFILES[2]}" 
-			 "$dep${LINKFILES[3]}")
+	local linkfiles=${LINKFILES[@]}
 	
-	log $ARROW "Synchronizing link list for dependency $BOLD$dep$RESET...$RESET"
+	log $ARROW "Generating link list cache for dependency $BOLD$dep$RESET...$RESET"
 	for item in ${linkfiles[@]}; do
-		local target=${item##*_}
-		local source=$INSTANCE_ROOT/$sandbox
-		local targetdir=$source/usr/$target
+		local root=$INSTANCE_ROOT/$sandbox
+		local link=$INSTANCE_DB_ROOT/$sandbox
+		local target=$item
+		local rdir=$root/usr/
+		local tdir=$root/usr/$target
 
-		find $targetdir -type f,l -links +1 | sed -z "s,$source/usr/,,g" | zstd -fq -o $link/$sandbox"_"$target.zst
-		log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
-	done	
+		find $tdir -type f,l -links +1 | sed -z "s,$rdir,,g" | zstd -fq -o $link/$target.zst
+		log " Cache generation complete for $BOLD$item$RESET in $BOLD$sandbox$RESET!"	
+	done
+	log " Cache generation complete for $BOLD$sandbox$RESET!"	
 }
 
-update_link_lists() {	
+update_link_lists() {
+	log $BAR "Generating link list cache..."
 	for sandbox in "$@"; do				
-		check_root "link list synchronization"
+		check_root "cache"
 		[[ $? == 1 ]] && continue
 
 		invoke_update_link_list
-	done	
+	done
+	log $BAR_GREEN "Cache generation complete!"
 }
 
 check_root() {
