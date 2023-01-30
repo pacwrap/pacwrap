@@ -108,7 +108,6 @@ init_vars () {
 	SBUPDATE_SANDBOX=$SANDBOX
 
 	if [[ $SWITCH == *d* ]]; then
-		SBUPDATE_SANDBOX=
 		ISDEP=1
 	fi
 	if [[ $SWITCH == *r* ]]; then
@@ -168,7 +167,7 @@ init_chroot () {
     	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
 	--cache /var/lib/cache/pacman/pkg \
     	base lib32-glibc --noconfirm 2>/dev/null
-	sbupdate -bgs $SBUPDATE_SANDBOX
+	sbupdate -bgs $SANDBOX
 }
 
 finalise () {
@@ -188,7 +187,7 @@ finalise () {
 				sbexecute $PARAMS pacman -Su --dbonly --noconfirm $dbsyncpkgs 2>/dev/null
 			fi
 		fi
-	fi	
+	fi
 }
 
 cleanup () {

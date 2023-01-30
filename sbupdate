@@ -134,19 +134,6 @@ init_vars() {
 
 	fi
 }
- 
-invoke_link_creation() {
-	local target=${item##*_}
-	local source=$INSTANCE_ROOT/$dep
-	local src=$source/usr/$target 
-	local dest=$root/usr/
-
-	if [[ ! $1 ]]; then
-		cp -flR $src $dest 2>/dev/null	
-	else
-		find $src -type f,l -links +1 | sed -z "s,$source/usr/,,g" | zstd -fq -o $link/$dep"_"$target.zst
-	fi
-}
 
 invoke_link_deletion() {
 	local pwd=$PWD
@@ -158,52 +145,51 @@ invoke_link_deletion() {
 	cd $pwd
 }
 
-invoke_link_sync() {
-	local linkfiles=("$dep${LINKFILES[0]}" 
-			 "$dep${LINKFILES[1]}" 
-			 "$dep${LINKFILES[2]}" 
-			 "$dep${LINKFILES[3]}")
-
-	if [[ ! $1 ]]; then
-		for item in ${linkfiles[@]}; do
-			invoke_link_deletion
-		done
-	fi
-
-	for item in ${linkfiles[@]}; do
-		invoke_link_creation $1
-		log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
-	done
-}
-
-
-
 invoke_update_link() {
 	local sandbox=$1
 	local root=$INSTANCE_ROOT/$sandbox
-	
+
 	if [[ ${synced[$sandbox]} ]]; then
-		return
-	fi
-	if [[ ! -d $root ]]; then
-		log $ARROW_RED "Root for $BOLD$sandbox$RESET not found.\n Skipping link synchronization..."
 		return
 	fi
 	if [[ -f $root/.root ]]; then
 		return
 	fi
 
+	local dest=$root/usr/
 	local dep=$(return_dependency)
 	local link=$INSTANCE_DB_ROOT/$dep
+	local linkfiles=("$dep${LINKFILES[0]}" 
+			 "$dep${LINKFILES[1]}" 
+			 "$dep${LINKFILES[2]}" 
+			 "$dep${LINKFILES[3]}")
+	
 	log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET...$RESET"
-	invoke_link_sync
+	for item in ${linkfiles[@]}; do
+		invoke_link_deletion
+	done
+	
+	for item in ${linkfiles[@]}; do
+		local target=${item##*_}
+		local source=$INSTANCE_ROOT/$dep
+		local src=$source/usr/$target 
+
+		cp -flR $src $dest 2>/dev/null
+		log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
+	done
 	synced[$sandbox]=1
 }
 
 update_links() {
 	declare -A synced
 	for sandbox in "$@"; do				
+		check_root "link synchronization"
+		[[ $? == 1 ]] && continue	
+
 		for dep in $(return_dependencies); do
+			check_root "link synchronization"
+			[[ $? == 1 ]] && continue	
+	
 			invoke_update_link $dep
 		done
 		invoke_update_link $sandbox
@@ -212,23 +198,33 @@ update_links() {
 
 update_link_lists() {	
 	for sandbox in "$@"; do				
+		check_root "link list synchronization"
+		[[ $? == 1 ]] && continue	
+
 		local root=$INSTANCE_ROOT/$sandbox
 		local link=$INSTANCE_DB_ROOT/$sandbox
 		local dep=$sandbox
-
-		if [[ ! -d $root ]]; then
-			log $BAR "Root for dependency $sandbox not found.\n Skipping link list synchronization..."
-			continue
-		fi
-
+		local linkfiles=("$dep${LINKFILES[0]}" 
+			 "$dep${LINKFILES[1]}" 
+			 "$dep${LINKFILES[2]}" 
+			 "$dep${LINKFILES[3]}")
+		
 		log $ARROW "Synchronizing link list for dependency $BOLD$dep$RESET...$RESET"
-		invoke_link_sync 1
+
+		for item in ${linkfiles[@]}; do
+			local target=${item##*_}
+			local source=$INSTANCE_ROOT/$sandbox
+			local targetdir=$source/usr/$target
+	
+			find $targetdir -type f,l -links +1 | sed -z "s,$source/usr/,,g" | zstd -fq -o $link/$sandbox"_"$target.zst
+			log " Synchronization complete for $BOLD${item##*_}$RESET in $BOLD$sandbox$RESET!"
+		done
 	done	
 }
 
 check_root() {
 	if [[ ! -d $INSTANCE_ROOT/$sandbox ]]; then
-		log $BAR$RESET "Root for $BOLD$sandbox$RESET not found.$RESET\n Skipping update..."
+		log $BAR$RESET "Root for $BOLD$sandbox$RESET not found.$RESET\n Skipping $@..."
 		return 1
 	fi
 }
@@ -295,7 +291,7 @@ invoke_update() {
 
 update () {		
 	for sandbox in "$@"; do	
-		check_root
+		check_root "update"
 		[[ $? == 1 ]] && continue	
 		invoke_update
 	done
@@ -303,7 +299,7 @@ update () {
 
 generate_pacman_conf () {		
 	for sandbox in "$@"; do	
-		check_root
+		check_root "pacman.conf generation"
 		[[ $? == 1 ]] && continue	
 		invoke_vdb
 	done
