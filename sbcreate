@@ -65,10 +65,6 @@ main () {
 
 	init_chroot
 
-	if [[ ! $ISROOTDEP ]]; then
-		sbupdate -sb $SBUPDATE_SANDBOX
-	fi
-
 	echo "Cleaning up.."
 
 	cleanup
@@ -132,10 +128,11 @@ init_struct () {
 	mkdir -p $INSTANCE_ROOT $INSTANCE_HOME \
 		$INSTANCE_ROOT/etc \
 		$INSTANCE_ROOT/var/lib/pacman \
-		$INSTANCE_ROOT/etc/pacman.d/
+		$INSTANCE_ROOT/etc/pacman.d/ \
+		$INSTANCE_ROOT/etc/fonts/conf.d
 
 	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
-	cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
+	#cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
 	cp $SANDBOX_BASE/etc/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
 
 	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
@@ -152,11 +149,7 @@ init_struct () {
 		else
 			echo "$DEPEND" > $INSTANCE_DEP_LIST
 		fi
-
-
-	fi
-
-	if [[ $ISROOTDEP ]]; then
+	else
 		touch $INSTANCE_ROOT/.root		
 	fi
 		
@@ -175,6 +168,7 @@ init_chroot () {
     	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
 	--cache /var/lib/cache/pacman/pkg \
     	base lib32-glibc --noconfirm 2>/dev/null
+	sbupdate -bgs $SBUPDATE_SANDBOX
 }
 
 finalise () {
@@ -184,15 +178,16 @@ finalise () {
 	sbexecute $PARAMS update-ca-trust
 	if [[ ! $ISROOTDEP ]]; then
 		if [[ $DEPEND ]]; then		
-			local deps=$DEPEND" "$(cat $SANDBOX_BASE/etc/deps/$DEPEND 2>/dev/null)
-			if [[ ! -f $SANDBOX_BASE/etc/deps/$DEPEND ]]; then
-				deps="$DEPEND"
-			fi
+			local deps=$(cat $INSTANCE_DEP_LIST 2>/dev/null)
+			local dbsyncpkgs=
+
 			for dep in $deps; do		
-				sbexecute $PARAMS pacman -Su --dbonly --noconfirm $(sbexecute --sandbox=$dep --root --exec pacman -Qqe) 2>/dev/null	
+				dbsyncpkgs=$dbsyncpkgs$(sbexecute --sandbox=$dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>|\<lib32-glibc\>//g")
 			done
+			if [[ $dbsyncpkgs ]]; then
+				sbexecute $PARAMS pacman -Su --dbonly --noconfirm $dbsyncpkgs 2>/dev/null
+			fi
 		fi
-		sbupdate -n $SBUPDATE_SANDBOX
 	fi	
 }
 

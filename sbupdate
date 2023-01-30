@@ -2,7 +2,7 @@
 #
 # BSD-3-Clause
 #
-# Sandbox Update - Copyright 2022-2023 Xavier (sapphirus@azorium.net)
+# Sandbox Update - Copyright 2023 Xavier (sapphirus@azorium.net)
 #
 # Redistribution and use in source and binary forms, with or without modification, 
 # are permitted provided that the following conditions are met:
@@ -29,8 +29,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-SANDBOX_ROOT=$SANDBOX_BASE/fs/root
-SANDBOX_DB_ROOT=$SANDBOX_BASE/etc/db
+INSTANCE_ROOT=$SANDBOX_BASE/fs/root
+INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
+INSTANCE_DEPS_ROOT=$SANDBOX_BASE/etc/deps
+INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
 
 BOLD=$(tput bold)
 RED=$(tput setaf 1)
@@ -43,7 +45,6 @@ BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
 ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
-SYNCED=()
 
 PARAMS="--root --exec --sandbox="
 DEP_PARAMS="--dep --root --exec --sandbox="
@@ -52,59 +53,51 @@ LINKFILES=("_bin" "_lib" "_lib32" "_share")
 main () {
 	parse_args $@
 
-	if [[ ! -d $SANDBOX_ROOT ]]; then
+	if [[ ! -d $INSTANCE_ROOT ]]; then
 		echo $BOLD$RED"Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
 		exit
 	fi	
-	
+
 	local roots=
-	local list=${ARGS[@]}
-	if [[ ! $list ]]; then
-		list=`ls -1F $SANDBOX_ROOT | grep -i "/" | tr -d "/"` 
-	fi
+	local rootdeps=
 
-	local deplist=`ls -1F $SANDBOX_ROOT | grep -i "/" | tr -d "/"` 	
-	local deps=
+	init_vars
 
-	for f in $deplist; do
-		if [[ -f $SANDBOX_ROOT/$f/.dep ]] || [[ -f $SANDBOX_ROOT/$f/.root ]]; then
-			deps="$deps $f"
-		fi
-	done
-	for f in $list; do
-		if [[ ! -f $SANDBOX_ROOT/$f/.dep ]] && [[ ! -f $SANDBOX_ROOT/$f/.root ]]; then
-			roots="$roots $f"
-		fi
-	done
-	
+	if [[ $SWITCH == *g* ]] && [[ $SWITCH == *b* ]]; then
+		generate_pacman_conf $roots
+	fi	
+
 	if [[ $SWITCH != *b* ]]; then
-		log $BAR "Update on sandbox dependencies \n\n$deps\n"
+		log $BAR "Update on sandbox dependencies \n\n$rootdeps\n"
 		if [[ "$(query_confirm "Proceed with update?")" ]]; then	
-			update $deps
+			generate_pacman_conf $rootdeps
+			update $rootdeps
 		fi
 	fi
 
 	if [[ $SWITCH == *s* ]] || [[ $SYNCREQ == 1 ]]; then
 		log $BAR "Synchronization required for sandboxes..."
-		update_links $list
-		update_link_lists $deps
+		update_links $rootdeps$roots
+		update_link_lists $rootdeps
 		log $BAR_GREEN "Synchronization complete!"
 	fi
 
 	if [[ $SWITCH != *b* ]]; then
 		log $BAR "Update sandbox \n\n$roots\n"	
 		if [[ "$(query_confirm "Proceed with update?")" ]]; then
+			generate_pacman_conf $roots
 			update $roots
 		fi
 	fi
 }
 
-
-
 parse_args () {
 	ARGS=()
 	for var in "$@"; do
 		case $var in 
+			--generate-config|-g)
+				SWITCH=g$SWITCH
+				;;
 			--bypass-update|-b)
 				SWITCH=b$SWITCH
 				;;
@@ -123,10 +116,28 @@ parse_args () {
 			esac
 	done
 }
+
+init_vars() {
+	local rootlist=$(ls -U -1F $INSTANCE_ROOT | grep -i "/" | tr -d "/")
+	local list=${ARGS[@]}
+
+	for f in $rootlist; do
+		if [[ -f $INSTANCE_ROOT/$f/.dep ]] || [[ -f $INSTANCE_ROOT/$f/.root ]]; then
+			rootdeps+="$f "
+		else	
+			roots+="$f "
+		fi
+	done
+
+	if [[ $list ]]; then
+		roots=$list
+
+	fi
+}
  
 invoke_link_creation() {
 	local target=${item##*_}
-	local source=$SANDBOX_ROOT/$dep
+	local source=$INSTANCE_ROOT/$dep
 	local src=$source/usr/$target 
 	local dest=$root/usr/
 
@@ -169,15 +180,9 @@ invoke_link_sync() {
 
 invoke_update_link() {
 	local sandbox=$1
-	local root=$SANDBOX_ROOT/$sandbox
-	local synced=
-	for syncdep in ${SYNCED[@]}; do
-		if [[ $syncdep == $sandbox ]]; then
-			synced=1
-			break
-		fi
-	done
-	if [[ $synced ]]; then
+	local root=$INSTANCE_ROOT/$sandbox
+	
+	if [[ ${synced[$sandbox]} ]]; then
 		return
 	fi
 	if [[ ! -d $root ]]; then
@@ -189,35 +194,30 @@ invoke_update_link() {
 	fi
 
 	local dep=$(return_dependency)
-	local link=$SANDBOX_DB_ROOT/$dep
-	log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET sandbox...$RESET"
+	local link=$INSTANCE_DB_ROOT/$dep
+	log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET...$RESET"
 	invoke_link_sync
-	SYNCED+=($sandbox)
+	synced[$sandbox]=1
 }
 
-update_links() {	
+update_links() {
+	declare -A synced
 	for sandbox in "$@"; do				
-		local dependency_chain=$(cat $SANDBOX_BASE/etc/deps/$sandbox 2>/dev/null)
-		for dep in $dependency_chain; do
+		for dep in $(return_dependencies); do
 			invoke_update_link $dep
 		done
 		invoke_update_link $sandbox
-	done	
+	done
 }
 
 update_link_lists() {	
 	for sandbox in "$@"; do				
-		local root=$SANDBOX_ROOT/$sandbox
-		local link=$SANDBOX_DB_ROOT/$sandbox
+		local root=$INSTANCE_ROOT/$sandbox
+		local link=$INSTANCE_DB_ROOT/$sandbox
 		local dep=$sandbox
 
 		if [[ ! -d $root ]]; then
 			log $BAR "Root for dependency $sandbox not found.\n Skipping link list synchronization..."
-			continue
-		fi
-
-		if [[ ! -f $root/.dep ]] && [[ ! -f $root/.root ]]; then
-				echo "this"
 			continue
 		fi
 
@@ -226,36 +226,44 @@ update_link_lists() {
 	done	
 }
 
+check_root() {
+	if [[ ! -d $INSTANCE_ROOT/$sandbox ]]; then
+		log $BAR$RESET "Root for $BOLD$sandbox$RESET not found.$RESET\n Skipping update..."
+		return 1
+	fi
+}
+
 invoke_vdb () {	
-	local root=$SANDBOX_ROOT/$sandbox
+	local root=$INSTANCE_ROOT/$sandbox
 	local dep=$(return_dependency)
 
 	if [[ -f $root/.dep ]]; then
 		dep=$sandbox
 	fi
 
-	if [[ ! -d $root ]]; then
-		log $BAR$RESET "Root for $BOLD$sandbox$RESET not found.$RESET\n Skipping update..."
-		return 1
-	fi
-
-	local template=$SANDBOX_BASE/etc/pacman.d/tpl/pacman.$dep.conf 
-	local pacmanconf=$SANDBOX_BASE/etc/pacman.d/pacman.$sandbox.conf
+	local template=$INSTANCE_PACMAND/tpl/pacman.$dep.conf 
+	local pacmanconf=$INSTANCE_PACMAND/pacman.$sandbox.conf
 	local header="##\n## THIS pacman.conf WAS AUTOMATICALLY GENERATED on $(date "+%F %T"). \n## DO NOT EDIT\n##\n" 
-	local basedep=$(return_base);
-	local ignorepkg="IgnorePkg  ="
-	local ignorelist="$(sbexecute $PARAMS$basedep pacman -Qq | sed -z -E "s,\n,\\\n|,g")"	
-	
+	local ignorepkg=
+
 	if [[ ! -f $root/.root ]]; then	
-		ignorepkg="$ignorepkg $(sbexecute $PARAMS$basedep pacman -Qq | sed -z "s/\n/ /g")"
-		local dependency_chain=$(cat $SANDBOX_BASE/etc/deps/$sandbox 2>/dev/null)
-		for depc in $dependency_chain; do
-			if [[ $depc == $basedep ]]; then
-				continue
-			fi
-			ignorepkg=$ignorepkg$(sbexecute $PARAMS$depc pacman -Qq | sed -z -E "s/$ignorelist//g" | sed -z "s/\n/ /g")
-			ignorelist="$ignorelist$(sbexecute $PARAMS$depc pacman -Qq | sed -z -E "s,\n,\\\n|,g")"	
+		declare -A skip
+		local skiplist=
+		ignorepkg="## Start of automated configuration ##\n"
+
+		for depc in $(return_dependencies); do
+			local pkgs=$(sbexecute $PARAMS$depc pacman -Qq)
+			for pkg in $pkgs; do
+			 	[[ ${skip[$pkg]} ]] && continue
+				ignorepkg+="IgnorePkg  = $pkg\n"
+			done			
+			skiplist=$pkgs$skiplist
+
+			for pkg in $skiplist; do
+				skip[$pkg]=1
+			done
 		done
+		ignorepkg=$ignorepkg"## End of automated configuration ##"
 	fi
 
 	echo -e $header > $pacmanconf
@@ -264,40 +272,53 @@ invoke_vdb () {
 }
 
 invoke_update() {
-	local params=$PARAMS
+	local params=$PARAMS	
+
+	log $BAR "Checking $sandbox instance for updates..."
 
 	sbexecute $params$sandbox pacman -Sy
 	local result=$(sbexecute pacman --color always $params$sandbox -Qu | grep -v "ignored")
 	
 	if [[ ! $result ]]; then
-		log $BAR_GREEN "Packages are up-to-date for $sandbox sandbox!"
+		log $BAR_GREEN "Packages are up-to-date for $sandbox!"
 	 	return
 	fi
 
 	echo -e "$BAR Packages to be installed or upgraded: $RESET \n\n$result\n"
-	[[ ! $(query_confirm "Confirm update and database synchronization on sandbox $sandbox") ]] && return
+	[[ ! $(query_confirm "Confirm update and database synchronization on $sandbox") ]] && return
 	SYNCREQ=1
 	sbexecute pacman $params$sandbox -Su --noconfirm 2>/dev/null
 	log $BAR "Synchronizing pacman database for foreign packages..."
 	sbexecute pacman $params$sandbox -Su --dbonly --noconfirm --config=/tmp/pacman.conf 2>/dev/null
-	log $BAR_GREEN "Synchronisation and upgrades are complete!"
+	log $BAR_GREEN "Synchronization and upgrades are complete!"
 }
 
 update () {		
-	for sandbox in "$@"; do			
-		invoke_vdb
-		[[ $? == 1 ]] && continue
+	for sandbox in "$@"; do	
+		check_root
+		[[ $? == 1 ]] && continue	
 		invoke_update
 	done
 }
 
+generate_pacman_conf () {		
+	for sandbox in "$@"; do	
+		check_root
+		[[ $? == 1 ]] && continue	
+		invoke_vdb
+	done
+}
+
+return_dependencies() {
+	echo $(cat $INNSTANCE_DEPS_ROOT/$sandbox 2>/dev/null)
+}
 
 return_base() {
-	echo $(cat $SANDBOX_BASE/etc/deps/$sandbox 2>/dev/null | head -n 1)
+	echo $(cat $INSTANCE_DEPS_ROOT/$sandbox 2>/dev/null | head -n 1)
 }
 
 return_dependency() {
-	echo $(cat $SANDBOX_BASE/etc/deps/$sandbox 2>/dev/null | tail -n 1)
+	echo $(cat $INSTANCE_DEPS_ROOT/$sandbox 2>/dev/null | tail -n 1)
 }
 
 log () {

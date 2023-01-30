@@ -60,9 +60,6 @@ main () {
 	fi
 	
 	case $SWITCH in 
-		*ep*)
-			nvim "$INSTANCE_ROOT/etc/pacman.conf"
-			;;
 		*rc*|*cr*) 
 			execute_sandbox fakechroot fakeroot "${ARGS[@]}"	
 			;;		
@@ -110,9 +107,6 @@ parse_args () {
 				;;	
 			--exec)
 				SWITCH=rc$SWITCH
-				;;
-			--edit-pacman|-ep)
-				SWITCH=ep$SWITCH
 				;;
 			*)
 				ARGS+=("$var")
