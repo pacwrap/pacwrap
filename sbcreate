@@ -127,8 +127,7 @@ init_struct () {
 		$INSTANCE_ROOT/etc \
 		$INSTANCE_ROOT/var/lib/pacman \
 		$INSTANCE_ROOT/etc/pacman.d/ \
-		$INSTANCE_ROOT/etc/fonts/conf.d \
- 		$SANDBOX_BASE/etc/db/$SANDBOX
+		$INSTANCE_ROOT/etc/fonts/conf.d
 
 	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
 	cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
@@ -154,7 +153,7 @@ init_struct () {
 		
 	if [[ $ISDEP ]]; then
 		cp $SANDBOX_BASE/etc/pacman.tpl.conf $SANDBOX_BASE/etc/pacman.d/tpl/pacman.$SANDBOX.conf
-		mkdir -p
+		mkdir -p $SANDBOX_BASE/etc/db/$SANDBOX
 		touch $INSTANCE_ROOT/.dep
 	fi
 	
@@ -167,7 +166,7 @@ init_chroot () {
     	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
 	--cache /var/lib/cache/pacman/pkg \
     	base lib32-glibc --noconfirm 2>/dev/null
-	sbupdate -fbns $SANDBOX
+	sbupdate -fbns
 }
 
 finalise () {

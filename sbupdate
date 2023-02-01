@@ -60,35 +60,35 @@ main () {
 
 	local roots=
 	local rootdeps=
+	local baserootdeps=
 
 	init_vars
 
-	if [[ $SWITCH == *g* ]] && [[ $SWITCH == *b* ]]; then
-		generate_pacman_conf $roots
-	fi	
-
-	if [[ $SWITCH != *b* ]]; then
-		log $BAR "Update on sandbox dependencies \n\n$rootdeps\n"
-		if [[ "$(query_confirm "Proceed with update?")" ]]; then	
-			generate_pacman_conf $rootdeps
-			update $rootdeps
-		fi
+	if [[ $SWITCH == *v* ]]; then
+		log "$BOLD$(basename $BASH_SOURCE)$RESET version 0.8 beta. Copyright 2023 Xavier M."
+		log "Licensed under (to be specified) license, see LICENSE file for details."
+		exit	
 	fi
 
-	if [[ $SWITCH == *f* ]]; then
-		log $BAR "Synchronizing for the first time..."
-		update_links $roots
-		update_link_lists $roots
-		update_link_lists $roots
-		log $BAR_GREEN "Synchronization complete!"
+	if [[ $SWITCH == *g* ]] && [[ $SWITCH == *b* ]]; then
+		generate_pacman_conf ${ARGS[@]}
 		return
+	fi
+
+	if [[ $SWITCH != *b* ]]; then
+		log $BAR "Update dependencies \n\n$baserootdeps$rootdeps\n"
+		
+		if [[ "$(query_confirm "Proceed with update?")" ]]; then	
+			generate_pacman_conf $baserootdeps$rootdeps
+			update $baserootdeps$rootdeps
+		fi
 	fi
 
 	if [[ $SWITCH == *s* ]] || [[ $SYNCREQ == 1 ]]; then
 		log $BAR "Synchronization event triggered..."	
-		update_link_lists $rootdeps$roots
+		generate_cache $baserootdeps
 		update_links $rootdeps$roots
-		update_link_lists $rootdeps$roots
+		cleanup_cache $rootdeps$baserootdeps
 		log $BAR_GREEN "Synchronization complete!"
 	fi
 
@@ -102,12 +102,8 @@ main () {
 }
 
 parse_args () {
-	ARGS=()
 	for var in "$@"; do
 		case $var in 
-			--first-time|-f)
-				SWITCH=f$SWITCH
-				;;
 			--generate-config|-g)
 				SWITCH=g$SWITCH
 				;;
@@ -119,7 +115,7 @@ parse_args () {
 				;;
 			--sync|-s)
 				SWITCH=s$SWITCH
-				;;
+				;;		
 			-*)
 				SWITCH=$(echo $var | cut -c 2-)
 				;;
@@ -132,71 +128,67 @@ parse_args () {
 
 init_vars() {
 	local rootlist=$(ls -U -1F $INSTANCE_ROOT | grep -i "/" | tr -d "/")
-	local list=${ARGS[@]}
-
-
-	if [[ $list ]]; then
-		roots=$list
-		return
-	fi
-
 	for f in $rootlist; do
-		if [[ -f $INSTANCE_ROOT/$f/.dep ]] || [[ -f $INSTANCE_ROOT/$f/.root ]]; then
+		if [[ -f $INSTANCE_ROOT/$f/.root ]]; then
+			baserootdeps+="$f "
+		elif [[ -f $INSTANCE_ROOT/$f/.dep ]]; then
 			rootdeps+="$f "
 		else	
 			roots+="$f "
 		fi
 	done
-
 }
 
 invoke_link_deletion() {
 	local pwd=$PWD
-	local file_old=$link/$item.zst
-	local file_new=$link/$item.new.zst
-	local delfiles=$(diff --unchanged-group-format= --new-line-format='%L' \
-		-biw <(echo "$(zstd -fd < $file_new)") <(echo "$(zstd -fd < $file_old)"))
+	local file_old=$link/$item.old.zst
+	local file_new=$link/$item.zst
+
+	([[ ! -f $file_new ]] || [[ ! -f $file_old ]]) && return
 
 	cd $root/usr
-	echo $delfiles | xargs rm -f
+	diff --unchanged-group-format= --new-line-format='%L' \
+		-biw <(echo "$(zstd -fd < $file_new)") <(echo "$(zstd -fd < $file_old)") | xargs rm -f
 	cd $pwd
 }
 
 invoke_update_link() {
 	local sandbox=$1
-	local root=$INSTANCE_ROOT/$sandbox
 
 	if [[ ${synced[$sandbox]} ]]; then
 		return
 	fi
-	if [[ -f $root/.root ]]; then
+	if [[ -f $INSTANCE_ROOT/$sandbox/.root ]]; then
 		return
 	fi
 
-	local dep=$(return_dependency)
 	local linkfiles=${LINKFILES[@]}
 	
 	log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET...$RESET"
+
+	local dep=$(return_dependency)
+
 	if [[ $SWITCH != *f* ]]; then
 		for item in ${linkfiles[@]}; do
 			local root=$INSTANCE_ROOT/$sandbox
-			local link=$INSTANCE_DB_ROOT/$sandbox
+			local link=$INSTANCE_DB_ROOT/$dep
 			invoke_link_deletion	
 		done
 	fi
 
 	for item in ${linkfiles[@]}; do
-		local link=$INSTANCE_DB_ROOT/$dep	
 		local root=$INSTANCE_ROOT/$sandbox
 		local source=$INSTANCE_ROOT/$dep		
-		local target=$item
-		local src=$source/usr/$target 
+		local src=$source/usr/$item 
 		local dest=$root/usr/	
 
 		cp -flR $src $dest 2>/dev/null
 		log " Synchronization complete for $BOLD$item$RESET in $BOLD$sandbox$RESET!"
 	done
 
+	if [[ -f $INSTANCE_ROOT/$sandbox/.dep ]]; then
+		generate_cache $sandbox		
+	fi
 	synced[$sandbox]=1
 }
 
@@ -214,47 +206,42 @@ update_links() {
 	done
 }
 
-invoke_place_link_list() {
-	local dep=$sandbox
-	local linkfiles=${LINKFILES[@]}
+cleanup_cache() {
+	for sandbox in "$@"; do				
+		check_root "cache file operation"
+		[[ $? == 1 ]] && continue
 	
-	for item in ${linkfiles[@]}; do
-		local link=$INSTANCE_DB_ROOT/$sandbox
-		local target=$item
-
-		rm $link/$target.zst
-		mv $link/$target.new.zst $link/$target.zst
+		local linkfiles=${LINKFILES[@]}
+	
+		for item in ${linkfiles[@]}; do
+			rm $INSTANCE_DB_ROOT/$sandbox/$item.old.zst
+		done
 	done
 }
 
-invoke_update_link_list() {
+invoke_generate_cache() {
 	local dep=$sandbox
 	local linkfiles=${LINKFILES[@]}
 	
 	for item in ${linkfiles[@]}; do
 		local root=$INSTANCE_ROOT/$sandbox
 		local link=$INSTANCE_DB_ROOT/$sandbox
-		local target=$item
 		local rdir=$root/usr/
-		local tdir=$root/usr/$target
-
-		find $tdir -type f,l -links +1 | sed -z "s,$rdir,,g" | zstd -fq -o $link/$target.new.zst
+		local tdir=$root/usr/$item
+	
+		mv $link/$item.zst $link/$item.old.zst
+		find $tdir -type f,l | sed -z "s,$rdir,,g" | zstd -fq -o $link/$item.zst
 	done
-	log $ARROW_GREEN "Link Cache generated for $BOLD$sandbox$RESET!"	
+	log $ARROW_GREEN "Generated link cache for $BOLD$sandbox$RESET!"	
 }
 
-update_link_lists() {
+generate_cache() {
 	for sandbox in "$@"; do				
 		check_root "cache"
 		[[ $? == 1 ]] && continue
 
-		if [[ $PLACE ]]; then
-			invoke_place_link_list
-		else
-			invoke_update_link_list
-		fi
+		invoke_generate_cache
 	done
-	PLACE=1
 }
 
 check_root() {
