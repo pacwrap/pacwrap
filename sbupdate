@@ -187,7 +187,7 @@ invoke_update_link() {
 	done
 
 	if [[ -f $INSTANCE_ROOT/$sandbox/.dep ]]; then
-		generate_cache $sandbox		
+		invoke_generate_cache
 	fi
 	synced[$sandbox]=1
 }
