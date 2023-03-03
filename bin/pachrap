@@ -19,7 +19,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 VER="v0.9 BETA"
-EXEC_NAME="pacshrap"
+EXEC_NAME="pachrap"
 
 BOLD=$(tput bold)
 RED=$(tput setaf 1)
@@ -100,15 +100,15 @@ distro_check() {
 	version
 	cat << _WARN 
 
-$BOLD${RED}error:$RESET An attempt was made to execute pacshrap on an unsupported distribution.
-pacshrap is currently only supported on distributions utilising Arch Linux's pacman package manager.
+$BOLD${RED}error:$RESET An attempt was made to execute pachrap on an unsupported distribution.
+pachrap is currently only supported on distributions utilising Arch Linux's pacman package manager.
 Support for other package managers with a similar, requisite subset of features may be possible in future.
 _WARN
 		exit 1
 	fi
 
 	if [[ ! $ID == "arch" ]]; then cat << _WARN
-$BOLD${RED}WARNING:$RESET You are running pacshrap on an unsupported derviative of Arch Linux.
+$BOLD${RED}WARNING:$RESET You are running pachrap on an unsupported derviative of Arch Linux.
 
 Support is not guaranteed. Use at your ${BOLD}OWN$RESET risk.
 

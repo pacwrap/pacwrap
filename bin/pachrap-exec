@@ -21,7 +21,7 @@
 BOLD=$(tput bold)
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
-EXEC_NAME="pacshrap-exec"
+EXEC_NAME="pachrap-exec"
 
 main () {
 	

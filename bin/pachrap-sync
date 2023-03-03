@@ -36,7 +36,7 @@ ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
 EXEC_NAME="pachrap-sync"
-EXEC_SCRIPT="pacshrap-exec"
+EXEC_SCRIPT="pachrap-exec"
 PARAMS="--root --exec"
 DEP_PARAMS="--dep --root --exec"
 LINKFILES=("bin" "lib" "lib32" "share")
