@@ -1,0 +1,235 @@
+#!/bin/bash
+#
+#  Pachwrap
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+VER="v0.9 BETA"
+EXEC_NAME="pachwrap"
+
+BOLD=$(tput bold)
+RED=$(tput setaf 1)
+RESET=$(tput sgr0)
+
+main () {
+
+	distro_check
+	parse_args "$@"
+
+	case $SWITCH in 
+		C)
+			pachwrap-create ${ARGS[@]}
+			;;
+		E)
+			pachwrap-exec ${ARGS[@]}
+			;;
+		S)
+			pachwrap-sync ${ARGS[@]}
+			;;
+		h)
+			help_operation $HELP
+			;;
+		v)
+			version
+			;;
+		*)
+			if [[ $1 ]]; then
+				echo $EXEC_NAME": invalid option -- '$(echo $1 | cut -c 2-)'"
+			else
+				echo $EXEC_NAME": operation not specified."
+			fi
+				echo "Try '$EXEC_NAME -h' for more information on valid operational parameters."
+			;;
+	esac
+}
+
+
+parse_args () {
+	ARGS=()
+	for var in "$@"; do
+		case $var in
+			--create|-C) 
+				SWITCH=C
+				;;
+			--execute|-E)
+				SWITCH=E
+				;;
+			--sync|-S)
+				SWITCH=S
+				;;
+			--help=*)
+				HELP=("$(echo $var | cut -c 8-)")
+				SWITCH=h
+				;;
+			-h|--help)
+				SWITCH=h
+				;;
+			-v|--version)
+				SWITCH=v
+				;;
+			-E*|-C*|-S*)
+				ARGS+=("$var")
+				SWITCH=$(echo $var | cut -c 2-2)
+				;;
+			*)
+				ARGS+=("$var")
+				;;
+		esac
+	done
+}
+
+distro_check() {
+
+	source /etc/os-release
+
+	if [[ ! -f /usr/bin/pacman ]]; then
+	version
+	cat << _WARN 
+
+$BOLD${RED}error:$RESET An attempt was made to execute pachwrap on an unsupported distribution.
+pachwrap is currently only supported on distributions utilising Arch Linux's pacman package manager.
+Support for other package managers with a similar, requisite subset of features may be possible in future.
+_WARN
+		exit 1
+	fi
+
+	if [[ ! $ID == "arch" ]]; then cat << _WARN
+$BOLD${RED}WARNING:$RESET You are running pachwrap on an unsupported derviative of Arch Linux.
+
+Support is not guaranteed. Use at your ${BOLD}OWN$RESET risk.
+
+_WARN
+	fi
+}
+
+version () {
+	if [[ ! $VER_DISPLAY ]]; then
+		VER_DISPLAY=$EXEC_NAME
+	fi
+
+cat << _VERSION
+$VER_DISPLAY $VER
+Copyright (C) 2023 Xavier R.M.
+
+Website: https://pacshrap.sapphirus.org/
+Github: https://github.com/sapphirusberyl/TBD/
+
+This program may be freely redistributed under the terms of the GNU General Public License v3.
+_VERSION
+}
+
+help_create() {
+
+cat << _USAGE
+${BOLD}CREATE OPTIONS$RESET
+	${BOLD}-d, --is-deps$RESET
+		Set target as dependency.
+
+	${BOLD}-r, --is-root$RESET
+		Set target as root dependency.
+	
+	${BOLD}--dep=TARGET$RESET
+		Set TARGET as non-root dependency.
+
+_USAGE
+}
+
+
+help_execute() {
+cat <<_USAGE
+${BOLD}EXECUTE OPTIONS$RESET
+	${BOLD}--sandbox=TARGET$RESET
+		Specify the target sandbox to execute with bubblewrap.
+
+	${BOLD}-r, --root$RESET
+		Execute operation with fakeroot. Facilitates a command with faked root privileges.
+	
+	${BOLD}-s, --shell$RESET
+		Invoke a bash shell
+
+_USAGE
+}
+
+help_sync() {
+cat << _USAGE
+${BOLD}SYNCHRONIZAtION OPERATIONS$RESET
+	${BOLD}-s, --sync$RESET
+		Executes a chroot synchronization event.
+
+	${BOLD}-n, --no-confirm$RESET
+		Override confirmation prompts and confirm all operations. 
+
+	${BOLD}-b, --bypass-update$RESET
+		Skip updating chroot environments and thus bypass pacman invocation on specified targets.
+
+	${BOLD}-g, --generate-config$RESET
+		Generate a new pacman.conf for specified targets.
+	
+_USAGE
+}
+
+help_operation() {
+
+cat << _USAGE
+
+${BOLD}NAME$RESET
+	pacshrap -- CLI tool which allows the creation, management, and execution of rootless, sandboxed chroots 
+	utilising pacman, bubblewrap, and fakeroot. 
+
+${BOLD}SYNOPSIS$RESET
+	pachwrap [options] [TARGETS]
+	pachwrap [options] [TARGETS] [EXEC_ARGS]	
+
+${BOLD}OPERATIONS$RESET
+	${BOLD}-S, --sync$RESET
+		Synhcronize package databases and update packages in target chroots. 
+		chpak-sync is invoked which facilitates an update and synchronization operation on specified targets.
+	
+	${BOLD}-C, --create$RESET
+		Facilitates the creation of chroots. Creation is facilitated with chpak-create.
+
+	${BOLD}-E, --execute$RESET
+		Executes application in target chroot with chpak-execute using bubblewrap.
+
+	${BOLD}-h, --help, --help=OPERATION$RESET
+		Invokes a printout of this manual in stdout. Specify an operation for further information.
+	
+	${BOLD}-v, --version$RESET
+		Printout of version and copyright information	
+
+_USAGE
+
+	case $HELP in
+		SYNC|sync|s|S)
+			help_sync
+			;;
+
+		CREATE|create|c|C)
+			help_create
+			;;
+		EXECUTE|execute|e|E)
+			help_execute
+			;;
+		*)
+			help_create
+			help_execute
+			help_sync
+			;;
+	esac
+}
+
+main $@
