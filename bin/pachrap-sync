@@ -35,7 +35,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-EXEC_NAME="pacshrap-sync"
+EXEC_NAME="pachrap-sync"
 EXEC_SCRIPT="pacshrap-exec"
 PARAMS="--root --exec"
 DEP_PARAMS="--dep --root --exec"

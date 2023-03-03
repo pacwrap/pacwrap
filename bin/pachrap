@@ -32,13 +32,13 @@ main () {
 
 	case $SWITCH in 
 		C)
-			pacshrap-create ${ARGS[@]}
+			pachrap-create ${ARGS[@]}
 			;;
 		E)
-			pacshrap-exec ${ARGS[@]}
+			pachrap-exec ${ARGS[@]}
 			;;
 		S)
-			pacshrap-sync ${ARGS[@]}
+			pachrap-sync ${ARGS[@]}
 			;;
 		h)
 			help_operation $HELP

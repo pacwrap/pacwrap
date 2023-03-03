@@ -19,8 +19,8 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
-EXEC_NAME="pacshrap-create" 
-EXEC_SCRIPT="pacshrap-exec"
+EXEC_NAME="pachrap-create" 
+EXEC_SCRIPT="pachrap-exec"
 
 main () {	
 
