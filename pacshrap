@@ -32,13 +32,13 @@ main () {
 
 	case $SWITCH in 
 		C)
-			sbcreate ${ARGS[@]}
+			pacshrap-create ${ARGS[@]}
 			;;
 		E)
-			sbexecute ${ARGS[@]}
+			pacshrap-exec ${ARGS[@]}
 			;;
 		S)
-			sbupdate ${ARGS[@]}
+			pacshrap-sync ${ARGS[@]}
 			;;
 		h)
 			help_operation $HELP
@@ -96,7 +96,7 @@ distro_check() {
 
 	source /etc/os-release
 
-	if [[ -f /usr/bin/pacman ]]; then
+	if [[ ! -f /usr/bin/pacman ]]; then
 	version
 	cat << _WARN 
 
