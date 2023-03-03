@@ -1,33 +1,22 @@
 #!/bin/bash
 #
-# BSD-3-Clause
+#  Pacshrap -- chroot synchronization utility
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
 #
-# Sandbox Update - Copyright 2023 Xavier (sapphirus@azorium.net)
 #
-# Redistribution and use in source and binary forms, with or without modification, 
-# are permitted provided that the following conditions are met:
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
 #
-#  1. Redistributions of source code must retain the above copyright notice, 
-#  this list of conditions and the following disclaimer.
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
 #
-#  2. Redistributions in binary form must reproduce the above copyright notice, 
-#  this list of conditions and the following disclaimer in the documentation 
-#  and/or other materials provided with the distribution.
-#
-#  3. Neither the name of the copyright holder nor the names of its contributors 
-#  may be used to endorse or promote products derived from this software without 
-#  specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
-# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
-# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 INSTANCE_ROOT=$SANDBOX_BASE/fs/root
 INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
@@ -46,15 +35,21 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-PARAMS="--root --exec --sandbox="
-DEP_PARAMS="--dep --root --exec --sandbox="
+EXEC_NAME="pacshrap-sync"
+PARAMS="--root --exec"
+DEP_PARAMS="--dep --root --exec"
 LINKFILES=("bin" "lib" "lib32" "share")
 
 main () {
 	parse_args $@
 
+	if [[ $SWITCH == *v* ]]; then
+		VER_DISPLAY=$EXEC_NAME chpak -v 
+		exit	
+	fi
+
 	if [[ ! -d $INSTANCE_ROOT ]]; then
-		echo $BOLD$RED"Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
+		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
 		exit
 	fi	
 
@@ -63,12 +58,6 @@ main () {
 	local baserootdeps=
 
 	init_vars
-
-	if [[ $SWITCH == *v* ]]; then
-		log "$BOLD$(basename $BASH_SOURCE)$RESET version 0.8 beta. Copyright 2023 Xavier M."
-		log "Licensed under (to be specified) license, see LICENSE file for details."
-		exit	
-	fi
 
 	if [[ $SWITCH == *g* ]] && [[ $SWITCH == *b* ]]; then
 		generate_pacman_conf ${ARGS[@]}
@@ -270,7 +259,7 @@ invoke_vdb () {
 		ignorepkg="## Start of automated configuration ##\n"
 
 		for depc in $(return_dependencies); do
-			local pkgs=$(sbexecute $PARAMS$depc pacman -Qq)
+			local pkgs=$(sbexecute $depc $PARAMS pacman -Qq)
 			for pkg in $pkgs; do
 			 	[[ ${skip[$pkg]} ]] && continue
 				ignorepkg+="IgnorePkg  = $pkg\n"
@@ -294,8 +283,8 @@ invoke_update() {
 
 	log $BAR "Checking $sandbox instance for updates..."
 
-	sbexecute $params$sandbox pacman -Sy
-	local result=$(sbexecute pacman --color always $params$sandbox -Qu | grep -v "ignored")
+	sbexecute $sandbox $params pacman -Sy
+	local result=$(sbexecute $sandbox $params pacman --color always -Qu | grep -v "ignored")
 	
 	if [[ ! $result ]]; then
 		log $BAR_GREEN "Packages are up-to-date for $sandbox!"
@@ -305,9 +294,9 @@ invoke_update() {
 	echo -e "$BAR Packages to be installed or upgraded: $RESET \n\n$result\n"
 	[[ ! $(query_confirm "Confirm update and database synchronization on $sandbox") ]] && return
 	SYNCREQ=1
-	sbexecute pacman $params$sandbox -Su --noconfirm 2>/dev/null
+	sbexecute $sandbox $params pacman -Su --noconfirm 2>/dev/null
 	log $BAR "Synchronizing pacman database for foreign packages..."
-	sbexecute pacman $params$sandbox -Su --dbonly --noconfirm --config=/tmp/pacman.conf 2>/dev/null
+	sbexecute $sandbox $params pacman -Su --dbonly --noconfirm --config=/tmp/pacman.conf 2>/dev/null
 	log $BAR_GREEN "Synchronization and upgrades are complete!"
 }
 

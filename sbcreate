@@ -1,54 +1,49 @@
 #!/bin/bash
 #
-# BSD-3-Clause
+#  Pacshrap -- chroot initialisation utility
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
 #
-# Sandbox Creation Utility Script (SBCreate) Copyright 2023 Xavier (sapphirus@azorium.net)
 #
-# Redistribution and use in source and binary forms, with or without modification, 
-# are permitted provided that the following conditions are met:
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
 #
-#  1. Redistributions of source code must retain the above copyright notice, 
-#  this list of conditions and the following disclaimer.
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
 #
-#  2. Redistributions in binary form must reproduce the above copyright notice, 
-#  this list of conditions and the following disclaimer in the documentation 
-#  and/or other materials provided with the distribution.
-#
-#  3. Neither the name of the copyright holder nor the names of its contributors 
-#  may be used to endorse or promote products derived from this software without 
-#  specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
-# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
-# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
-	
+EXEC_NAME="pacshrap-create" 
+
 main () {	
 
 	parse_args "$@"
 
+	if [[ $SWITCH == *v* ]]; then
+		VER_DISPLAY=$EXEC_NAME chpak -v
+		exit
+	fi
+
 	if [[ ! $SANDBOX ]]; then
-		echo "Sandbox not specified."
-		exit 1;
+		echo $EXEC_NAME": Sandbox not specified."
+		exit 1
 	fi
 
 	init_vars
 
 	if [[ -d $INSTANCE_ROOT ]] || [[ -d $INSTANCE_HOME ]]; then 
-		echo "Root or home directory for $SANDBOX exists. Aborting." 
+		echo $EXEC_NAME": Root or home directory for $SANDBOX exists. Aborting." 
 		exit 1
 	fi
 
 	if [[ ! -d $BASE_ROOT ]] && [[ ! $DEPEND ]]; then
-		echo "Directory not found for $DEPEND root dependency."
+		echo $EXEC_NAME": Directory not found for $DEPEND root dependency."
 		exit 1
 	fi
 
@@ -89,8 +84,11 @@ parse_args () {
 			--is-root)
 				SWITCH=r$SWITCH
 				;;
+			-C*)
+				SWITCH=$(echo $var | cut -c 3-)$SWITCH
+				;;
 			-*)
-				SWITCH=$(echo $var | cut -c 2-)
+				SWITCH=$(echo $var | cut -c 2-)$SWITCH
 				;;
 			*)
 				SANDBOX=$var
@@ -101,7 +99,7 @@ parse_args () {
 
 init_vars () {
 	PACMAN_CONFIG=pacman.install.conf	
-	PARAMS="--sandbox=$SANDBOX --root --exec"	
+	PARAMS="$SANDBOX --root --exec"	
 	INSTANCE_ROOT=$SANDBOX_BASE/fs/root/$SANDBOX
 	INSTANCE_HOME=$SANDBOX_BASE/fs/home/$SANDBOX
 	INSTANCE_DEP_LIST=$SANDBOX_BASE/etc/deps/$SANDBOX
