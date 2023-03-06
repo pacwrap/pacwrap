@@ -1,0 +1,247 @@
+#!/bin/bash
+#
+#  Pachwrap -- chroot synchronization utility
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+INSTANCE_ROOT=$SANDBOX_BASE/fs/root
+INSTANCE_HOME=$SANDBOX_BASE/fs/home
+INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
+INSTANCE_DEPS_ROOT=$SANDBOX_BASE/etc/deps
+INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
+
+BOLD=$(tput bold)
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+CYAN=$(tput setaf 6)
+YELLOW=$(tput setaf 11)
+RESET=$(tput sgr0)
+UNDERLINE=$(tput smul)
+
+NUMFMT="numfmt --to=si --suffix=B --from-unit=1000 --format=%2f "
+
+BAR="$RED$BOLD::$RESET$BOLD"
+BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
+ARROW="$CYAN$BOLD->$RESET"
+ARROW_GREEN="$GREEN$BOLD->$RESET"
+ARROW_RED="$RED$BOLD->$RESET"
+
+EXEC_NAME="pachwrap-utils"
+EXEC_SCRIPT="pachwrap-exec"
+
+main () {
+	parse_args $@
+
+	if [[ $SWITCH == *v* ]]; then
+		VER_DISPLAY=$EXEC_NAME pachwrap -v 
+		exit	
+	fi
+
+	if [[ ! -d $INSTANCE_ROOT ]]; then
+		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
+		exit
+	fi	
+
+	if [[ ! $SWITCH ]]; then
+		echo $BOLD$RED"error:$RESET no operation provided."
+		exit
+	fi
+
+	local roots=
+	local rootdeps=
+	local baserootdeps=
+	local links=
+	local total=0
+
+	init_vars
+
+	case $SWITCH in
+		h*)
+			pachwrap --help=utils
+			;;
+
+		l*)
+				local instance=${ARGS[1]};
+				local link=${ARGS[0]};
+
+				if [[ ! $instance ]] || [[ ! $link ]]; then
+					echo "Invalid parameters."
+				fi
+
+				printf "%s\n\n$BOLD%s\n\n" "$BAR Create virtual instance" "$instance $ARROW $link"
+
+				if [[ "$(query_confirm "Proceed with creation?")" ]]; then
+					if [[ -d $INSTANCE_ROOT/$instance ]]; then
+						echo "$RED${BOLD}error:$RESET $instance already exists."
+						return
+					fi
+					ln -s $INSTANCE_ROOT/$link $INSTANCE_ROOT/$instance
+
+					mkdir -p $INSTANCE_HOME/$instance
+					echo 'PS1="'$instance'> "' > $INSTANCE_HOME/$instance/.bashrc
+
+					printf "$BAR_GREEN %s$RESET\n" "Creation of virtual instance $instance complete!"	
+				fi
+			;;			
+		d*)
+				local instance=${ARGS[0]};
+				
+				if [[ ! $instance ]]; then
+			
+					printf "%s\n%s\n" "$EXEC_NAME: instance not specified." \
+					       "Try '$EXEC_NAME -h' for more information on valid operational parameters."
+					return
+				fi
+				printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete instance" "$instance"
+
+				if [[ "$(query_confirm "Proceed with deletion?")" ]]; then
+					if [[ ! -d $INSTANCE_ROOT/$instance ]]; then
+						echo "$RED${BOLD}error:$RESET $instance does not exist."
+						return
+					fi
+					rm -rf $INSTANCE_ROOT/$instance
+					
+					printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Retain instance's home directory" "$instance"
+
+					[[ "$(query_confirm "Retain home directory?")" ]] && return
+				
+					if [[ ! -d $INSTANCE_HOME/$instance ]]; then
+						echo "$RED${BOLD}error:$RESET Home $instance does not exist."
+						return	
+					fi
+					
+					rm -rf $INSTANCE_HOME/$instance
+					printf "$BAR_GREEN %s$RESET\n" "Deletion of $instance complete!"
+				fi
+			;;			
+
+		s*)
+			if [[ $SWITCH == *l* ]]; then
+				local tmpfile=$(mktemp)
+				
+				list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} > $tmpfile
+		
+				echo -n $BOLD
+				cat $tmpfile | column -t --table-columns=Name,Dependency,Size,Type
+				rm $tmpfile
+			fi
+		
+			if [[ $SWITCH == *d* ]]; then	
+		
+				[[ ! $SWITCH == *l* ]] && add_total ${roots[@]} ${rootdeps[@]} ${baserootdeps[@]}
+				
+				local dh=$(du -d 1 $INSTANCE_ROOT | tail -n-1)
+				local actual_size=${dh%	*}	
+				local diff=$(($total - $actual_size))
+		
+				printf "\n${BOLD}Diskspace consumption summary$RESET\n"
+				printf "\n%s\t%s\n" "Total   " "  $($NUMFMT $total)"
+				printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$RESET"
+				printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " "  $($NUMFMT $actual_size)"
+			fi
+		;;
+	esac
+}
+
+parse_args () {
+	for var in "$@"; do
+		case $var in 
+			--list|-l)
+				SWITCH=l$SWITCH
+				;;
+			-*)
+				SWITCH=$(echo $var | cut -c 2-)
+				;;
+			*)
+				ARGS+=("$var")
+				;;
+			esac
+	done
+}
+
+init_vars() {
+	local list="ls -U -1F $INSTANCE_ROOT"
+	local rootlist=$($list | grep -i "/" | tr -d "/")
+	local linklist=$($list | grep -i "@" | tr -d "@")
+
+	for f in $rootlist; do
+		if [[ -f $INSTANCE_ROOT/$f/.root ]]; then
+			baserootdeps+=($f)
+		elif [[ -f $INSTANCE_ROOT/$f/.dep ]]; then
+			rootdeps+=($f)
+		else	
+			roots+=($f)
+		fi
+	done
+
+	for f in $linklist; do
+		links+=($f)
+	done
+}
+
+
+add_total() {
+	for instance in $@; do
+		local dh=$(du -d 1 $INSTANCE_ROOT/$instance | tail -n-1)
+		((total+=${dh%	*}))	
+	done
+}
+
+list_root() {
+	for instance in $@; do
+		local dh=$(du -d 1 $INSTANCE_ROOT/$instance | tail -n-1)
+		local bytes=${dh%	*}
+		local dep=$(return_dependency)
+		local type=
+
+		if [[ $bytes == 0 ]]; then
+			dep="$(ls -l $INSTANCE_ROOT/$instance)"
+			type="LINK"
+		elif [[ ! $dep ]]; then
+			type="BASE"
+			dep="-"
+		elif [[ -f $INSTANCE_ROOT/$instance/.dep ]]; then
+			type="DEP"
+		else
+			type="ROOT"
+		fi
+
+		printf "$RESET%s\t%s\t%s\t%s\n" "$instance" "${dep##*> }" "$($NUMFMT $bytes)" "$type"
+		((total+=$bytes))
+	done
+}
+
+return_dependency() {
+	echo $(cat $INSTANCE_DEPS_ROOT/$instance 2>/dev/null | tail -n 1)
+}
+
+query_confirm () {
+	if [[ $SWITCH == *n* ]]; then		
+		echo 1	
+		return
+	fi
+	read -rp "$BAR $@ [y/N]$RESET " input
+	if [[ "$input" != "y" ]] && 
+	   [[ "$input" != "Y" ]] &&
+	   ([[ "$input" == "" ]] ||
+	   [[ "$input" != "" ]]); then
+		return	
+	fi
+	echo 1
+}
+
+main $@
