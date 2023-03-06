@@ -19,6 +19,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 INSTANCE_ROOT=$SANDBOX_BASE/fs/root
+INSTANCE_HOME=$SANDBOX_BASE/fs/home
 INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
 INSTANCE_DEPS_ROOT=$SANDBOX_BASE/etc/deps
 INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
@@ -39,7 +40,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-EXEC_NAME="pachwrap-manage"
+EXEC_NAME="pachwrap-utils"
 EXEC_SCRIPT="pachwrap-exec"
 
 main () {
@@ -69,30 +70,89 @@ main () {
 	init_vars
 
 	case $SWITCH in
+		h*)
+			pachwrap --help=utils
+			;;
+
+		l*)
+				local instance=${ARGS[1]};
+				local link=${ARGS[0]};
+
+				if [[ ! $instance ]] || [[ ! $link ]]; then
+					echo "Invalid parameters."
+				fi
+
+				printf "%s\n\n$BOLD%s\n\n" "$BAR Create virtual instance" "$instance $ARROW $link"
+
+				if [[ "$(query_confirm "Proceed with creation?")" ]]; then
+					if [[ -d $INSTANCE_ROOT/$instance ]]; then
+						echo "$RED${BOLD}error:$RESET $instance already exists."
+						return
+					fi
+					ln -s $INSTANCE_ROOT/$link $INSTANCE_ROOT/$instance
+
+					mkdir -p $INSTANCE_HOME/$instance
+					echo 'PS1="'$instance'> "' > $INSTANCE_HOME/$instance/.bashrc
+
+					printf "$BAR_GREEN %s$RESET\n" "Creation of virtual instance $instance complete!"	
+				fi
+			;;			
+		d*)
+				local instance=${ARGS[0]};
+				
+				if [[ ! $instance ]]; then
+			
+					printf "%s\n%s\n" "$EXEC_NAME: instance not specified." \
+					       "Try '$EXEC_NAME -h' for more information on valid operational parameters."
+					return
+				fi
+				printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete instance" "$instance"
+
+				if [[ "$(query_confirm "Proceed with deletion?")" ]]; then
+					if [[ ! -d $INSTANCE_ROOT/$instance ]]; then
+						echo "$RED${BOLD}error:$RESET $instance does not exist."
+						return
+					fi
+					rm -rf $INSTANCE_ROOT/$instance
+					
+					printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Retain instance's home directory" "$instance"
+
+					[[ "$(query_confirm "Retain home directory?")" ]] && return
+				
+					if [[ ! -d $INSTANCE_HOME/$instance ]]; then
+						echo "$RED${BOLD}error:$RESET Home $instance does not exist."
+						return	
+					fi
+					
+					rm -rf $INSTANCE_HOME/$instance
+					printf "$BAR_GREEN %s$RESET\n" "Deletion of $instance complete!"
+				fi
+			;;			
+
 		s*)
-		if [[ $SWITCH == *l* ]]; then
-			local tmpfile=$(mktemp)
-			
-			list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} > $tmpfile
-	
-			echo -n $BOLD
-			cat $tmpfile | column -t --table-columns=Name,Dependency,Size,Type
-			rm $tmpfile
-		fi
-	
-		if [[ $SWITCH == *d* ]]; then	
-	
-			[[ ! $SWITCH == *l* ]] && add_total ${roots[@]} ${rootdeps[@]} ${baserootdeps[@]}
-			
-			local dh=$(du -d 1 $INSTANCE_ROOT | tail -n-1)
-			local actual_size=${dh%	*}	
-			local diff=$(($total - $actual_size))
-	
-			printf "\n${BOLD}Diskspace consumption summary$RESET\n"
-			printf "\n%s\t%s\n" "Total:  " "  $($NUMFMT $total)"
-			printf "%s\t%s\n" "Difference:" "- $UNDERLINE$($NUMFMT $diff)$RESET"
-			printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " "  $($NUMFMT $actual_size)"
-		fi
+			if [[ $SWITCH == *l* ]]; then
+				local tmpfile=$(mktemp)
+				
+				list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} > $tmpfile
+		
+				echo -n $BOLD
+				cat $tmpfile | column -t --table-columns=Name,Dependency,Size,Type
+				rm $tmpfile
+			fi
+		
+			if [[ $SWITCH == *d* ]]; then	
+		
+				[[ ! $SWITCH == *l* ]] && add_total ${roots[@]} ${rootdeps[@]} ${baserootdeps[@]}
+				
+				local dh=$(du -d 1 $INSTANCE_ROOT | tail -n-1)
+				local actual_size=${dh%	*}	
+				local diff=$(($total - $actual_size))
+		
+				printf "\n${BOLD}Diskspace consumption summary$RESET\n"
+				printf "\n%s\t%s\n" "Total   " "  $($NUMFMT $total)"
+				printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$RESET"
+				printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " "  $($NUMFMT $actual_size)"
+			fi
 		;;
 	esac
 }
@@ -167,6 +227,21 @@ list_root() {
 
 return_dependency() {
 	echo $(cat $INSTANCE_DEPS_ROOT/$instance 2>/dev/null | tail -n 1)
+}
+
+query_confirm () {
+	if [[ $SWITCH == *n* ]]; then		
+		echo 1	
+		return
+	fi
+	read -rp "$BAR $@ [y/N]$RESET " input
+	if [[ "$input" != "y" ]] && 
+	   [[ "$input" != "Y" ]] &&
+	   ([[ "$input" == "" ]] ||
+	   [[ "$input" != "" ]]); then
+		return	
+	fi
+	echo 1
 }
 
 main $@
