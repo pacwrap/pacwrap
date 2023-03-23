@@ -33,8 +33,8 @@ main () {
 	fi
 
 	if [[ $SANDBOX == "" ]]; then
-		echo $EXEC_NAME": Target not specified."
-		echo "Try 'chpak -h' for more information on valid operational parameters."
+		echo "$EXEC_NAME $BOLD${RED}ERROR$RESET: Target not specified."
+		echo "Try 'pacwrap -h' for more information on valid operational parameters."
 		exit 1
 	fi
 
@@ -42,31 +42,16 @@ main () {
 
 	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] || [[ ! -d $SANDBOX_BASE ]]; then
 		echo "$EXEC_NAME $BOLD${RED}ERROR$RESET: Sandbox $SANDBOX not found."
-		echo "Try 'chpak -h' for more information on valid operational parameters."	
+		echo "Try 'pacwrap -h' for more information on valid operational parameters."	
 		exit 1
 	fi
 
-	local sandbox=$SANDBOX
-	if [[ $SWITCH == *r* ]] || [[ $SWITCH == *ep* ]]; then
-		sandbox=fakeroot
-		
-	fi
-
-	SANDBOX_SCRIPT="$XDG_DATA_HOME/sbscripts/$sandbox.sh"
-
-
-	if [[ ! -f $SANDBOX_SCRIPT ]]; then
-		echo "$EXEC_NAME: Script $SANDBOX_SCRIPT not found."
-		echo "Try 'chpak -h' for more information on valid operational parameters."
-		exit 1
-	fi
-	
 	case $SWITCH in 
 		*rc*|*cr*) 
-			execute_sandbox fakechroot fakeroot "${ARGS[@]}"	
+			execute_fakeroot "${ARGS[@]}"	
 			;;		
 		*rs*|*sr*)	
-			execute_sandbox fakechroot fakeroot bash
+			execute_fakeroot bash
 			;;
 		s)
 			execute_sandbox bash			
@@ -78,6 +63,10 @@ main () {
 }
 
 init_vars () {
+	if [[ ! $SANDBOX_BASE ]]; then
+		SANDBOX_BASE="$HOME/.local/share/pacwrap"
+	fi
+
 	INSTANCE_USER=user
 	INSTANCE_ROOT=$SANDBOX_BASE/fs/root/$SANDBOX
 	INSTANCE_HOME=$SANDBOX_BASE/fs/home/$SANDBOX
@@ -88,6 +77,10 @@ init_vars () {
 		INSTANCE_HOME=$SANDBOX_BASE/fs.dep/home/$SANDBOX
 	
 	fi	
+	
+	INSTANCE_SCRIPT="$SANDBOX_BASE/etc/bwrap/$SANDBOX.sh"
+
+
 }
 
 
@@ -125,7 +118,43 @@ parse_args () {
 }
 
 execute_sandbox () {
-	source $SANDBOX_SCRIPT
+	if [[ ! -f $INSTANCE_SCRIPT ]]; then
+		echo "$EXEC_NAME $BOLD${RED}ERROR$RESET: Script $INSTANCE_SCRIPT not found."
+		echo "Try 'pacwrap -h' for more information on valid operational parameters."
+		exit 1
+	fi
+	
+	source $INSTANCE_SCRIPT
+}
+
+execute_fakeroot() {
+	(exec bwrap \
+	--bind $INSTANCE_ROOT / \
+	--ro-bind /usr/lib/libfakeroot /usr/lib/libfakeroot/ \
+	--ro-bind /usr/bin/fakeroot /usr/bin/fakeroot \
+	--ro-bind /usr/bin/fakechroot /usr/bin/fakechroot \
+	--ro-bind /usr/bin/faked /usr/bin/faked \
+	--ro-bind /etc/resolv.conf /etc/resolv.conf \
+	--ro-bind $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf /etc/pacman.conf \
+	--bind $SANDBOX_BASE/var/cache/pacman/pkg /var/cache/pacman/pkg \
+	--dev /dev \
+	--proc /proc \
+	--tmpfs /tmp \
+	--ro-bind $SANDBOX_BASE/etc/pacman.conf /tmp/pacman.conf \
+	--ro-bind $SANDBOX_BASE/etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist \
+	--bind $INSTANCE_HOME $INSTANCE_HOME_MOUNT \
+	--unshare-all \
+	--share-net \
+	--clearenv \
+	--setenv CWD $INSTANCE_HOME_MOUNT \
+	--setenv HOME $INSTANCE_HOME_MOUNT \
+	--setenv USER $INSTANCE_USER \
+	--setenv PATH /usr/bin \
+	--setenv TERM xterm \
+	--setenv FREETYPE_PROPERTIES $FREETYPE_PROPERTIES \
+	--new-session \
+	--die-with-parent \
+	fakechroot fakeroot "$@")
 }
 
 main $@

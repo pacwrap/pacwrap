@@ -25,13 +25,9 @@ EXEC_SCRIPT="pacwrap-exec"
 SYNC_SCRIPT="pacwrap-sync"
 
 main () {	
+	trap abort INT
 
 	parse_args "$@"
-
-	if [[ $SWITCH == *v* ]]; then
-		VER_DISPLAY=$EXEC_NAME pachwrap -v
-		exit
-	fi
 
 	if [[ ! $SANDBOX ]]; then
 		echo $EXEC_NAME": Instance not specified."
@@ -40,24 +36,9 @@ main () {
 
 	init_vars
 
-	if [[ -d $INSTANCE_ROOT ]]; then 
-		echo $EXEC_NAME": Root directory for $SANDBOX exists. Aborting." 
-		exit 1
-	fi
-
-	if [[ ! -d $BASE_ROOT ]] && [[ ! $DEPEND ]]; then
-		echo $EXEC_NAME": Directory not found for $DEPEND root dependency."
-		exit 1
-	fi
-
 	echo "Pre-initialising structures.."
 	
 	init_struct
-
-	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then 
-		echo "Directory creation failed." 
-		exit 1
-	fi
 
 	echo "Initialising chroot.."
 
@@ -78,6 +59,10 @@ parse_args () {
 	ArGS=()
 	for var in "$@"; do
 		case $var in 
+			-v|--version)
+				VER_DISPLAY=$EXEC_NAME pacwrap -v
+				exit
+				;;
 			--dep=*)
 				DEPEND=$(echo $var | cut -c 7-)
 				;;	
@@ -101,11 +86,20 @@ parse_args () {
 }
 
 init_vars () {
+	if [[ ! $SANDBOX_BASE ]]; then
+		SANDBOX_BASE="$HOME/.local/share/pacwrap"
+	fi
+
 	PACMAN_CONFIG=pacman.install.conf	
 	PARAMS="$SANDBOX --root --exec"	
 	INSTANCE_ROOT=$SANDBOX_BASE/fs/root/$SANDBOX
 	INSTANCE_HOME=$SANDBOX_BASE/fs/home/$SANDBOX
 	INSTANCE_CONFIG=$SANDBOX_BASE/etc/config/$SANDBOX
+
+	if [[ ! -d $SANDBOX_BASE ]]; then ## TODO: enhance check and externalise it to pacwrap-utils
+		echo $EXEC_NAME": Data directory not found. Aborting." 	
+		exit 1
+	fi
 
 	if [[ $SWITCH == *d* ]]; then
 		ISDEP=1
@@ -120,6 +114,18 @@ init_vars () {
 		echo "Root dependency not specified."
 		exit 1
 	fi	
+
+	if [[ -d $INSTANCE_ROOT ]]; then 
+		echo $EXEC_NAME": Root directory for $SANDBOX exists. Aborting." 
+		exit 1
+	fi
+
+	if [[ ! -d $BASE_ROOT ]] && [[ ! $DEPEND ]]; then
+		echo $EXEC_NAME": Directory not found for $DEPEND root dependency."
+		exit 1
+	fi
+
+
 }
 
 
@@ -130,11 +136,16 @@ init_struct () {
 		$INSTANCE_ROOT/etc/pacman.d/ \
 		$INSTANCE_ROOT/etc/fonts/conf.d
 
+	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then 
+		echo "Directory creation failed." 
+		exit 1
+	fi
+
 	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
 	cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
 	cp $SANDBOX_BASE/etc/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
-
-	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	cp $SANDBOX_BASE/etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	
 	echo "$LANG ${LANG#*.}" > $INSTANCE_ROOT/etc/locale.gen
 	echo "LANG=$LANG" > $INSTANCE_ROOT/etc/locale.conf
 	echo "user:x:1000:1000::/home/user:/bin/bash" >> $INSTANCE_ROOT/etc/passwd
@@ -210,7 +221,13 @@ cleanup () {
 	$INSTANCE_ROOT/opt \
 	$INSTANCE_ROOT/run \
 	$INSTANCE_ROOT/dev \
-	$INSTANCE_ROOT/etc/pacman.install.conf
+	$INSTANCE_ROOT/etc/pacman.install.conf \
+	$INSTANCE_ROOT/etc/pacman.d/mirrorlist
+}
+
+abort () {
+	echo "aborting operation.."
+	exit 1
 }
 
 main $@

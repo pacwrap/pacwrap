@@ -18,11 +18,6 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-INSTANCE_ROOT=$SANDBOX_BASE/fs/root
-INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
-INSTANCE_CONFIG_ROOT=$SANDBOX_BASE/etc/config
-INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
-
 BOLD=$(tput bold)
 RED=$(tput setaf 1)
 GREEN=$(tput setaf 2)
@@ -47,11 +42,6 @@ main () {
 		VER_DISPLAY=$EXEC_NAME pachwrap -v 
 		exit	
 	fi
-
-	if [[ ! -d $INSTANCE_ROOT ]]; then
-		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
-		exit
-	fi	
 
 	local roots=
 	local rootdeps=
@@ -87,6 +77,9 @@ main () {
 			generate_pacman_conf $roots
 			update $roots
 		fi
+		if [[ -f /usr/bin/paccache ]]; then
+			paccache --cachedir $SANDBOX_BASE/var/cache/pacman/pkg/ -r -k 2 --min-mtime "14 days ago"
+		fi
 	fi
 }
 
@@ -116,6 +109,20 @@ parse_args () {
 }
 
 init_vars() {
+	if [[ ! $SANDBOX_BASE ]]; then
+		SANDBOX_BASE="$HOME/.local/share/pacwrap"
+	fi 
+
+	INSTANCE_ROOT=$SANDBOX_BASE/fs/root
+	INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
+	INSTANCE_CONFIG_ROOT=$SANDBOX_BASE/etc/config
+	INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
+
+	if [[ ! -d $INSTANCE_ROOT ]]; then
+		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
+		exit
+	fi	
+
 	local rootlist=$(ls -U -1F $INSTANCE_ROOT | grep -i "/" | tr -d "/")
 	for sandbox in $rootlist; do
 		local type=$(return_type)
