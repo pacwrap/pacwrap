@@ -22,7 +22,7 @@ BOLD=$(tput bold)
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 
-VER="v0.9.3 ${BOLD}BETA$RESET"
+VER="v0.9.3.1 ${BOLD}BETA$RESET"
 EXEC_NAME="pacwrap"
 UTILS_SCRIPT="pacwrap-utils"
 
@@ -69,11 +69,11 @@ init_structures() {
 	fi
 
 	if [[ ! -d $SANDBOX_BASE ]]; then
-		$UTILS_SCRIPT -i	
+		$UTILS_SCRIPT -Ui	
 	fi
 }
 
-parse_args () {
+parse_args () {1
 	ARGS=()
 	for var in "$@"; do
 		case $var in

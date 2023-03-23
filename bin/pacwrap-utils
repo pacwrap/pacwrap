@@ -61,7 +61,7 @@ main () {
 	case $SWITCH in
 		c*)
 			if [[ -f /usr/bin/paccache ]]; then
-				paccache --cachedir $SANDBOX_BASE/var/cache/pacman/pkg/ -r -k 2 --min-mtime "14 days ago"
+				paccache --cachedir $SANDBOX_BASE/var/cache/pacman/pkg/ ${ARGS[@]}
 			fi
 			;;
 
@@ -130,9 +130,6 @@ parse_args () {
 			-U*)
 				SWITCH=$(echo $var | cut -c 3-)
 				;;	
-			-*)
-				SWITCH=$(echo $var | cut -c 2-)
-				;;
 			*)
 				ARGS+=("$var")
 				;;
@@ -276,40 +273,51 @@ edit_file() {
 		if [[ ! $EDITOR ]]; then
 			EDITOR="vi"
 		fi
-		
+
+		if [[ -f $EDITOR ]]; then
+			printf "%s%s\n" "$RED$BOLD" "error:$RESET \$EDITOR was not found at $EDITOR."		
+			exit	
+		fi
+
+		tmpfile=$(mktemp)
+		local error=	
+
 		case $SWITCH in
 			*c*)
 				file="$INSTANCE_CONFIG_ROOT/$instance"
-
-				if [[ ! -f $file ]]; then
-					echo "$RED${BOLD}error:$RESET $instance config file not found."		
-					return
+				error="config file"
+				if [[ -f $file ]]; then ## TODO: In place until configuration editing supported
+					printf "%s\n#\n# %s\n# %s\n#\n\n" "## NOTICE ##" \
+					"Configuration editing is currently unsupported." \
+					"For the purposes of viewing or diagnostics only." > $tmpfile
+					dissolve=1
 				fi
+			;;
 
-				tmpfile=$(mktemp)
-				printf "%s\n#\n# %s\n# %s\n#\n\n" "## NOTICE ##" \
-				"Configuration editing is currently unsupported." \
-				"For the purposes of viewing or diagnostics only." > $tmpfile
-				cat $file >> $tmpfile
-				dissolve=1
+			*pt*)
+				file="$SANDBOX_BASE/etc/pacman.$instance.conf"
+				error="pacman $instance template"
+			;;
+			*p*)
+				file="$SANDBOX_BASE/etc/pacman.conf"
+				error="default pacman.conf"
 			;;
 			*t*)
 				file="$SANDBOX_BASE/etc/pacman.d/tpl/pacman.$instance.conf"
-		
-				if [[ ! -f $file ]]; then
-					printf "%s%s\n" "$RED$BOLD" "error:$RESET $instance pacman template not found."		
-					return
-				fi
-				
-				tmpfile=$(mktemp)	
-				cat $file >> $tmpfile
+				error="pacman $instance template"
 			;;
 			*)
 				printf "%s%s\n" "$RED$BOLD" "error:$RESET operation not defined."
 				return
-				;;
+			;;
 		esac
 
+		if [[ ! -f $file ]]; then
+			printf "%s%s\n" "$RED$BOLD" "error:$RESET $error not found."		
+			return
+		fi
+				
+		cat $file >> $tmpfile
 		$EDITOR $tmpfile
 
 		local tmp_sum=$(sha256sum $tmpfile)
