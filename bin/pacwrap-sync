@@ -1,0 +1,362 @@
+#!/bin/bash
+#
+#  Pachwrap -- chroot synchronization utility
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+INSTANCE_ROOT=$SANDBOX_BASE/fs/root
+INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
+INSTANCE_CONFIG_ROOT=$SANDBOX_BASE/etc/config
+INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
+
+BOLD=$(tput bold)
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+CYAN=$(tput setaf 6)
+YELLOW=$(tput setaf 11)
+RESET=$(tput sgr0)
+BAR="$RED$BOLD::$RESET$BOLD"
+BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
+ARROW="$CYAN$BOLD->$RESET"
+ARROW_GREEN="$GREEN$BOLD->$RESET"
+ARROW_RED="$RED$BOLD->$RESET"
+
+EXEC_NAME="pacwrap-sync"
+EXEC_SCRIPT="pacwrap-exec --root --exec"
+
+LINKFILES=("bin" "lib" "lib32" "share")
+
+main () {
+	parse_args $@
+
+	if [[ $SWITCH == *v* ]]; then
+		VER_DISPLAY=$EXEC_NAME pachwrap -v 
+		exit	
+	fi
+
+	if [[ ! -d $INSTANCE_ROOT ]]; then
+		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
+		exit
+	fi	
+
+	local roots=
+	local rootdeps=
+	local baserootdeps=
+
+	init_vars
+
+	if [[ $SWITCH == *g* ]]; then
+		generate_pacman_conf ${ARGS[@]}
+		return
+	fi
+
+	if [[ $SWITCH == *u* ]] ; then
+		log $BAR "Update dependencies \n\n$baserootdeps$rootdeps\n"
+		
+		if [[ "$(query_confirm "Proceed with update?")" ]]; then	
+			generate_pacman_conf $baserootdeps$rootdeps
+			update $baserootdeps$rootdeps
+		fi
+	fi
+
+	if [[ $SWITCH == *y* ]] || [[ $SYNCREQ == 1 ]]; then
+		log $BAR "Synchronization event triggered..."	
+		generate_cache $baserootdeps
+		update_links $rootdeps$roots
+		cleanup_cache $rootdeps$baserootdeps
+		log $BAR_GREEN "Synchronization complete!"
+	fi
+
+	if [[ $SWITCH == *u* ]]; then
+		log $BAR "Update sandbox \n\n$roots\n"	
+		if [[ "$(query_confirm "Proceed with update?")" ]]; then
+			generate_pacman_conf $roots
+			update $roots
+		fi
+	fi
+}
+
+parse_args () {
+	for var in "$@"; do
+		case $var in 
+			--generate-config|-g)
+				SWITCH=g$SWITCH
+				;;
+			--update|-u)
+				SWITCH=u$SWITCH
+				;;
+			--no-confirm|-n)
+				SWITCH=n$SWITCH
+				;;
+			--sync|-y)
+				SWITCH=y$SWITCH
+				;;		
+			-*)
+				SWITCH=$(echo $var | cut -c 2-)
+				;;
+			*)
+				ARGS+=("$var")
+				;;
+			esac
+	done
+}
+
+init_vars() {
+	local rootlist=$(ls -U -1F $INSTANCE_ROOT | grep -i "/" | tr -d "/")
+	for sandbox in $rootlist; do
+		local type=$(return_type)
+		case $type in
+			BASE)
+				baserootdeps+="$sandbox "
+			;;
+			DEP)
+				rootdeps+="$sandbox "
+			;;
+			*)
+				roots+="$sandbox "
+			;;
+		esac
+	done
+}
+
+invoke_link_deletion() {
+	local pwd=$PWD
+	local file_old=$link/$item.old.zst
+	local file_new=$link/$item.zst
+
+	([[ ! -f $file_new ]] || [[ ! -f $file_old ]]) && return
+
+	cd $root/usr
+	diff --unchanged-group-format= --new-line-format='%L' \
+		-biw <(echo "$(zstd -fd < $file_new)") <(echo "$(zstd -fd < $file_old)") | xargs rm -f
+	cd $pwd
+}
+
+invoke_update_link() {
+	local sandbox=$1
+
+	if [[ ${synced[$sandbox]} ]]; then
+		return
+	fi
+	if [[ $(return_type) == "BASE" ]]; then
+		return
+	fi
+
+	local linkfiles=${LINKFILES[@]}
+	
+	log $ARROW "Synchronizing links for dependency $BOLD$dep$RESET in $BOLD$sandbox$RESET...$RESET"
+
+	local dep=$(return_dependency)
+
+	if [[ $SWITCH != *f* ]]; then
+		for item in ${linkfiles[@]}; do
+			local root=$INSTANCE_ROOT/$sandbox
+			local link=$INSTANCE_DB_ROOT/$dep
+			invoke_link_deletion	
+		done
+	fi
+
+	for item in ${linkfiles[@]}; do
+		local root=$INSTANCE_ROOT/$sandbox
+		local source=$INSTANCE_ROOT/$dep		
+		local src=$source/usr/$item 
+		local dest=$root/usr/	
+
+		cp -flR $src $dest 2>/dev/null
+		log " Synchronization complete for $BOLD$item$RESET in $BOLD$sandbox$RESET!"
+	done
+
+	if [[ $(return_type) == "DEP" ]]; then
+		invoke_generate_cache
+	fi
+	synced[$sandbox]=1
+}
+
+update_links() {
+	declare -A synced
+	for sandbox in "$@"; do				
+		check_root "link synchronization"
+		[[ $? == 1 ]] && continue		
+		for dep in $(return_dependencies); do
+			check_root "link synchronization"
+			[[ $? == 1 ]] && continue	
+			invoke_update_link $dep
+		done
+		invoke_update_link $sandbox
+	done
+}
+
+cleanup_cache() {
+	for sandbox in "$@"; do				
+		check_root "cache file operation"
+		[[ $? == 1 ]] && continue
+	
+		local linkfiles=${LINKFILES[@]}
+	
+		for item in ${linkfiles[@]}; do
+			rm $INSTANCE_DB_ROOT/$sandbox/$item.old.zst
+		done
+	done
+}
+
+invoke_generate_cache() {
+	local dep=$sandbox
+	local linkfiles=${LINKFILES[@]}
+	
+	for item in ${linkfiles[@]}; do
+		local root=$INSTANCE_ROOT/$sandbox
+		local link=$INSTANCE_DB_ROOT/$sandbox
+		local rdir=$root/usr/
+		local tdir=$root/usr/$item
+	
+		mv $link/$item.zst $link/$item.old.zst
+		find $tdir -type f,l | sed -z "s,$rdir,,g" | zstd -fq -o $link/$item.zst
+	done
+	log $ARROW_GREEN "Generated link cache for $BOLD$sandbox$RESET!"	
+}
+
+generate_cache() {
+	for sandbox in "$@"; do				
+		check_root "cache"
+		[[ $? == 1 ]] && continue
+
+		invoke_generate_cache
+	done
+}
+
+check_root() {
+	if [[ ! -d $INSTANCE_ROOT/$sandbox ]]; then
+		log $BAR$RESET "Root for $BOLD$sandbox$RESET not found.$RESET\n Skipping $@..."
+		return 1
+	fi
+}
+
+invoke_vdb () {	
+	local root=$INSTANCE_ROOT/$sandbox
+	local dep=
+
+	if [[ $(return_type) != "ROOT" ]]; then
+		dep=$sandbox
+	else
+		dep=$(return_dependency)
+	fi
+
+	local template=$INSTANCE_PACMAND/tpl/pacman.$dep.conf 
+	local pacmanconf=$INSTANCE_PACMAND/pacman.$sandbox.conf
+	local header="##\n## THIS pacman.conf WAS AUTOMATICALLY GENERATED on $(date "+%F %T"). \n## DO NOT EDIT\n##\n" 
+	local ignorepkg=
+
+	if [[ $(return_type) != "BASE" ]]; then	
+		declare -A skip
+		local skiplist=
+		ignorepkg="## Start of automated configuration ##\n"
+
+		for depc in $(return_dependencies); do
+			local pkgs=$($EXEC_SCRIPT $depc pacman -Qq)
+			for pkg in $pkgs; do
+			 	[[ ${skip[$pkg]} ]] && continue
+				ignorepkg+="IgnorePkg  = $pkg\n"
+			done			
+			skiplist=$pkgs$skiplist
+
+			for pkg in $skiplist; do
+				skip[$pkg]=1
+			done
+		done
+		ignorepkg=$ignorepkg"## End of automated configuration ##"
+	fi
+
+	echo -e $header > $pacmanconf
+	cat $template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
+	log "$BAR_GREEN Generated pacman.conf for $sandbox."
+}
+
+invoke_update() {
+	log $BAR "Checking $sandbox instance for updates..."
+
+	$EXEC_SCRIPT $sandbox pacman -Sy
+	local result=$($EXEC_SCRIPT $sandbox pacman --color always -Qu | grep -v "ignored")
+	
+	if [[ ! $result ]]; then
+		log $BAR_GREEN "Packages are up-to-date for $sandbox!"
+	 	return
+	fi
+
+	echo -e "$BAR Packages to be installed or upgraded: $RESET \n\n$result\n"
+	[[ ! $(query_confirm "Confirm update and database synchronization on $sandbox") ]] && return
+	SYNCREQ=1
+	$EXEC_SCRIPT $sandbox pacman -Su --noconfirm 2>/dev/null
+	log $BAR "Synchronizing pacman database for foreign packages..."
+	$EXEC_SCRIPT $sandbox pacman -Su --dbonly --noconfirm --config=/tmp/pacman.conf 2>/dev/null
+	log $BAR_GREEN "Synchronization and upgrades are complete!"
+}
+
+update () {		
+	for sandbox in "$@"; do	
+		check_root "update"
+		[[ $? == 1 ]] && continue	
+		invoke_update
+	done
+}
+
+generate_pacman_conf () {		
+	for sandbox in "$@"; do	
+		check_root "pacman.conf generation"
+		[[ $? == 1 ]] && continue	
+		invoke_vdb
+	done
+}
+
+return_type() {
+	source $INSTANCE_CONFIG_ROOT/$sandbox
+	echo $TYPE
+}
+
+return_dependencies() {
+	source $INSTANCE_CONFIG_ROOT/$sandbox
+	echo ${DEPS[@]}
+}
+
+return_base() {
+	source $INSTANCE_CONFIG_ROOT/$sandbox
+	echo ${DEPS[0]}
+}
+
+return_dependency() {
+	source $INSTANCE_CONFIG_ROOT/$sandbox
+	echo ${DEPS[$((${#DEPS[@]} - 1))]}
+}
+
+log () {
+	echo -e "$@ $RESET"	
+}
+
+query_confirm () {
+	if [[ $SWITCH == *n* ]]; then		
+		echo 1	
+		return
+	fi
+	read -rp "$BAR $@ [Y/n]$RESET " input
+	if [[ "$input" != "Y" ]] && 
+	   [[ "$input" != "y" ]] &&
+           [[ "$input" != "" ]]; then
+		return	
+	fi
+	echo 1
+}
+
+main $@

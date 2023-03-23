@@ -1,0 +1,216 @@
+#!/bin/bash
+#
+#  Pachwrap -- chroot initialisation utility
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
+EXEC_NAME="pacwrap-create" 
+
+EXEC_SCRIPT="pacwrap-exec"
+SYNC_SCRIPT="pacwrap-sync"
+
+main () {	
+
+	parse_args "$@"
+
+	if [[ $SWITCH == *v* ]]; then
+		VER_DISPLAY=$EXEC_NAME pachwrap -v
+		exit
+	fi
+
+	if [[ ! $SANDBOX ]]; then
+		echo $EXEC_NAME": Instance not specified."
+		exit 1
+	fi
+
+	init_vars
+
+	if [[ -d $INSTANCE_ROOT ]]; then 
+		echo $EXEC_NAME": Root directory for $SANDBOX exists. Aborting." 
+		exit 1
+	fi
+
+	if [[ ! -d $BASE_ROOT ]] && [[ ! $DEPEND ]]; then
+		echo $EXEC_NAME": Directory not found for $DEPEND root dependency."
+		exit 1
+	fi
+
+	echo "Pre-initialising structures.."
+	
+	init_struct
+
+	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then 
+		echo "Directory creation failed." 
+		exit 1
+	fi
+
+	echo "Initialising chroot.."
+
+	init_chroot
+
+	echo "Cleaning up.."
+
+	cleanup
+
+	echo "Finalising chroot.."
+
+	finalise
+
+	echo "Process complete! Use pachwrap to configure $SANDBOX."
+}
+
+parse_args () {
+	ArGS=()
+	for var in "$@"; do
+		case $var in 
+			--dep=*)
+				DEPEND=$(echo $var | cut -c 7-)
+				;;	
+			--is-dep)
+				SWITCH=d$SWITCH
+				;;
+			--is-root)
+				SWITCH=r$SWITCH
+				;;
+			-C*)
+				SWITCH=$(echo $var | cut -c 3-)$SWITCH
+				;;
+			-*)
+				SWITCH=$(echo $var | cut -c 2-)$SWITCH
+				;;
+			*)
+				SANDBOX=$var
+				;;
+			esac
+	done
+}
+
+init_vars () {
+	PACMAN_CONFIG=pacman.install.conf	
+	PARAMS="$SANDBOX --root --exec"	
+	INSTANCE_ROOT=$SANDBOX_BASE/fs/root/$SANDBOX
+	INSTANCE_HOME=$SANDBOX_BASE/fs/home/$SANDBOX
+	INSTANCE_CONFIG=$SANDBOX_BASE/etc/config/$SANDBOX
+
+	if [[ $SWITCH == *d* ]]; then
+		ISDEP=1
+	fi
+	if [[ $SWITCH == *r* ]]; then
+		ISROOTDEP=1
+		PACMAN_CONFIG=pacman.conf
+	fi
+
+	BASE_ROOT=$SANDBOX_BASE/fs/root/$DEPEND
+	if [[ ! $DEPEND ]] && [[ ! $ISROOTDEP ]]; then
+		echo "Root dependency not specified."
+		exit 1
+	fi	
+}
+
+
+init_struct () {
+	mkdir -p $INSTANCE_ROOT $INSTANCE_HOME \
+		$INSTANCE_ROOT/etc \
+		$INSTANCE_ROOT/var/lib/pacman \
+		$INSTANCE_ROOT/etc/pacman.d/ \
+		$INSTANCE_ROOT/etc/fonts/conf.d
+
+	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
+	cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
+	cp $SANDBOX_BASE/etc/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
+
+	cp /etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	echo "$LANG ${LANG#*.}" > $INSTANCE_ROOT/etc/locale.gen
+	echo "LANG=$LANG" > $INSTANCE_ROOT/etc/locale.conf
+	echo "user:x:1000:1000::/home/user:/bin/bash" >> $INSTANCE_ROOT/etc/passwd
+	echo "$MACHINE_ID" > $INSTANCE_ROOT/etc/machine-id
+	echo 'PS1="'$SANDBOX'> "' > $INSTANCE_HOME/.bashrc
+	local t="TYPE=ROOT"
+	local d="DEPS=()"
+
+	if [[ $ISDEP ]] || [[ $ISROOTDEP ]]; then
+		cp $SANDBOX_BASE/etc/pacman.tpl.conf $SANDBOX_BASE/etc/pacman.d/tpl/pacman.$SANDBOX.conf
+		mkdir -p $SANDBOX_BASE/etc/db/$SANDBOX
+	fi
+
+	if [[ ! $ISROOTDEP ]]; then
+		if [[ -f $SANDBOX_BASE/etc/config/$DEPEND ]]; then
+			source $SANDBOX_BASE/etc/config/$DEPEND
+			DEPS+=("$DEPEND")
+			d="DEPS=(${DEPS[@]})"
+		else
+			d="DEPS=($DEPEND)"
+		fi
+	fi	
+
+	if [[ $ISDEP ]]; then
+		t="TYPE=DEP"
+	elif [[ $ISROOTDEP ]]; then
+		t="TYPE=BASE"
+	fi	
+
+	echo $t > $INSTANCE_CONFIG
+	echo $d >> $INSTANCE_CONFIG
+
+}
+
+init_chroot () {	
+	fakechroot fakeroot pacman -Syu \
+   	--root $INSTANCE_ROOT \
+    	--dbpath $INSTANCE_ROOT/var/lib/pacman \
+    	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
+	--cache /var/lib/cache/pacman/pkg \
+    	base lib32-glibc --noconfirm 2>/dev/null
+	$SYNC_SCRIPT -y
+}
+
+finalise () {
+	$EXEC_SCRIPT $PARAMS pacman-key --init
+	$EXEC_SCRIPT $PARAMS pacman-key --populate
+	$EXEC_SCRIPT $PARAMS locale-gen
+	$EXEC_SCRIPT $PARAMS update-ca-trust
+	if [[ ! $ISROOTDEP ]]; then
+		if [[ $DEPEND ]]; then		
+			source $INSTANCE_CONFIG
+			local dbsyncpkgs=
+
+			for dep in ${DEPS[@]}; do
+				dbsyncpkgs="$dbsyncpkgs $($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>|\<lib32-glibc\>//g")"
+			done
+			if [[ $dbsyncpkgs ]]; then
+				$EXEC_SCRIPT $PARAMS pacman -Su --dbonly --noconfirm $dbsyncpkgs 2>/dev/null
+			fi
+		fi
+		$SYNC_SCRIPT -g $SANDBOX
+	fi
+}
+
+cleanup () {
+	rm -v -r \
+	$INSTANCE_ROOT/boot \
+	$INSTANCE_ROOT/mnt \
+	$INSTANCE_ROOT/root \
+	$INSTANCE_ROOT/srv \
+	$INSTANCE_ROOT/sys \
+	$INSTANCE_ROOT/opt \
+	$INSTANCE_ROOT/run \
+	$INSTANCE_ROOT/dev \
+	$INSTANCE_ROOT/etc/pacman.install.conf
+}
+
+main $@
