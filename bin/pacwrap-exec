@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Pachwrap -- sandbox invocator
+#  PacWrap -- Chroot Invocator
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -27,7 +27,7 @@ main () {
 	
 	parse_args "$@"
 
-	if [[ $SWITCH == *v* ]]; then
+	if [[ $SWITCH == v ]]; then
 		VER_DISPLAY=$EXEC_NAME pachwrap -v
 		exit
 	fi
@@ -40,7 +40,7 @@ main () {
 
 	init_vars
 
-	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] || [[ ! -d $SANDBOX_BASE ]]; then
+	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then
 		echo "$EXEC_NAME $BOLD${RED}ERROR$RESET: Sandbox $SANDBOX not found."
 		echo "Try 'pacwrap -h' for more information on valid operational parameters."	
 		exit 1
@@ -63,24 +63,23 @@ main () {
 }
 
 init_vars () {
-	if [[ ! $SANDBOX_BASE ]]; then
-		SANDBOX_BASE="$HOME/.local/share/pacwrap"
+	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
+	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
+	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
+
+	if [[ $PACWRAP_DEBUG ]]; then 
+		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
+		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
 	fi
-
+	
+	LOG_FILE="$INSTANCE_DATA_DIR/pacwrap.log"
+	INSTANCE_ROOT_DIR=$INSTANCE_DATA_DIR/root
+	INSTANCE_HOME_DIR=$INSTANCE_DATA_DIR/home
+	INSTANCE_ROOT=$INSTANCE_ROOT_DIR/$SANDBOX
+	INSTANCE_HOME=$INSTANCE_HOME_DIR/$SANDBOX
 	INSTANCE_USER=user
-	INSTANCE_ROOT=$SANDBOX_BASE/fs/root/$SANDBOX
-	INSTANCE_HOME=$SANDBOX_BASE/fs/home/$SANDBOX
 	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
-
-	if [[ $SWITCH == *d* ]]; then
-		INSTANCE_ROOT=$SANDBOX_BASE/fs.dep/root/$SANDBOX
-		INSTANCE_HOME=$SANDBOX_BASE/fs.dep/home/$SANDBOX
-	
-	fi	
-	
-	INSTANCE_SCRIPT="$SANDBOX_BASE/etc/bwrap/$SANDBOX.sh"
-
-
+	INSTANCE_SCRIPT="$INSTANCE_CONFIG_DIR/bwrap/$SANDBOX.sh"
 }
 
 
@@ -135,17 +134,22 @@ execute_fakeroot() {
 	--ro-bind /usr/bin/fakechroot /usr/bin/fakechroot \
 	--ro-bind /usr/bin/faked /usr/bin/faked \
 	--ro-bind /etc/resolv.conf /etc/resolv.conf \
-	--ro-bind $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf /etc/pacman.conf \
-	--bind $SANDBOX_BASE/var/cache/pacman/pkg /var/cache/pacman/pkg \
+	--ro-bind $INSTANCE_CONFIG_DIR/pacman/sync/pacman.$SANDBOX.conf /etc/pacman.conf \
+	--ro-bind /etc/localtime /etc/localtime \
+	--bind $INSTANCE_DATA_DIR/pacman/sync /var/lib/pacman/sync \
+	--bind $INSTANCE_DATA_DIR/pacman/gnupg /etc/pacman.d/gnupg \
+	--bind $INSTANCE_CACHE_DIR /var/cache/pacman/pkg \
 	--dev /dev \
 	--proc /proc \
 	--tmpfs /tmp \
-	--ro-bind $SANDBOX_BASE/etc/pacman.conf /tmp/pacman.conf \
-	--ro-bind $SANDBOX_BASE/etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist \
+	--ro-bind $INSTANCE_CONFIG_DIR/pacman/syncdb/pacman.$SANDBOX.conf /tmp/pacman.conf \
+	--ro-bind $INSTANCE_CONFIG_DIR/pacman.d/mirrorlist /etc/pacman.d/mirrorlist \
+	--bind $LOG_FILE /tmp/pacman.log \
 	--bind $INSTANCE_HOME $INSTANCE_HOME_MOUNT \
 	--unshare-all \
 	--share-net \
 	--clearenv \
+	--hostname "FakeChroot" \
 	--setenv CWD $INSTANCE_HOME_MOUNT \
 	--setenv HOME $INSTANCE_HOME_MOUNT \
 	--setenv USER $INSTANCE_USER \

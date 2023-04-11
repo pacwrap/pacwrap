@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Pachwrap -- chroot synchronization utility
+#  PacWrap -- Utility Script
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -40,7 +40,7 @@ EXEC_SCRIPT="pacwrap-exec"
 main () {
 	parse_args $@
 
-	if [[ $SWITCH == *v* ]]; then
+	if [[ $SWITCH == v ]]; then
 		VER_DISPLAY=$EXEC_NAME pacwrap -v 
 		exit	
 	fi
@@ -53,7 +53,7 @@ main () {
 
 	init_vars
 
-	if [[ ! -d $INSTANCE_ROOT ]]; then
+	if [[ ! -d $INSTANCE_ROOT ]] && [[ $SWITCH != i* ]]; then
 		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
 		exit
 	fi	
@@ -61,26 +61,29 @@ main () {
 	case $SWITCH in
 		c*)
 			if [[ -f /usr/bin/paccache ]]; then
-				paccache --cachedir $SANDBOX_BASE/var/cache/pacman/pkg/ ${ARGS[@]}
+				paccache --cachedir $INSTANCE_CACHE_DIR ${ARGS[@]}
 			fi
 			;;
 
 		i*)
 			initialize_data_directory
 			;;
+		v*)
+			edit_file 1
+			;;
 		e*)
 			edit_file	
 			;;		
-		l*)
-			link_chroot
-
-			;;			
-		d*)
-			delete_chroot
-			;;			
-		s*)
+		ls*)
 			summary	
 			;;
+		l*)
+			link_root
+			;;			
+		d*)
+			[[ $SWITCH == *r* ]] && delete_root
+			[[ $SWITCH == *h* ]] && delete_home
+			;;			
 		h*)
 			pacwrap --help=utils
 			;;
@@ -97,28 +100,32 @@ main () {
 }
 
 summary() {
-	if [[ $SWITCH == *l* ]]; then
-		local tmpfile=$(mktemp)
+	declare -A size
 
+	parse_du
+
+	if [[ $SWITCH != *ddd* ]]; then
+		local tmpfile=$(mktemp)	
 		list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} > $tmpfile
+		cat $tmpfile | column -t
+		rm $tmpfile
+	fi
 		
-			cat $tmpfile | column -t
-			rm $tmpfile
-		fi
-		
-		if [[ $SWITCH == *d* ]]; then	
-		
-			[[ ! $SWITCH == *l* ]] && add_total ${roots[@]} ${rootdeps[@]} ${baserootdeps[@]}
+	if [[ $SWITCH == *d* ]]; then		
 				
-			local dh=$(du -d 1 $INSTANCE_ROOT | tail -n-1)
-			local actual_size=${dh%	*}	
-			local diff=$(($total - $actual_size))
+		local actual_size=${size["root"]}	
+		local diff=$(($total - $actual_size))
+		
+		[[ $diff -le 0 ]] && diff=0
 
-			printf "\n${BOLD}Diskspace consumption summary$RESET\n"
-			printf "\n%s\t%s\n" "Total   " "  $($NUMFMT $total)"
-			printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$RESET"
-			printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " "  $($NUMFMT $actual_size)"
-		fi
+		printf "\n${BOLD}Diskspace consumption summary$RESET\n"
+		printf "\n%s\t%s\n" "Total   " "  $($NUMFMT $total)"
+		
+		[[ $SWITCH != *dd* ]] || [[ $SWITCH == *dddd* ]] && return
+
+		printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$RESET"
+		printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " "  $($NUMFMT $actual_size)"
+	fi
 }
 
 parse_args () {
@@ -126,6 +133,9 @@ parse_args () {
 		case $var in 
 			--list|-l)
 				SWITCH=l$SWITCH
+				;;
+			-v|--version)
+				SWITCH=v
 				;;
 			-U*)
 				SWITCH=$(echo $var | cut -c 3-)
@@ -138,15 +148,20 @@ parse_args () {
 }
 
 init_vars() {
-	if [[ ! $SANDBOX_BASE ]]; then
-		SANDBOX_BASE="$HOME/.local/share/pacwrap"
-	fi 
+	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
+	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
+	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
 
-	INSTANCE_ROOT=$SANDBOX_BASE/fs/root
-	INSTANCE_HOME=$SANDBOX_BASE/fs/home
-	INSTANCE_DB_ROOT=$SANDBOX_BASE/etc/db
-	INSTANCE_CONFIG_ROOT=$SANDBOX_BASE/etc/config
-	INSTANCE_PACMAND=$SANDBOX_BASE/etc/pacman.d
+	if [[ $PACWRAP_DEBUG ]]; then 
+		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
+		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
+	fi
+
+	INSTANCE_ROOT=$INSTANCE_DATA_DIR/root
+	INSTANCE_HOME=$INSTANCE_DATA_DIR/home
+	INSTANCE_DB_ROOT=$INSTANCE_DATA_DIR/database
+	INSTANCE_CONFIG_ROOT=$INSTANCE_CONFIG_DIR/root
+	INSTANCE_PACMAND=$INSTANCE_CONFIG_DIR/etc/pacman.d
 
 	local list="ls -U -1F $INSTANCE_ROOT"
 	local rootlist=$($list | grep -i "/" | tr -d "/")
@@ -172,39 +187,60 @@ init_vars() {
 	done
 }
 
-delete_chroot() {
-	local instance=${ARGS[0]};
+
+delete_home() {
+	local instances=${ARGS[@]};
 			
-	if [[ ! $instance ]]; then		
+	if [[ ! $instances ]]; then		
 		printf "%s\n%s\n" "$EXEC_NAME: instance not specified." \
 		       "Try '$EXEC_NAME -h' for more information on valid operational parameters."
 		return
 	fi
-	printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete instance" "$instance"
+
+	printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete home" "$instances"
 
 	if [[ "$(query_confirm "Proceed with deletion?")" ]]; then
-		if [[ ! -d $INSTANCE_ROOT/$instance ]]; then
-			echo "$RED${BOLD}error:$RESET $instance does not exist."
-			return
-		fi
-		rm -rf $INSTANCE_ROOT/$instance
-			
-		printf "$BAR_GREEN %s$RESET\n" "Deletion of $instance complete!"					
-
-		[[ "$(query_confirm "Retain home directory?")" ]] && return
-				
-		if [[ ! -d $INSTANCE_HOME/$instance ]]; then
-			echo "$RED${BOLD}error:$RESET Home $instance does not exist."
-			return	
-		fi
+	
+		for instance in $instances; do
+			if [[ ! -d $INSTANCE_HOME/$instance ]]; then
+				echo "$RED${BOLD}error:$RESET Home $instance does not exist."
+				continue
+			fi
 					
-		rm -rf $INSTANCE_HOME/$instance
-		printf "$BAR_GREEN %s$RESET\n" "Deletion of $instance's home complete!"
+			rm -rf $INSTANCE_HOME/$instance
+			printf "$ARROW_GREEN %s$RESET\n" "Deletion of $instance's home complete!"
+		done
+	fi
+}
+
+delete_root() {
+	local instances=${ARGS[@]};
+			
+	if [[ ! $instances ]]; then		
+		printf "%s\n%s\n" "$EXEC_NAME: instance not specified." \
+		       "Try '$EXEC_NAME -h' for more information on valid operational parameters."
+		return
+	fi
+
+	printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete instance" "$instances"
+
+	if [[ "$(query_confirm "Proceed with deletion?")" ]]; then
+
+		for instance in $instances; do
+			if [[ ! -d $INSTANCE_ROOT/$instance ]]; then
+				echo "$RED${BOLD}error:$RESET $instance does not exist."
+				continue
+			fi
+			rm -rf $INSTANCE_ROOT/$instance
+			
+			printf "$ARROW_GREEN %s$RESET\n" "Deletion of $instance complete!"					
+		done
+
 	fi
 }
 
 
-link_chroot() {
+link_root() {
 		local instance=${ARGS[1]};
 		local link=${ARGS[0]};
 
@@ -214,13 +250,19 @@ link_chroot() {
 			return
 		fi
 
+		if [[ -d $INSTANCE_ROOT/$instance ]]; then
+			echo "$RED${BOLD}error:$RESET $instance already exists."
+			return
+		fi
+
+		if [[ ! -d $INSTANCE_ROOT/$link ]]; then
+			echo "$RED${BOLD}error:$RESET $link doesn't exist."
+			return
+		fi
+
 		printf "%s\n\n$BOLD%s\n\n" "$BAR Create virtual instance" "$instance $ARROW $link"
 
 		if [[ "$(query_confirm "Proceed with creation?")" ]]; then
-			if [[ -d $INSTANCE_ROOT/$instance ]]; then
-				echo "$RED${BOLD}error:$RESET $instance already exists."
-				return
-			fi
 			ln -s $INSTANCE_ROOT/$link $INSTANCE_ROOT/$instance
 
 			mkdir -p $INSTANCE_HOME/$instance
@@ -231,10 +273,26 @@ link_chroot() {
 }
 
 
-add_total() {
-	for instance in $@; do
-		local dh=$(du -d 1 $INSTANCE_ROOT/$instance | tail -n-1)
-		((total+=${dh%	*}))	
+parse_du() {
+	for string in $(du -d 1 $INSTANCE_ROOT | tr '	' '-'); do
+		local bytes=${string%%-*}
+		local instance=${string##*/}
+
+		size["$instance"]=$bytes
+	
+
+		if [[ $SWITCH == *dd* ]] && [[ $SWITCH != *dddd* ]]; then 
+			[[ $instance == "root" ]] && continue
+			local dh=$(du -d 1 $INSTANCE_ROOT/$instance | tail -n-1)
+		 	bytes=${dh%	*}
+			size["$instance"]=$bytes
+		fi
+	
+	
+
+		[[ $instance == "root" ]] && continue
+		((total+=bytes))
+		
 	done
 }
 
@@ -242,15 +300,15 @@ list_root() {
 	printf "$BOLD%s\t%s\t%s\t%s$RESET\n" "Name" "Dependency" "Size" "Type"
 
 	for instance in $@; do
-		local dh=$(du -d 1 $INSTANCE_ROOT/$instance | tail -n-1)
-		local bytes=${dh%	*}
 		local dep=
 		local type=	
+		local bytes=0
 
-		if [[ $bytes == 0 ]]; then
+		if [[ ! ${size["$instance"]} ]]; then
 			dep="$(ls -l $INSTANCE_ROOT/$instance | sed -z "s,$INSTANCE_ROOT/,,g")"
 			type="LINK"
 		else
+			bytes=${size["$instance"]}
 			type=$(return_type)
 			if [[ $type != BASE ]]; then	
 				dep=$(return_dependency)
@@ -260,70 +318,95 @@ list_root() {
 		fi
 
 		printf "%s\t%s\t%s\t%s\n" "$instance" "${dep##*> }" "$($NUMFMT $bytes)" "$type"
-		((total+=$bytes))
 	done
 }
 
 edit_file() {
+		local instance=${ARGS[0]};
+		
+		local create=
 		local dissolve=
 		local file=
 		local tmpfile=
-		local instance=${ARGS[0]};
-	
+		local error=	
+		
 		if [[ ! $EDITOR ]]; then
 			EDITOR="vi"
 		fi
 
-		if [[ -f $EDITOR ]]; then
+		if [[ ! -f $EDITOR ]]; then
 			printf "%s%s\n" "$RED$BOLD" "error:$RESET \$EDITOR was not found at $EDITOR."		
 			exit	
 		fi
 
-		tmpfile=$(mktemp)
-		local error=	
+		[[ $1 ]] && dissolve=1
 
+		tmpfile=$(mktemp)
+		
 		case $SWITCH in
 			*c*)
 				file="$INSTANCE_CONFIG_ROOT/$instance"
 				error="config file"
-				if [[ -f $file ]]; then ## TODO: In place until configuration editing supported
-					printf "%s\n#\n# %s\n# %s\n#\n\n" "## NOTICE ##" \
-					"Configuration editing is currently unsupported." \
-					"For the purposes of viewing or diagnostics only." > $tmpfile
-					dissolve=1
-				fi
 			;;
-
+			*b*)
+				file="$INSTANCE_CONFIG_DIR/bwrap/$instance.sh"
+				error="bubblewrap script $file"
+				create=1
+				;;	
+			*ips*)
+				file="$INSTANCE_CONFIG_DIR/pacman/syncdb/pacman.$instance.conf"
+				error="instanced pacman $file"
+				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
+				dissolve=1
+			;;
+			*ip*)
+				file="$INSTANCE_CONFIG_DIR/pacman/sync/pacman.$instance.conf"
+				error="instanced template $file"
+				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
+				dissolve=1
+			;;
+			*l*)
+				file="$INSTANCE_DATA_DIR/pacwrap.log"
+				error="$file"
+				dissolve=1
+			;;
 			*pt*)
-				file="$SANDBOX_BASE/etc/pacman.$instance.conf"
-				error="pacman $instance template"
-			;;
+				file="$INSTANCE_CONFIG_DIR/pacman/template/pacman.$instance.conf"
+				error="pacman template $file"
+			;;	
 			*p*)
-				file="$SANDBOX_BASE/etc/pacman.conf"
+				file="$INSTANCE_CONFIG_DIR/pacman/pacman.conf"
 				error="default pacman.conf"
-			;;
-			*t*)
-				file="$SANDBOX_BASE/etc/pacman.d/tpl/pacman.$instance.conf"
-				error="pacman $instance template"
-			;;
+			;;	
 			*)
 				printf "%s%s\n" "$RED$BOLD" "error:$RESET operation not defined."
 				return
 			;;
 		esac
 
-		if [[ ! -f $file ]]; then
+
+		if ([[ ! -f $file ]] && [[ $dissolve ]]) ||
+		   ([[ ! -f $file ]] && [[ ! $create ]]); then
 			printf "%s%s\n" "$RED$BOLD" "error:$RESET $error not found."		
+			rm $tmpfile
 			return
 		fi
-				
+			
+		#sed -r "s/(\x1B\^O|\x1B\[[0-9;]*[JKmsu])//g" 
 		cat $file >> $tmpfile
 		$EDITOR $tmpfile
 
-		local tmp_sum=$(sha256sum $tmpfile)
-		local config_sum=$(sha256sum $file)
-		if [[ "${tmp_sum% *}" != "${config_sum% *}" ]] && [[ ! $dissolve ]]; then
-			cp $tmpfile $file	
+		local tmp_sum=$(sha256sum $tmpfile) 
+		local blank_sum=$(sha256sum /dev/null) 
+	
+		if [[ "${tmp_sum% *}" != "${blank_sum% *}" ]] && [[ ! $dissolve ]]; then
+			local config_sum=$(sha256sum $file)
+
+			if [[ "${tmp_sum% *}" != "${config_sum% *}" ]]; then
+				cp $tmpfile $file
+			else
+				echo "$BAR_GREEN No changes made.$RESET"
+			fi
 		else
 			echo "$BAR_GREEN No changes made.$RESET"
 		fi
@@ -332,21 +415,28 @@ edit_file() {
 }
 
 initialize_data_directory() {
-	mkdir -p $SANDBOX_BASE/fs/root \
-		$SANDBOX_BASE/fs/home \
-		$SANDBOX_BASE/var/cache/pacman/pkg \
-		$SANDBOX_BASE/etc/config \
-		$SANDBOX_BASE/etc/pacman.d/tpl \
-		$SANDBOX_BASE/etc/bwrap
+	mkdir -v -p $INSTANCE_DATA_DIR/root \
+		$INSTANCE_DATA_DIR/home \
+		$INSTANCE_DATA_DIR/database \
+		$INSTANCE_DATA_DIR/pacman/sync \
+		$INSTANCE_DATA_DIR/pacman/gnupg \
+		$INSTANCE_CACHE_DIR \
+		$INSTANCE_CONFIG_DIR/root \
+		$INSTANCE_CONFIG_DIR/pacman.d \
+		$INSTANCE_CONFIG_DIR/pacman/sync \
+		$INSTANCE_CONFIG_DIR/pacman/syncdb \
+		$INSTANCE_CONFIG_DIR/pacman/template \
+		$INSTANCE_CONFIG_DIR/bwrap
 
 	local ins_string="\[options\]\n"
 	local template="\n###IGNOREPKG###\n\n"
 	local install="\nNoExtract = usr/lib/*\nNoExtract = usr/lib32/*\nNoExtract = usr/bin/*\nNoExtract = usr/share/*\n\n"
+	
+	([[ ! -f $INSTANCE_CONFIG_DIR/pacman.d/mirrorlist ]] || [[ $SWITCH == *m* ]]) && cp /etc/pacman.d/mirrorlist $INSTANCE_CONFIG_DIR/pacman.d/mirrorlist
+	[[ ! -f $INSTANCE_CONFIG_DIR/pacman/pacman.conf ]] && cp /etc/pacman.conf $INSTANCE_CONFIG_DIR/pacman/pacman.conf	
 
-	cp /etc/pacman.d/mirrorlist $SANDBOX_BASE/etc/pacman.d/mirrorlist
-	cp /etc/pacman.conf $SANDBOX_BASE/etc/pacman.conf	
-	cat $SANDBOX_BASE/etc/pacman.conf | sed -z "s,$ins_string,$ins_string$template,g" > $SANDBOX_BASE/etc/pacman.tpl.conf
-	cat $SANDBOX_BASE/etc/pacman.conf | sed -z "s,$ins_string,$ins_string$install,g" > $SANDBOX_BASE/etc/pacman.install.conf
+	cat $INSTANCE_CONFIG_DIR/pacman/pacman.conf | sed -z "s,$ins_string,$ins_string$template,g" > $INSTANCE_CONFIG_DIR/pacman/pacman.template.conf
+	cat $INSTANCE_CONFIG_DIR/pacman/pacman.conf | sed -z "s,$ins_string,$ins_string$install,g" > $INSTANCE_CONFIG_DIR/pacman/pacman.install.conf
 }
 
 
@@ -374,7 +464,5 @@ query_confirm () {
 	fi
 	echo 1
 }
-
-
 
 main $@

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Pachwrap
+#  PacWrap -- Front-end Script
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -22,7 +22,7 @@ BOLD=$(tput bold)
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 
-VER="v0.9.3.1 ${BOLD}BETA$RESET"
+VER="v0.9.7 R4 ${BOLD}BETA$RESET"
 EXEC_NAME="pacwrap"
 UTILS_SCRIPT="pacwrap-utils"
 
@@ -64,16 +64,21 @@ main () {
 }
 
 init_structures() {
-	if [[ ! $SANDBOX_BASE ]]; then
-		SANDBOX_BASE="$HOME/.local/share/pacwrap"
+	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
+	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
+	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
+
+	if [[ $PACWRAP_DEBUG ]]; then 
+		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
+		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
 	fi
 
-	if [[ ! -d $SANDBOX_BASE ]]; then
+	if [[ ! -d $INSTANCE_DATA_DIR ]] || [[ ! -d $INSTANCE_DATA_DIR ]] || [[ ! -d $INSTANCE_DATA_DIR ]]; then
 		$UTILS_SCRIPT -Ui	
 	fi
 }
 
-parse_args () {1
+parse_args () {
 	ARGS=()
 	for var in "$@"; do
 		case $var in
@@ -233,17 +238,17 @@ help_operation() {
 cat << _USAGE
 
 ${BOLD}NAME$RESET
-	pacshwrap -- CLI tool which allows the creation, management, and execution of rootless, sandboxed chroots 
-	utilising pacman, bubblewrap, and fakeroot. 
+	pacwrap -- CLI script which facilitates the creation, management, and execution of unprivileged, 
+	sandboxed containers with bubblewrap, pacman, and coreutils.
 
 ${BOLD}SYNOPSIS$RESET
-	pachwrap [options] [TARGETS]
-	pachwrap [options] [TARGETS] [EXEC_ARGS]	
+	pacwrap [options] [TARGETS]
+	pacwrap [options] [TARGETS] [EXEC_ARGS]	
 
 ${BOLD}OPERATIONS$RESET
 	${BOLD}-S, --sync$RESET
 		Synhcronize package databases and update packages in target chroots. 
-		pachwrap-sync is invoked which facilitates an update and synchronization operation on specified targets.
+		pacwrap-sync is invoked which facilitates an update and synchronization operation on specified targets.
 	
 	${BOLD}-C, --create$RESET
 		Facilitates the creation of chroots. Creation is facilitated with chpak-create.

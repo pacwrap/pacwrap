@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Pachwrap -- chroot initialisation utility
+#  PacWrap -- Chroot Initialisation Utility
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -18,7 +18,18 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
+BOLD=$(tput bold)
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+CYAN=$(tput setaf 6)
+YELLOW=$(tput setaf 11)
+RESET=$(tput sgr0)
+BAR="$RED$BOLD::$RESET$BOLD"
+BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
+ARROW="$CYAN$BOLD->$RESET"
+ARROW_GREEN="$GREEN$BOLD->$RESET"
+ARROW_RED="$RED$BOLD->$RESET"
+
 EXEC_NAME="pacwrap-create" 
 
 EXEC_SCRIPT="pacwrap-exec"
@@ -29,6 +40,11 @@ main () {
 
 	parse_args "$@"
 
+	if [[ $SWITCH == v ]]; then
+		VER_DISPLAY=$EXEC_NAME pacwrap -v 
+		exit	
+	fi
+
 	if [[ ! $SANDBOX ]]; then
 		echo $EXEC_NAME": Instance not specified."
 		exit 1
@@ -36,23 +52,17 @@ main () {
 
 	init_vars
 
-	echo "Pre-initialising structures.."
-	
+	log $BAR_GREEN "Initializing container..."
+
 	init_struct
-
-	echo "Initialising chroot.."
-
 	init_chroot
 
-	echo "Cleaning up.."
-
-	cleanup
-
-	echo "Finalising chroot.."
+	log $BAR_GREEN "Finalizing chroot..."
 
 	finalise
 
-	echo "Process complete! Use pachwrap to configure $SANDBOX."
+	log $BAR_GREEN "Process complete!"
+	echo " Use pacwrap -Esr $BOLD$SANDBOX$RESET to configure the the container."
 }
 
 parse_args () {
@@ -66,6 +76,9 @@ parse_args () {
 			--dep=*)
 				DEPEND=$(echo $var | cut -c 7-)
 				;;	
+			--verbose)
+				SWITCH=v$SWITCH
+				;;
 			--is-dep)
 				SWITCH=d$SWITCH
 				;;
@@ -86,17 +99,35 @@ parse_args () {
 }
 
 init_vars () {
-	if [[ ! $SANDBOX_BASE ]]; then
-		SANDBOX_BASE="$HOME/.local/share/pacwrap"
+	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
+	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
+	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
+
+	VERBOSE="/dev/null"
+	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"	
+
+	if [[ $PACWRAP_DEBUG ]]; then 
+		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
+		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
 	fi
+
+	LOG_FILE="$INSTANCE_DATA_DIR/pacwrap.log"
+	OUTPUT_DEST=$LOG_FILE
+
+	INSTANCE_ROOT_DIR=$INSTANCE_DATA_DIR/root
+	INSTANCE_HOME_DIR=$INSTANCE_DATA_DIR/home
+	INSTANCE_ROOT=$INSTANCE_ROOT_DIR/$SANDBOX
+	INSTANCE_HOME=$INSTANCE_HOME_DIR/$SANDBOX
+	INSTANCE_CONFIG=$INSTANCE_CONFIG_DIR/root/$SANDBOX
 
 	PACMAN_CONFIG=pacman.install.conf	
 	PARAMS="$SANDBOX --root --exec"	
-	INSTANCE_ROOT=$SANDBOX_BASE/fs/root/$SANDBOX
-	INSTANCE_HOME=$SANDBOX_BASE/fs/home/$SANDBOX
-	INSTANCE_CONFIG=$SANDBOX_BASE/etc/config/$SANDBOX
+	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
 
-	if [[ ! -d $SANDBOX_BASE ]]; then ## TODO: enhance check and externalise it to pacwrap-utils
+
+	##TODO: Standardise output and integrate with logging infrastructure
+
+	if [[ ! -d $INSTANCE_ROOT_DIR ]]; then ## TODO: enhance check and externalise it to pacwrap-utils
 		echo $EXEC_NAME": Data directory not found. Aborting." 	
 		exit 1
 	fi
@@ -109,18 +140,18 @@ init_vars () {
 		PACMAN_CONFIG=pacman.conf
 	fi
 
-	BASE_ROOT=$SANDBOX_BASE/fs/root/$DEPEND
+	local base_root=$INSTANCE_ROOT_DIR/$DEPEND
 	if [[ ! $DEPEND ]] && [[ ! $ISROOTDEP ]]; then
 		echo "Root dependency not specified."
 		exit 1
-	fi	
+	fi
 
 	if [[ -d $INSTANCE_ROOT ]]; then 
 		echo $EXEC_NAME": Root directory for $SANDBOX exists. Aborting." 
 		exit 1
 	fi
 
-	if [[ ! -d $BASE_ROOT ]] && [[ ! $DEPEND ]]; then
+	if [[ ! -d $base_root ]] && [[ $DEPEND ]]; then
 		echo $EXEC_NAME": Directory not found for $DEPEND root dependency."
 		exit 1
 	fi
@@ -130,6 +161,8 @@ init_vars () {
 
 
 init_struct () {
+	log $ARROW "Pre-initializing structures.."
+
 	mkdir -p $INSTANCE_ROOT $INSTANCE_HOME \
 		$INSTANCE_ROOT/etc \
 		$INSTANCE_ROOT/var/lib/pacman \
@@ -141,77 +174,129 @@ init_struct () {
 		exit 1
 	fi
 
-	cp $SANDBOX_BASE/etc/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
-	cp $SANDBOX_BASE/etc/pacman.conf $SANDBOX_BASE/etc/pacman.d/pacman.$SANDBOX.conf
-	cp $SANDBOX_BASE/etc/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
-	cp $SANDBOX_BASE/etc/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	cp $INSTANCE_CONFIG_DIR/pacman/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
+	cp $INSTANCE_CONFIG_DIR/pacman/pacman.conf $INSTANCE_CONFIG_DIR/pacman/sync/pacman.$SANDBOX.conf
+	cp $INSTANCE_CONFIG_DIR/pacman/pacman.conf $INSTANCE_CONFIG_DIR/pacman/syncdb/pacman.$SANDBOX.conf	
+	cp $INSTANCE_CONFIG_DIR/pacman/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
+	cp $INSTANCE_CONFIG_DIR/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
 	
 	echo "$LANG ${LANG#*.}" > $INSTANCE_ROOT/etc/locale.gen
 	echo "LANG=$LANG" > $INSTANCE_ROOT/etc/locale.conf
 	echo "user:x:1000:1000::/home/user:/bin/bash" >> $INSTANCE_ROOT/etc/passwd
 	echo "$MACHINE_ID" > $INSTANCE_ROOT/etc/machine-id
 	echo 'PS1="'$SANDBOX'> "' > $INSTANCE_HOME/.bashrc
-	local t="TYPE=ROOT"
-	local d="DEPS=()"
+	local t="ROOT"
+	local d=
+
 
 	if [[ $ISDEP ]] || [[ $ISROOTDEP ]]; then
-		cp $SANDBOX_BASE/etc/pacman.tpl.conf $SANDBOX_BASE/etc/pacman.d/tpl/pacman.$SANDBOX.conf
-		mkdir -p $SANDBOX_BASE/etc/db/$SANDBOX
+		cp $INSTANCE_CONFIG_DIR/pacman/pacman.template.conf $INSTANCE_CONFIG_DIR/pacman/template/pacman.$SANDBOX.conf
+		mkdir -p $INSTANCE_DATA_DIR/database/$SANDBOX
 	fi
 
 	if [[ ! $ISROOTDEP ]]; then
-		if [[ -f $SANDBOX_BASE/etc/config/$DEPEND ]]; then
-			source $SANDBOX_BASE/etc/config/$DEPEND
+		if [[ -f $INSTANCE_CONFIG_DIR/root/$DEPEND ]]; then
+			source $INSTANCE_CONFIG_DIR/root/$DEPEND
 			DEPS+=("$DEPEND")
-			d="DEPS=(${DEPS[@]})"
+			d="${DEPS[@]}"
 		else
-			d="DEPS=($DEPEND)"
+			d="$DEPEND"
 		fi
 	fi	
 
 	if [[ $ISDEP ]]; then
-		t="TYPE=DEP"
+		t="DEP"
 	elif [[ $ISROOTDEP ]]; then
-		t="TYPE=BASE"
+		t="BASE"
 	fi	
 
-	echo $t > $INSTANCE_CONFIG
-	echo $d >> $INSTANCE_CONFIG
+	local config=$(cat << _CONFIG
+##
+\n## Configuration for $SANDBOX container
+\n## generated on $(date "+%F %T") by $EXEC_SCRIPT.
+\n##
 
+\n\n# Container type (DO NOT EDIT)
+\nTYPE=$t
+
+\n\n# Container dependency array (DO NOT EDIT)
+\nDEPS=($d)
+
+\n\n# Forcibly apply pacman -Sy to container
+\n# Not applicable to ROOT containers
+\nSYNC_PACMANDB=0
+_CONFIG
+)
+	echo -e $config > $INSTANCE_CONFIG
 }
 
 init_chroot () {	
+	log $ARROW "Bootstrapping base packages..."
 	fakechroot fakeroot pacman -Syu \
    	--root $INSTANCE_ROOT \
     	--dbpath $INSTANCE_ROOT/var/lib/pacman \
     	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
-	--cache /var/lib/cache/pacman/pkg \
-    	base lib32-glibc --noconfirm 2>/dev/null
-	$SYNC_SCRIPT -y
+	--cache $INSTANCE_CACHE_DIR \
+	--logfile "$LOG_FILE" \
+    	base lib32-glibc \
+	--noconfirm 2>/dev/null 1>>$VERBOSE
+	export PACWRAP_CREATE=1
+	$SYNC_SCRIPT -yyyy $SANDBOX
+
+	local gnupg=$(get_directory_pop $INSTANCE_DATA_DIR/pacman/gnupg) 
+	local sync=$(get_directory_pop $INSTANCE_DATA_DIR/pacman/sync) 
+
+	if [[ $sync == 0 ]]; then
+		cp -vr $INSTANCE_ROOT/var/lib/pacman/sync $INSTANCE_DATA_DIR/pacman  1>>$OUTPUT_DEST 2>>$OUTPUT_DEST 
+	fi
+
+	if [[ $gnupg == 0 ]]; then
+		init_trust	
+	fi
+
+}
+
+get_directory_pop() {
+	local array=$(ls $1)
+	echo ${#array}
+}
+
+init_trust () {
+	log $BAR_GREEN "Initializing pacman trust database..."
+	$EXEC_SCRIPT $PARAMS pacman-key --init 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	log $ARROW "Populating pacman trust database..."
+	$EXEC_SCRIPT $PARAMS pacman-key --populate 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 }
 
 finalise () {
-	$EXEC_SCRIPT $PARAMS pacman-key --init
-	$EXEC_SCRIPT $PARAMS pacman-key --populate
-	$EXEC_SCRIPT $PARAMS locale-gen
-	$EXEC_SCRIPT $PARAMS update-ca-trust
-	if [[ ! $ISROOTDEP ]]; then
-		if [[ $DEPEND ]]; then		
-			source $INSTANCE_CONFIG
-			local dbsyncpkgs=
+	log $ARROW "Generating locale..."
+	$EXEC_SCRIPT $PARAMS locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
+	log $ARROW "Updating certificate trust..."
+	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 
-			for dep in ${DEPS[@]}; do
-				dbsyncpkgs="$dbsyncpkgs $($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>|\<lib32-glibc\>//g")"
-			done
-			if [[ $dbsyncpkgs ]]; then
-				$EXEC_SCRIPT $PARAMS pacman -Su --dbonly --noconfirm $dbsyncpkgs 2>/dev/null
-			fi
-		fi
-		$SYNC_SCRIPT -g $SANDBOX
+	[[ ! $ISROOTDEP ]] && [[ $DEPEND ]] && sync_foreign_database		
+	cleanup
+	$SYNC_SCRIPT -g $SANDBOX
+}
+
+sync_foreign_database () {
+	source $INSTANCE_CONFIG
+	local dbsyncpkgs=()
+	local i=0
+	for dep in ${DEPS[@]}; do
+		dbsyncpkgs[i++]="$($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>|\<lib32-glibc\>//g")"
+	done
+	if [[ ${dbsyncpkgs[@]} ]]; then
+		log $ARROW "Synchronizing pacman database against foreign packages..."
+		$EXEC_SCRIPT $PARAMS pacman -Su \
+		--dbonly \
+		--logfile /tmp/pacman.log \
+		--noconfirm ${dbsyncpkgs[@]} 2>/dev/null 1>>$VERBOSE
 	fi
 }
 
 cleanup () {
+	log $ARROW "Some housekeeping..."
 	rm -v -r \
 	$INSTANCE_ROOT/boot \
 	$INSTANCE_ROOT/mnt \
@@ -222,11 +307,22 @@ cleanup () {
 	$INSTANCE_ROOT/run \
 	$INSTANCE_ROOT/dev \
 	$INSTANCE_ROOT/etc/pacman.install.conf \
-	$INSTANCE_ROOT/etc/pacman.d/mirrorlist
+	$INSTANCE_ROOT/etc/pacman.d/mirrorlist 1>>$OUTPUT_DEST
+}
+
+log () {
+	echo -e "$@ $RESET"
+	local i=
+	local log=
+	local log_output=()
+ 	for string in $@; do [[ $string == *[* ]] && continue
+        	log_output[i++]="$string"
+    	done
+	echo -e "[$(date '+%FT%H:%M:%S%z')] [$EXEC_NAME] ${log_output[@]}" >>$LOG_FILE
 }
 
 abort () {
-	echo "aborting operation.."
+	log $BAR "Operation aborted by user."
 	exit 1
 }
 
