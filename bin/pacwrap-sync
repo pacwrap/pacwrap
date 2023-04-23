@@ -18,17 +18,11 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-BOLD=$(tput bold)
-RED=$(tput setaf 1)
-GREEN=$(tput setaf 2)
-CYAN=$(tput setaf 6)
-YELLOW=$(tput setaf 11)
-RESET=$(tput sgr0)
-BAR="$RED$BOLD::$RESET$BOLD"
-BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
-ARROW="$CYAN$BOLD->$RESET"
-ARROW_GREEN="$GREEN$BOLD->$RESET"
-ARROW_RED="$RED$BOLD->$RESET"
+source pacwrap-common
+
+declare -A updated	
+declare -A synced
+declare -A syncreq
 
 EXEC_NAME="pacwrap-sync"
 EXEC_SCRIPT="pacwrap-exec --root --exec"
@@ -36,50 +30,58 @@ EXEC_SCRIPT="pacwrap-exec --root --exec"
 LINKFILES=("bin" "lib" "lib32" "share")
 
 main () {
-	parse_args $@
-
-	if [[ $SWITCH == v ]]; then
-		VER_DISPLAY=$EXEC_NAME pacwrap -v 
-		exit	
-	fi
+	export PACWRAP_UTILS=1
+	trap abort INT
 
 	local roots=()
 	local rootdeps=()
 	local baserootdeps=()
 	local syncroots=()
+	local syncreq=
 
-	init_vars
+	parse_args $@
+	init $PACWRAP_CREATE
+
+	[[ ! $SWITCH ]] && log_error "No switch provided." 1
+
+	log_to_file "Running '$RUNTIME_ARGS'"
 
 	if [[ $SWITCH == *g* ]]; then
-		generate_pacman_conf ${ARGS[@]}
-		return
+		log "$ARROW Configuring container..."
+		local instance=${ARGS[0]}
+		check_root "pacman.conf generation"
+		sync_pacman_conf
+		exit
 	fi
 
-	[[ $SWITCH == *yyyy* ]] && SYNCREQ=1
-
-	if [[ $SWITCH == *u* ]] || ([[ $SWITCH == *y* ]] && [[ ! $SYNCREQ ]]); then
-		log $BAR "Update container \n\n${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}\n"
-		
-		[[ ! "$(query_confirm "Proceed with update?")" ]] && return	
-		generate_pacman_conf ${baserootdeps[@]} ${rootdeps[@]}
+	if [[ $SYNC_UPGRADE ]] || ([[ $SYNC_UPDATE ]] && [[ ! $SYNC_FORCE ]]); then
+		log "$BAR_GREEN Starting container upgrade..."
+		[[ ! $SWITCH_NOCONFIRM ]] && echo -e $BAR "Update container \n\n${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}\n"
+		[[ ! "$(query_confirm_Yn "Proceed with update?")" ]] && return
+		configure_containers ${baserootdeps[@]} ${rootdeps[@]}
 		update ${baserootdeps[@]} ${rootdeps[@]}
 	fi
 
-	if [[ $SWITCH == *yyy* ]] || [[ $SYNCREQ == 1 ]]; then
-		[[ $PACWRAP_CREATE ]] && syncroots=${roots[@]} 
-		log $BAR_GREEN "Synchronizing container structures..."	
-		generate_cache ${baserootdeps[@]}
-		update_links ${rootdeps[@]} ${syncroots[@]} 
-		cleanup_cache ${rootdeps[@]} ${baserootdeps[@]}
-		[[ $SWITCH == *yyyy* ]] && return
-	fi
+	[[ ${#roots[@]} > 0 ]] && [[ ! $SYNC_FORCE ]] && 
+		log "$BAR_GREEN Starting contingent container upgrade..."
 
-	if [[ $SWITCH == *u* ]] || [[ $SWITCH == *y* ]]; then
-		generate_pacman_conf ${roots[@]}
+	for b in ${baserootdeps[@]}; do
+		[[ ${syncreq[$(return_base)]} ]] && syncreq=1 && break; done
+
+	if [[ $SYNC_OVERRIDE ]] || [[ $syncreq ]]; then
+		update_links ${syncroots[@]} 
+		cleanup_cache ${rootdeps[@]} ${baserootdeps[@]}
+		[[ $SYNC_FORCE ]] && return
+	fi
+	
+	[[ ${#roots[@]} -le 0 ]] && return
+
+	if [[ $SYNC_UPGRADE ]] || [[ $SYNC_UPDATE ]]; then
+		configure_containers ${roots[@]}
 		update ${roots[@]}
-		if [[ -f /usr/bin/paccache ]]; then
-			paccache --cachedir $INSTANCE_CACHE_DIR -r -k 1 --min-mtime "14 days ago"
-		fi
+		[[ -f /usr/bin/paccache ]] && 
+			paccache --cachedir $INSTANCE_PACMAN_CACHE -r -k 1 --min-mtime "14 days ago"
+		
 	fi
 }
 
@@ -98,8 +100,8 @@ parse_args () {
 			--sync|-y)
 				SWITCH=y$SWITCH
 				;;		
-			-*)
-				SWITCH=$(echo $var | cut -c 2-)
+			-S*)
+				SWITCH=$(echo $var | cut -c 3-)
 				;;
 			*)
 				ARGS+=("$var")
@@ -108,60 +110,39 @@ parse_args () {
 	done
 }
 
-init_vars() {
-	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
-	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
-	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
+script_init () {
+	[[ $SWITCH == *y* ]] && SYNC_UPDATE=1
+	[[ $SWITCH == *u* ]] && SYNC_UPGRADE=1
+	[[ $SWITCH == *yy* ]] && SYNC_FOREIGN=1
+	[[ $SWITCH == *yyy* ]] && SYNC_OVERRIDE=1
+	[[ $SWITCH == *yyyy* ]] && SYNC_FORCE=1
 
-	if [[ $PACWRAP_DEBUG ]]; then 
-		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
-		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
-	fi
-
-	VERBOSE="/dev/null"
-	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
-
-	LOG_FILE="$INSTANCE_DATA_DIR/pacwrap.log"
-	OUTPUT_DEST=$LOG_FILE
-
-	INSTANCE_ROOT=$INSTANCE_DATA_DIR/root
-	INSTANCE_DB_ROOT=$INSTANCE_DATA_DIR/database
-	INSTANCE_CONFIG_ROOT=$INSTANCE_CONFIG_DIR/root
-	INSTANCE_PACMAN_SYNC=$INSTANCE_CONFIG_DIR/pacman/sync
-	INSTANCE_PACMAN_SYNCDB=$INSTANCE_CONFIG_DIR/pacman/syncdb
-	INSTANCE_PACMAN_TEMPLATE=$INSTANCE_CONFIG_DIR/pacman/template
-
-	if [[ ! -d $INSTANCE_ROOT ]]; then
-		echo $BOLD$RED"error:$RESET Sandbox root is either missing or an environmental variable is misconfigured.$RESET" 
-		exit
-	fi	
-
-	local rootlist=$(ls -U -1F $INSTANCE_ROOT | grep -i "/" | tr -d "/")
-	for sandbox in $rootlist; do
-		local type=$(return_type)
-		case $type in
-			BASE)
-				baserootdeps+=("$sandbox")
-			;;
-			DEP)
-				rootdeps+=("$sandbox")
-			;;
-			*)
-				roots+=("$sandbox")
-			;;
-		esac
-	done
-	syncroots=${roots[@]}
+	syncroots=(${roots[@]})
 
 	if [[ ${ARGS[@]} ]]; then 
 		roots=()
-		for sandbox in $ARGS; do
+		for instance in $ARGS; do
 			check_root "container" 
 			[[ $? == 1 ]] && continue
-			roots+=("$sandbox")
+			[[ $(return_type) != "ROOT" ]] && 
+			[[ ! $PACWRAP_CREATE ]] && continue 	
+			roots+=("$instance")
 		done
-
 	fi
+
+	[[ $SYNC_FORCE ]] && syncroots+=(${rootdeps[@]})
+
+	if [[ $PACWRAP_CREATE ]]; then
+		local instance=${roots[0]}
+		syncroots=($instance)
+		for instance in $(return_dependencies); do
+			[[ $(return_type) == "BASE" ]] && continue
+			syncroots+=($instance)
+		done
+	fi
+
+	touch $LOCK_FILE
+	trap on_exit EXIT
 }
 
 invoke_link_deletion() {
@@ -179,133 +160,161 @@ invoke_link_deletion() {
 }
 
 invoke_update_link() {
-	local sandbox=$1
-
-	if [[ ${synced[$sandbox]} ]]; then
-		return
-	fi
-	if [[ $(return_type) == "BASE" ]]; then
-		return
-	fi
-
+	local instance=$1
 	local linkfiles=${LINKFILES[@]}
-	local dep=$(return_dependency)
-	
-	if [[ $SWITCH != *f* ]]; then
-		for item in ${linkfiles[@]}; do
-			local root=$INSTANCE_ROOT/$sandbox
-			local link=$INSTANCE_DB_ROOT/$dep
-			invoke_link_deletion
-		#	log_to_file "Deleted stray files from $dep/$item in $sandbox."
-		done
+
+	[[ ${synced[$instance]} ]] && return
+
+	if [[ $(return_type) == "BASE" ]]; then
+		invoke_generate_cache
+		synced[$instance]=1
+		return
 	fi
+
+	local dep=$(return_dependency)
 
 	for item in ${linkfiles[@]}; do
-		local root=$INSTANCE_ROOT/$sandbox
-		local source=$INSTANCE_ROOT/$dep		
+		local root=$INSTANCE_ROOT_DIR/$instance
+		local link=$INSTANCE_DB_DIR/$dep
+		invoke_link_deletion
+		#log_to_file "Deleted stray files from $dep/$item in $instance."
+
+		if [[ $amt ]]; then
+			((amt_done++))
+			progress_bar
+		fi
+	done
+
+	for item in ${linkfiles[@]}; do
+		local root=$INSTANCE_ROOT_DIR/$instance
+		local source=$INSTANCE_ROOT_DIR/$dep		
 		local src=$source/usr/$item 
 		local dest=$root/usr/	
 
-		([[ ! -d $src ]] || [[ ! -d $dest ]]) && continue
+		([[ ! -d $src ]] || [[ ! -d $dest ]]) && ((amt_done++)) && continue 
 
 		cp -flR $src $dest 2>>$OUTPUT_DEST 1>>$OUTPUT_DEST
-		log_to_file "Linked $sandbox/$item against $dep/$item."
+		log_to_file "Linked $instance/$item against $dep/$item."	
+
+		if [[ $amt ]]; then
+			((amt_done++))
+			progress_bar
+		fi
 	done
 
-	if [[ $(return_type) == "DEP" ]]; then
-		invoke_generate_cache
-	fi
-	synced[$sandbox]=1
+	[[ $(return_type) == "DEP" ]] && invoke_generate_cache
+	[[ $ABORT ]] && exit 1
+
+	synced[$instance]=1
 }
 
 update_links() {
-	declare -A synced
-	local amt=${#@}
 	local amt_done=0
-
+	local amt=$((${#@} * 8))
+	local check_root="link synchronization"
+	
+	SYNC=1
 	init_progress
-	set_progress_label " Linking structures"
+	set_progress_label "Linking structures" $ARROW
 
-	for sandbox in "$@"; do				
-		((amt_done++))
-		progress_bar	
-		check_root "link synchronization"
+	for instance in "$@"; do check_root $check_root
 		[[ $? == 1 ]] && continue		
-		for dep in $(return_dependencies); do
-			check_root "link synchronization"
-			[[ $? == 1 ]] && continue	
-			invoke_update_link $dep
+		local syncreq=$SYNC_OVERRIDE
+	
+		for instance_dep in $(return_dependencies); do check_root $check_root
+			[[ $? == 1 ]] && break
+			[[ $syncreq ]] && invoke_update_link $instance_dep
+			[[ ${synced[$instance_dep]} ]] && syncreq=1		
 		done
-		invoke_update_link $sandbox
-	done; echo
+
+		if [[ $syncreq ]]; then
+			invoke_update_link $instance
+		else
+			((amt_done+=8))
+			progress_bar
+		fi
+	done; SYNC= && echo
 }
 
 cleanup_cache() {
-	for sandbox in "$@"; do				
+	for instance in "$@"; do				
 		check_root "cache file operation"
 		[[ $? == 1 ]] && continue
 	
 		local linkfiles=${LINKFILES[@]}
 	
 		for item in ${linkfiles[@]}; do
-			[[ -f $INSTANCE_DB_ROOT/$sandbox/$item.old.zst ]] && 
-				rm $INSTANCE_DB_ROOT/$sandbox/$item.old.zst 2>>$OUTPUT_DEST 1>>$OUTPUT_DEST
+			[[ -f $INSTANCE_DB_DIR/$instance/$item.old.zst ]] && 
+				rm $INSTANCE_DB_DIR/$instance/$item.old.zst 2>>$OUTPUT_DEST 1>>$OUTPUT_DEST
 		done
 	done
 }
 
 invoke_generate_cache() {
-	local dep=$sandbox
+	local dep=$instance
 	local linkfiles=${LINKFILES[@]}
 	
 	for item in ${linkfiles[@]}; do
-		local root=$INSTANCE_ROOT/$sandbox
-		local link=$INSTANCE_DB_ROOT/$sandbox
+		local root=$INSTANCE_ROOT_DIR/$instance
+		local link=$INSTANCE_DB_DIR/$instance
 		local rdir=$root/usr/
 		local tdir=$root/usr/$item		
 
 		if ([[ ! -d $root ]] || [[ ! -d $tdir ]]); then
-			log $ARROW_RED$RESET "Root or link target for $BOLD$sandbox$RESET not found..."		
-			log_to_file "Root or link target for $sandbox not found during synchronization operation."
+			log_error "Root or link target for $BOLD$instance$RESET not found..."
 			return
 		fi
 
 		[[ -f $link/$item.zst ]] && mv $link/$item.zst $link/$item.old.zst 2>>$OUTPUT_DEST 1>>$OUTPUT_DEST
 		find $tdir -type f,d,l | sed -z "s,$rdir,,g" | zstd -fq -o $link/$item.zst
 	done
-	log_to_file "Generated link cache for $sandbox!"	
-}
-
-generate_cache() {
-	for sandbox in "$@"; do				
-		check_root "cache"
-		[[ $? == 1 ]] && continue
-
-		invoke_generate_cache
-	done
+	log_to_file "Generated link cache for $instance!"
 }
 
 check_root() {
-	if [[ ! -d $INSTANCE_ROOT/$sandbox ]]; then
-		log $ARROW_RED$RESET "Root for $BOLD$sandbox$RESET not found.$RESET\n Skipping $@..."
+	if [[ ! -d $INSTANCE_ROOT_DIR/$instance ]]; then
+		log_error $ARROW_RED "Root for $BOLD$instance$RESET not found." "Skipping..."
 		return 1
 	fi
 }
 
-invoke_vdb () {	
-	local root=$INSTANCE_ROOT/$sandbox
-	local dep=
+update_config() {
+	declare -A skip
+	
+	local i=
+	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qqe)	
+	local old_local_pkgs=$(return_packages)
+	local package_list=()
 
-	if [[ $(return_type) != "ROOT" ]]; then
-		dep=$sandbox
-	else
-		dep=$(return_dependency)
+	if [[ $(return_type) != "BASE" ]]; then
+		local pkgs=$($EXEC_SCRIPT $(return_dependency) pacman -Qqe)
+	
+		for pkg in $pkgs; do
+			skip[$pkg]=1
+		done
 	fi
 
-	declare -A skip
-	local template="cat $INSTANCE_PACMAN_TEMPLATE/pacman.$dep.conf"
+	for pkg in $local_pkgs; do
+		[[ ${skip[$pkg]} ]] && continue
+		package_list[i++]="$pkg"
+	done
 
-	local pacmanconf=$INSTANCE_PACMAN_SYNC/pacman.$sandbox.conf
+	[[ "$(echo ${package_list[@]})" != "$(echo ${old_local_pkgs[@]})" ]] &&
+		generate_config ${package_list[@]}
+	
+	((amt_done++))
+	progress_bar
+}
+
+sync_pacman_conf () {	
+	local dep=$instance
+
+	[[ $(return_type) == "ROOT" ]] && dep=$(return_dependency)
+	
+	declare -A skip
+	local template="cat $(return_pacman_template $dep)"
+
+	local pacmanconf=$(return_pacman_sync $instance)
 	local ignorepkg="## Start of automated configuration ##\n"
 	
 	if [[ $(return_type) != "BASE" ]]; then		
@@ -333,12 +342,18 @@ invoke_vdb () {
 	echo -e $header > $pacmanconf
 	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
 	log_to_file "Generated $pacmanconf."
-	invoke_vdb_update
+	
+	if [[ $amt ]]; then
+		((amt_done++))
+		progress_bar
+	fi
+
+	syncdb_pacman_conf	
 }
 
-invoke_vdb_update() {
-	local pacmanconf=$INSTANCE_PACMAN_SYNCDB/pacman.$sandbox.conf
-	local local_pkgs=$($EXEC_SCRIPT $sandbox pacman -Qq)
+syncdb_pacman_conf() {
+	local pacmanconf=$(return_pacman_syncdb $instance)
+	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qq)
 	local ignorepkg="## Start of automated configuration ##\n"
 	
 	if [[ $(return_type) != "BASE" ]]; then	
@@ -352,145 +367,128 @@ invoke_vdb_update() {
 	echo -e $header > $pacmanconf
 	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
 	log_to_file "Generated $pacmanconf."
+
+	if [[ $amt ]]; then
+		((amt_done++))
+		progress_bar
+	fi
 }
 
-
 invoke_update() {
-	log_to_file "Checking $sandbox container for updates..."
-	log $BAR_GREEN "Checking $sandbox for updates..."
+	local instance=$1
+
+	[[ ${updated[$instance]} ]] && return
+	updated[$instance]=1
+	log "$BAR_GREEN Checking $instance for updates..." \
+	    "Checking $instance container for updates..."
+
 
 	local type=$(return_type);
-	local syncdb=$(return_pacman_syncdb)
+	local syncdb=$(return_sync_pacmandb)
 
-	if [[ $SWITCH == *y* ]] && ([[ $type == "BASE" ]] || [[ $type == "DEP" ]]); then
-		([[ ! $PMSYNCED ]] || ([[ $syncdb ]] && [[ $syncdb == 1 ]])) &&
-			$EXEC_SCRIPT $sandbox pacman --logfile /tmp/pacman.log -Sy
+	if [[ $SYNC_UPDATE ]] && [[ $type != "ROOT" ]]; then
+		if [[ ! $PMSYNCED ]] || [[ $syncdb == 1 ]]; then
+			$EXEC_SCRIPT $instance pacman --logfile /tmp/pacman.log -Sy
+			[[ $? != 0 ]] && 
+				log_error $ARROW_RED "Remote database synchronization failed." \
+						     "Use pacwrap -Sv and examine stdout for details." 1
+		fi
 		PMSYNCED=1
 	fi
 
-	local result=$($EXEC_SCRIPT $sandbox pacman --color always -Qu | grep -v "ignored")
+	local result=$($EXEC_SCRIPT $instance pacman --color always -Qu | grep -v "ignored")
 
-	if ([[ $SWITCH == *yy* ]] || ([[ $result ]] && [[ $SWITCH == *u* ]])) && [[ $(return_type) != "BASE" ]]; then
-		log $ARROW "Synchronizing database against foreign packages..."
-		$EXEC_SCRIPT $sandbox pacman -Su --logfile /tmp/pacman.log --dbonly --noconfirm --config=/tmp/pacman.conf 2>/dev/null 1>$VERBOSE
+	if ([[ $SYNC_OVERRIDE ]] || [[ ${syncreq[$(return_base)]} ]]) && 
+	    [[ $type != "ROOT" ]]; then
+		log "$ARROW Linking structures..."
+		invoke_update_link $instance
+	fi
+
+	if ([[ $SYNC_FOREIGN ]] || ([[ $result ]] && [[ $SYNC_UPGRADE ]])) && 
+	    [[ $(return_type) != "BASE" ]]; then
+		log "$ARROW Synchronizing database against foreign packages..."
+		$EXEC_SCRIPT $instance pacman -Su \
+			--logfile /tmp/pacman.log \
+			--dbonly --noconfirm \
+			--config=/tmp/pacman.conf 2>/dev/null 1>$VERBOSE
+
+		[[ $? != 0 ]] && 
+			log_error $ARROW_RED "Foreign database synchronization failed." \
+					     "Use pacwrap -Sv and examine stdout for details." 1
+
 		log " Database synchronization complete!"
 	fi
 
 	if [[ ! $result ]]; then
-		log "$ARROW Container $BOLD$sandbox$RESET is up to date!"
-		log_to_file "Database up-to-date for $sandbox."
+		log "$ARROW Container $BOLD$instance$RESET is up to date!" \
+		    "Database up-to-date for $instance."
 		return
 	fi
 
 	echo -e "$BAR Package changes: $RESET \n\n$result\n"
-	[[ $SWITCH != *u* ]] && return
-	[[ ! $(query_confirm "Proceed with installation on $sandbox") ]] && return
-	log_to_file "Updating $sandbox container.."
+	
+	[[ ! $SYNC_UPGRADE ]] && return
+	[[ ! $(query_confirm_Yn "Proceed with installation on $instance") ]] && return
 
-	SYNCREQ=1
-	$EXEC_SCRIPT $sandbox pacman -Su --logfile /tmp/pacman.log --noconfirm 2>/dev/null
-	log $ARROW_GREEN "Upgrade complete!"
+	log_to_file "Updating $instance container.."
+	$EXEC_SCRIPT $instance pacman -Su \
+		--logfile /tmp/pacman.log \
+		--noconfirm 2>/dev/null
+
+	[[ $? != 0 ]] && 
+		log_error $ARROW_RED "Upgrade for $instance failed." \
+				     "Use pacwrap -Sv and examine stdout for details." 1
+
+	if [[ $(return_type) != "ROOT" ]]; then
+		log "$ARROW Generating link cache..."
+		invoke_generate_cache $instance
+		synced[$instance]=1
+	fi
+
+	syncreq[$(return_base)]=1
+
+	log "$ARROW_GREEN Upgrade complete!"
 }
 
-update () {		
-	for sandbox in "$@"; do	
+update () {	
+	for instance in "$@"; do	
 		check_root "update"
 		[[ $? == 1 ]] && continue	
-		invoke_update
+		for dep in $(return_dependencies); do
+			invoke_update $dep 
+		done
+
+		invoke_update $instance
 	done
 }
 
-print_progress_bar() {	
-    printf "$PROGRESS_LABEL" 
-    printf "%-*s" $(($2+1)) '[' | tr ' ' '#'
-    printf "%*s% 3d%%\r"  $(($1-$2))  "]" "$3"
-}
 
-
-init_progress() {
-	TTY_SIZE=($(stty size))
-	PROGRESS_LENGTH=$((${TTY_SIZE[1]}/2))
-}	
-
-
-set_progress_label() {
-	PROGRESS_LABEL="$1"
-	local label_length=${#PROGRESS_LABEL}
-	local padding_length=$(($PROGRESS_LENGTH-$label_length-8))
-	for ((i=0; i<=padding_length; i+=1)); do
-		PROGRESS_LABEL+=" "
-	done
-}
-
-progress_bar() {
-	local bar_percent=$(($((PROGRESS_LENGTH*2))*$amt_done/$amt % 2 + $PROGRESS_LENGTH*$amt_done/$amt))
-	local percent=$((200*$amt_done/$amt % 2 + 100*$amt_done/$amt))
-
-	print_progress_bar $((PROGRESS_LENGTH+1)) $bar_percent $percent
-}
-
-generate_pacman_conf () {
-	log $BAR_GREEN "Generating pacman configuration..."
-	init_progress
-	set_progress_label " pacman.conf"
-	local amt=${#@}
+configure_containers () {	
+	local amt=$((${#@}*3))
 	local amt_done=0
 
-	for sandbox in "$@"; do	
-		((amt_done++))
-		progress_bar
-		check_root "pacman.conf generation"
+	init_progress
+	set_progress_label "Configuring containers" $ARROW
+
+	for instance in "$@"; do check_root "pacman.conf generation"
 		[[ $? == 1 ]] && continue	
-		invoke_vdb
+		sync_pacman_conf
+	done
+
+	for instance in "$@"; do check_root "configuration update"
+		[[ $? == 1 ]] && continue	
+		update_config
 	done; echo
 }
 
-return_pacman_syncdb() {
-	source $INSTANCE_CONFIG_ROOT/$sandbox
-	echo $SYNC_PACMANDB
+abort () {	
+	echo
+	ABORT=1
+	[[ ! $SYNC ]] && exit
 }
 
-return_type() {
-	source $INSTANCE_CONFIG_ROOT/$sandbox
-	echo $TYPE
-}
-
-return_dependencies() {
-	source $INSTANCE_CONFIG_ROOT/$sandbox
-	echo ${DEPS[@]}
-}
-
-return_base() {
-	source $INSTANCE_CONFIG_ROOT/$sandbox
-	echo ${DEPS[0]}
-}
-
-return_dependency() {
-	source $INSTANCE_CONFIG_ROOT/$sandbox
-	echo ${DEPS[$((${#DEPS[@]} - 1))]}
-}
-
-log () {
-	echo -e "$@ $RESET"
-}
-
-log_to_file() {
-	echo -e "[$(date '+%FT%H:%M:%S%z')] [$EXEC_NAME] $@" >>$LOG_FILE 
-}
-
-
-query_confirm () {
-	if [[ $SWITCH == *n* ]]; then		
-		echo 1	
-		return
-	fi
-	read -rp "$BAR $@ [Y/n]$RESET " input
-	if [[ "$input" != "Y" ]] && 
-	   [[ "$input" != "y" ]] &&
-           [[ "$input" != "" ]]; then
-		return	
-	fi
-	echo 1
+on_exit() {
+	[[ ! $PACWRAP_CREATE ]] && [[ -f $LOCK_FILE ]] && rm $LOCK_FILE
 }
 
 main $@

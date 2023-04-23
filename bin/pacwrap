@@ -18,33 +18,27 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-BOLD=$(tput bold)
-RED=$(tput setaf 1)
-RESET=$(tput sgr0)
+source pacwrap-common
 
-VER="v0.9.7 R4 ${BOLD}BETA$RESET"
 EXEC_NAME="pacwrap"
-UTILS_SCRIPT="pacwrap-utils"
-
 
 main () {
-
-	distro_check
 	parse_args "$@"
-	init_structures	
+
+	distro_warn
 
 	case $SWITCH in 
 		C)
-			pacwrap-create ${ARGS[@]}
+			$CREATE_SCRIPT ${ARGS[@]}
 			;;
 		E)
-			pacwrap-exec ${ARGS[@]}
+			$EXEC_SCRIPT ${ARGS[@]}
 			;;
 		S)
-			pacwrap-sync ${ARGS[@]}
+			$SYNC_SCRIPT ${ARGS[@]}
 			;;
 		U)
-			pacwrap-utils ${ARGS[@]}
+			$UTILS_SCRIPT ${ARGS[@]}
 			;;
 		h)
 			help_operation $HELP
@@ -61,21 +55,6 @@ main () {
 				echo "Try '$EXEC_NAME -h' for more information on valid operational parameters."
 			;;
 	esac
-}
-
-init_structures() {
-	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
-	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
-	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
-
-	if [[ $PACWRAP_DEBUG ]]; then 
-		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
-		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
-	fi
-
-	if [[ ! -d $INSTANCE_DATA_DIR ]] || [[ ! -d $INSTANCE_DATA_DIR ]] || [[ ! -d $INSTANCE_DATA_DIR ]]; then
-		$UTILS_SCRIPT -Ui	
-	fi
 }
 
 parse_args () {
@@ -115,30 +94,6 @@ parse_args () {
 	done
 }
 
-distro_check() {
-
-	source /etc/os-release
-
-	if [[ ! -f /usr/bin/pacman ]]; then
-
-	version
-	cat << _WARN 
-
-$BOLD${RED}error:$RESET An attempt was made to execute pachwrap on an unsupported distribution.
-pachwrap is currently only supported on distributions utilising Arch Linux's pacman package manager.
-Support for other package managers with a similar, requisite subset of features may be possible in future.
-_WARN
-		exit 1
-	fi
-
-	if [[ ! $ID == "arch" ]]; then cat << _WARN
-$BOLD${RED}WARNING:$RESET You are running pachwrap on an unsupported derviative of Arch Linux.
-
-Support is not guaranteed. Use at your ${BOLD}OWN$RESET risk.
-
-_WARN
-	fi
-}
 
 version () {
 	if [[ ! $VER_DISPLAY ]]; then
@@ -281,6 +236,16 @@ _USAGE
 			help_sync
 			;;
 	esac
+}
+
+function distro_warn() {
+	source /etc/os-release
+	[[ ! $ID == "arch" ]] && cat << _WARN
+$BOLD${RED}WARNING:$RESET You are running pacwrap on an unsupported distribution of Linux or Unix.
+
+Support is not guaranteed. Use at your ${BOLD}OWN$RESET risk.
+
+_WARN
 }
 
 main $@

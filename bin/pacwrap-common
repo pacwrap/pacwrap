@@ -1,0 +1,343 @@
+#!/bin/bash
+#
+#  PacWrap -- common script
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+RUNTIME_ARGS="$0 $@"
+
+BOLD=$(tput bold)
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+CYAN=$(tput setaf 6)
+YELLOW=$(tput setaf 11)
+RESET=$(tput sgr0)
+UNDERLINE=$(tput smul)
+
+BAR="$RED$BOLD::$RESET$BOLD"
+BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
+ARROW="$CYAN$BOLD->$RESET"
+ARROW_GREEN="$GREEN$BOLD->$RESET"
+ARROW_RED="$RED$BOLD->$RESET"
+
+VER="v0.9.8 ${BOLD}BETA$RESET"
+
+EXEC_SCRIPT="pacwrap-exec"
+CREATE_SCRIPT="pacwrap-create"
+UTILS_SCRIPT="pacwrap-utils"
+SYNC_SCRIPT="pacwrap-sync"
+
+LOG_ERR_HELP=1
+LOG_ERR_WARN=2
+LOG_ERR_ERROR=3
+
+declare -A INSTANCE_CONFIG
+[[ ! $PACWRAP_DATA_DIR ]] && PACWRAP_DATA_DIR="$HOME/.local/share/pacwrap"
+[[ ! $PACWRAP_CACHE_DIR ]] && PACWRAP_CACHE_DIR="$HOME/.cache/pacwrap"
+[[ ! $PACWRAP_CONFIG_DIR ]] && PACWRAP_CONFIG_DIR="$HOME/.config/pacwrap"
+
+VERBOSE="/dev/null"
+
+LOCK_FILE="$PACWRAP_DATA_DIR/pacwrap.lck"	
+LOG_FILE="$PACWRAP_DATA_DIR/pacwrap.log"
+OUTPUT_DEST=$LOG_FILE
+
+INSTANCE_ROOT_DIR=$PACWRAP_DATA_DIR/root
+INSTANCE_HOME_DIR=$PACWRAP_DATA_DIR/home
+INSTANCE_CONFIG_DIR=$PACWRAP_CONFIG_DIR/root
+INSTANCE_DB_DIR=$PACWRAP_DATA_DIR/database	
+
+INSTANCE_PACMAN_DIR="$PACWRAP_DATA_DIR/pacman"
+INSTANCE_PACMAN_GNUPG="$INSTANCE_PACMAN_DIR/gnupg"
+INSTANCE_PACMAN_SYNC="$INSTANCE_PACMAN_DIR/sync"
+INSTANCE_PACMAN_MIRRORLIST="$PACWRAP_CONFIG_DIR/pacman.d/mirrorlist"	
+INSTANCE_PACMAN_CACHE="$PACWRAP_CACHE_DIR/pkg"
+
+INSTANCE_PACMAN_CFG_DIR="$PACWRAP_CONFIG_DIR/pacman"
+
+init() {
+	runtime_check
+
+	[[ $SWITCH == *n* ]] && SWITCH_NOCONFIRM=1
+	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
+	[[ ! -f $LOG_FILE ]] && touch $LOG_FILE
+
+	[[ ! $1 ]] && [[ -f $LOCK_FILE ]] && 
+		log_error "pacwrap is locked: $LOCK_FILE$RESET" 2
+	
+
+	local list="ls -U -1F $INSTANCE_ROOT_DIR"
+	local rootlist=$($list 2>/dev/null | grep -i "/" | tr -d "/")
+
+	for instance in $rootlist; do
+		source_configuration
+		populate_configuration
+		populate_container_array
+	done
+
+	if [[ $SWITCH == v ]]; then
+		VER_DISPLAY=$EXEC_NAME pacwrap -v 
+		exit	
+	fi
+
+	script_init
+	perform_datadir_check
+}
+
+populate_container_array() {
+	case $TYPE in
+		BASE)	
+			baserootdeps+=($instance)
+			;;	
+		DEP)
+			rootdeps+=($instance)
+			;;
+		*)	
+			roots+=($instance)
+			;;
+		esac
+}
+
+source_configuration() {
+	source $INSTANCE_CONFIG_DIR/$instance
+}
+
+populate_configuration() {
+	INSTANCE_CONFIG[$instance,0]=$TYPE
+	INSTANCE_CONFIG[$instance,1]="deps=(${DEPS[@]})"
+	INSTANCE_CONFIG[$instance,2]=$SYNC_PACMANDB
+	INSTANCE_CONFIG[$instance,3]="pkgs=(${PKG[@]})"
+}
+
+return_sync_pacmandb() {
+	echo ${INSTANCE_CONFIG[$instance,2]}
+}
+
+return_base() {
+	[[ $(return_type) == "BASE" ]] && echo $instance && return 
+	eval ${INSTANCE_CONFIG[$instance,1]}
+	echo ${deps[0]}
+}
+
+return_dependencies() {
+	eval ${INSTANCE_CONFIG[$instance,1]}
+	echo ${deps[@]}
+}
+
+return_packages() {
+	eval ${INSTANCE_CONFIG[$instance,3]}
+	echo ${pkgs[@]}
+}
+
+return_type() {
+	echo ${INSTANCE_CONFIG[$instance,0]}
+}
+
+return_dependency() {
+	eval ${INSTANCE_CONFIG[$instance,1]}
+	echo ${deps[$((${#deps[@]} - 1))]}
+}
+
+return_pacman_template() {
+	echo "$INSTANCE_PACMAN_CFG_DIR/template/pacman.$1$INSTANCE.conf"
+}
+
+return_pacman_sync() {
+	echo "$INSTANCE_PACMAN_CFG_DIR/sync/pacman.$1$INSTANCE.conf"
+}
+
+return_pacman_syncdb() {
+	echo "$INSTANCE_PACMAN_CFG_DIR/syncdb/pacman.$1$INSTANCE.conf"
+}
+
+log () {
+	printf "%s$RESET\n" "$1"
+	[[ $2 ]] && case $2 in
+		1)
+			log_to_file "$1"
+			;;
+		*)
+			log_to_file "$2"
+			;;
+	esac
+}
+
+log_error() {
+	case $1 in
+		$LOG_ERR_HELP)
+			printf "%s %s\n%s\n" "$EXEC_NAME error:" "$2" \
+			"Try 'pacwrap -h' for more information on valid operational parameters."
+			exit
+			;;
+		$ARROW_RED)
+			printf "$ARROW_RED %s\n %s\n" "$2" "$3"		
+			log_to_file "$2"
+			[[ $4 ]] && exit $4
+			;;
+		$LOG_ERR_WARN)
+			printf "$BOLD$YELLOW%s$RESET %s\n" "warning:" "$2"
+			[[ $3 ]] && exit $3
+			;;
+		*)
+			printf "$BOLD$RED%s$RESET %s\n" "error:" "$1"
+			[[ $2 ]] && exit $2
+			;;
+	esac
+}
+
+log_to_file() {
+	printf "[%s] [%s] %s\n" $(date '+%FT%H:%M:%S%z') $EXEC_NAME "$1" >>$LOG_FILE 
+}
+
+print_progress_bar() {	
+	printf "\r$PROGRESS_LABEL$RESET"
+	printf "%-*s" $(($2+1)) '[' | tr ' ' '#'
+	printf "%*s% 3d%%\r"  $(($1-$2))  "]" "$3"
+}
+
+
+init_progress() {
+	TTY_SIZE=($(stty size))
+	PROGRESS_LENGTH=$((${TTY_SIZE[1]}/2))
+}
+
+set_progress_label() {
+	[[ $PROGRESS_OFF ]] && printf "\r%s" "$2 $1" && return
+
+	PROGRESS_LABEL="$1"
+
+	local label_length=${#PROGRESS_LABEL}
+	local padding_length=$(($PROGRESS_LENGTH-$label_length-8))
+	
+	[[ $2 ]] && PROGRESS_LABEL="$2 $1" && padding_length=$(($padding_length-3))
+
+
+	for ((i=0; i<=padding_length; i+=1)); do
+		PROGRESS_LABEL+=" "
+	done
+	
+	progress_bar
+}
+
+progress_bar() {
+	[[ $PROGRESS_OFF ]] && return
+
+	local bar_percent=$(($((PROGRESS_LENGTH*2))*$amt_done/$amt % 2 + $PROGRESS_LENGTH*$amt_done/$amt))
+	local percent=$((200*$amt_done/$amt % 2 + 100*$amt_done/$amt))
+
+	print_progress_bar $((PROGRESS_LENGTH+1)) $bar_percent $percent
+}
+
+query_confirm_yN () {
+	if [[ $SWITCH == *n* ]]; then		
+		echo 1	
+		return
+	fi
+	read -rp "$BAR $@ [y/N]$RESET " input
+	if [[ "$input" != "y" ]] && 
+	   [[ "$input" != "Y" ]] &&
+	   ([[ "$input" == "" ]] ||
+	   [[ "$input" != "" ]]); then
+		return	
+	fi
+	echo 1
+}
+
+query_confirm_Yn () {
+	if [[ $SWITCH == *n* ]]; then		
+		echo 1	
+		return
+	fi
+	read -rp "$BAR $@ [Y/n]$RESET " input
+	if [[ "$input" != "Y" ]] && 
+	   [[ "$input" != "y" ]] &&
+           [[ "$input" != "" ]]; then
+		return	
+	fi
+	echo 1
+}
+
+perform_datadir_check() {
+	([[ ! -d $PACWRAP_DATA_DIR ]] ||
+	[[ ! -d $PACWRAP_CACHE_DIR ]] ||
+	[[ ! -d $PACWRAP_CONFIG_DIR ]]) && 
+		initialize_data_directory
+
+	([[ ! -d $PACWRAP_DATA_DIR ]] ||
+	[[ ! -d $PACWRAP_CACHE_DIR ]] ||
+	[[ ! -d $PACWRAP_CONFIG_DIR ]]) &&
+		printf "$BOLD$RED%s$RESET %s\n%s" "error:" "Data directories not found." && exit 2
+}
+
+initialize_data_directory() {
+	mkdir -p $PACWRAP_DATA_DIR/root \
+		$PACWRAP_DATA_DIR/home \
+		$PACWRAP_DATA_DIR/database \
+		$PACWRAP_DATA_DIR/pacman/sync \
+		$PACWRAP_DATA_DIR/pacman/gnupg \
+		$PACWRAP_CACHE_DIR/pkg \
+		$PACWRAP_CONFIG_DIR/root \
+		$PACWRAP_CONFIG_DIR/pacman.d \
+		$PACWRAP_CONFIG_DIR/pacman/sync \
+		$PACWRAP_CONFIG_DIR/pacman/syncdb \
+		$PACWRAP_CONFIG_DIR/pacman/template \
+		$PACWRAP_CONFIG_DIR/bwrap
+
+	local ins_string="\[options\]"
+	local template="\n\n###IGNOREPKG###\n"
+	
+	([[ ! -f $INSTANCE_PACMAN_MIRRORLIST ]] || [[ $SWITCH == *m* ]]) && cp /etc/pacman.d/mirrorlist $INSTANCE_PACMAN_MIRRORLIST
+	[[ ! -f $INSTANCE_PACMAN_CFG_DIR/pacman.conf ]] && echo -e $(pacman_conf) >  $INSTANCE_PACMAN_CFG_DIR/pacman.conf		
+
+	cat  $INSTANCE_PACMAN_CFG_DIR/pacman.conf | sed -z "s,$ins_string,$ins_string$template,g" >  $INSTANCE_PACMAN_CFG_DIR/pacman.template.conf
+}
+
+pacman_conf() {
+echo $(cat << _CONFIG
+[options]\nHoldPkg     = pacman glibc\nArchitecture = auto\nNoExtract   = pacman-mirrorlist\n\nColor\nCheckSpace
+\n#ParallelDownloads = 5\n\nSigLevel    = Required DatabaseOptional\nLocalFileSigLevel = Optional\n\n#[testing]
+\n#Include = /etc/pacman.d/mirrorlist\n\n[core]\nInclude = /etc/pacman.d/mirrorlist\n\n[extra]
+\nInclude = /etc/pacman.d/mirrorlist\n\n#[community-testing]\n#Include = /etc/pacman.d/mirrorlist
+\n\n[community]\nInclude = /etc/pacman.d/mirrorlist\n\n#[multilib-testing]\n#Include = /etc/pacman.d/mirrorlist
+\n\n#[multilib]\n#Include = /etc/pacman.d/mirrorlist
+_CONFIG
+)
+}
+
+generate_config() {
+	local config=$(cat << _CONFIG
+##\n## Configuration for $instance container\n## generated on $(date "+%F %T") by $EXEC_NAME.
+\n##\n\n# Container type (DO NOT EDIT)\nTYPE=($(return_type))\n\n# Container dependency array (DO NOT EDIT)
+\nDEPS=($(return_dependencies))\n\n# Container explicit install array\nPKG=($@)\n\n# Forcibly apply pacman -Sy to container
+\n# Not applicable to ROOT containers\nSYNC_PACMANDB=$(return_sync_pacmandb)
+_CONFIG
+)
+	echo -e $config > $INSTANCE_CONFIG_DIR/$instance
+}
+
+runtime_check() {
+	if [[ ! $(type -P bwrap) ]] || [[ ! $(type -P bwrap) ]] || [[ ! $(type -P pacman-key gpg) ]]; then
+		cat << _WARN 
+$BOLD${RED}error:$RESET Requisite dependencies are missing. 
+Please make sure that the following binaries are present in \$PATH:
+
+ ${BOLD}bwrap$RESET, ${BOLD}zstd$RESET, ${BOLD}pacman-key$RESET or ${BOLD}gpg$RESET.
+
+_WARN
+		exit 2
+	fi
+}
