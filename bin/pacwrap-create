@@ -166,7 +166,7 @@ obtain_tarball() {
 
 check_tarball () {
 	local key_exec=($(type -P pacman-key gpg))
-	local date_current=$(date +%Y.%m.01 --date='next month')
+	local date_current=$(date +%Y.%m.01 --date='this month')
 	local date_cache=
 
 	if [[ ! -f $ARCHLINUX_TARBALL_CACHE ]]; then
