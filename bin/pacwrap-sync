@@ -467,7 +467,7 @@ configure_containers () {
 		update_config
 	done; echo
 
-	log_to_file "Configured containers: $@"
+	log_to_file "Configured containers: $(echo $@)"
 }
 
 abort () {	
