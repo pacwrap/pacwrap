@@ -18,51 +18,38 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-BOLD=$(tput bold)
-RED=$(tput setaf 1)
-GREEN=$(tput setaf 2)
-CYAN=$(tput setaf 6)
-YELLOW=$(tput setaf 11)
-RESET=$(tput sgr0)
-BAR="$RED$BOLD::$RESET$BOLD"
-BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
-ARROW="$CYAN$BOLD->$RESET"
-ARROW_GREEN="$GREEN$BOLD->$RESET"
-ARROW_RED="$RED$BOLD->$RESET"
+source pacwrap-common
 
 EXEC_NAME="pacwrap-create" 
 
-EXEC_SCRIPT="pacwrap-exec"
-SYNC_SCRIPT="pacwrap-sync"
-
 main () {	
-	trap abort INT
+	trap exit INT
+	export PACWRAP_CREATE=1
+		
+	local args=$@
 
 	parse_args "$@"
+	init $PACWRAP_UTILS
 
-	if [[ $SWITCH == v ]]; then
-		VER_DISPLAY=$EXEC_NAME pacwrap -v 
-		exit	
-	fi
+	local instance=$INSTANCE
+	local args="$0 $@"
 
-	if [[ ! $SANDBOX ]]; then
-		echo $EXEC_NAME": Instance not specified."
-		exit 1
-	fi
-
-	init_vars
-
-	log $BAR_GREEN "Initializing container..."
-
+	log "$BAR_GREEN Initializing container $INSTANCE..." \
+	    "Initializing container $INSTANCE running '$RUNTIME_ARGS'"
+	
+	check_tarball
 	init_struct
 	init_chroot
 
-	log $BAR_GREEN "Finalizing chroot..."
+	log "$BAR_GREEN Finalizing container..." \
+	    "Finalizing container"
 
 	finalise
 
-	log $BAR_GREEN "Process complete!"
-	echo " Use pacwrap -Esr $BOLD$SANDBOX$RESET to configure the the container."
+	log "$BAR_GREEN Process complete!" \
+	    "Finished creation of $INSTANCE container"
+	printf " %s\n" \
+	       "Use pacwrap -Esr $BOLD$INSTANCE$RESET to configure the the container."
 }
 
 parse_args () {
@@ -82,8 +69,8 @@ parse_args () {
 			--is-dep)
 				SWITCH=d$SWITCH
 				;;
-			--is-root)
-				SWITCH=r$SWITCH
+			--is-base)
+				SWITCH=b$SWITCH
 				;;
 			-C*)
 				SWITCH=$(echo $var | cut -c 3-)$SWITCH
@@ -92,168 +79,221 @@ parse_args () {
 				SWITCH=$(echo $var | cut -c 2-)$SWITCH
 				;;
 			*)
-				SANDBOX=$var
+				ARGS+=("$var")
 				;;
 			esac
+		CLI_INVOCATION+="$var "
 	done
 }
 
-init_vars () {
-	INSTANCE_DATA_DIR="$HOME/.local/share/pacwrap"
-	INSTANCE_CACHE_DIR="$HOME/.cache/pacwrap/pkg"
-	INSTANCE_CONFIG_DIR="$HOME/.config/pacwrap"
+script_init () {
+	INSTANCE=${ARGS[0]}
+	
+	[[ ! $INSTANCE ]] &&
+		log_error "Instance not specified." 1
+		
+	INSTANCE_ROOT="$INSTANCE_ROOT_DIR/$INSTANCE"
+	INSTANCE_HOME="$INSTANCE_HOME_DIR/$INSTANCE"
+	INSTANCE_CONFIG_FILE="$INSTANCE_CONFIG_DIR/$INSTANCE"
+	DEPEND_CONFIG_FILE="$INSTANCE_CONFIG_DIR/$DEPEND"
+	INSTANCE_DEPEND_ROOT=$INSTANCE_ROOT_DIR/$DEPEND
+	ARCHLINUX_TARBALL="archlinux-bootstrap-x86_64.tar.gz" 
+	ARCHLINUX_TARBALL_CACHE="$PACWRAP_CACHE_DIR/$ARCHLINUX_TARBALL" 
 
-	VERBOSE="/dev/null"
-	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"	
-
-	if [[ $PACWRAP_DEBUG ]]; then 
-		INSTANCE_DATA_DIR="$PACWRAP_DEBUG"
-		INSTANCE_CONFIG_DIR="$PACWRAP_DEBUG/cfg"	
-	fi
-
-	LOG_FILE="$INSTANCE_DATA_DIR/pacwrap.log"
-	OUTPUT_DEST=$LOG_FILE
-
-	INSTANCE_ROOT_DIR=$INSTANCE_DATA_DIR/root
-	INSTANCE_HOME_DIR=$INSTANCE_DATA_DIR/home
-	INSTANCE_ROOT=$INSTANCE_ROOT_DIR/$SANDBOX
-	INSTANCE_HOME=$INSTANCE_HOME_DIR/$SANDBOX
-	INSTANCE_CONFIG=$INSTANCE_CONFIG_DIR/root/$SANDBOX
-
-	PACMAN_CONFIG=pacman.install.conf	
-	PARAMS="$SANDBOX --root --exec"	
+	PARAMS="$INSTANCE --root --exec"	
 	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
+	
+	case $SWITCH in
+		*d*)
+			C_TYPE="DEP"
+			;;
+		*b*)
+			C_TYPE="BASE"
+			;;
+		*)
+			C_TYPE="ROOT"
+			;;
+	esac
+	
+	INSTANCE_CONFIG[$INSTANCE,0]=$C_TYPE
+	INSTANCE_CONFIG[$INSTANCE,1]="deps=()"
+	INSTANCE_CONFIG[$INSTANCE,3]="pkgs=()"
 
+	[[ ${#ARGS[@]} -gt 1 ]] && ARGS[0]=""
 
-	##TODO: Standardise output and integrate with logging infrastructure
+	[[ ! $DEPEND ]] && [[ $C_TYPE != "BASE" ]] &&
+		log_error "$instance already exists!" 2
 
-	if [[ ! -d $INSTANCE_ROOT_DIR ]]; then ## TODO: enhance check and externalise it to pacwrap-utils
-		echo $EXEC_NAME": Data directory not found. Aborting." 	
-		exit 1
-	fi
+	[[ -d $INSTANCE_ROOT ]] &&
+		log_error "Root directory for $INSTANCE already exists!" 2
 
-	if [[ $SWITCH == *d* ]]; then
-		ISDEP=1
-	fi
-	if [[ $SWITCH == *r* ]]; then
-		ISROOTDEP=1
-		PACMAN_CONFIG=pacman.conf
-	fi
+	[[ ! -d $INSTANCE_DEPEND_ROOT ]] && [[ $DEPEND ]] &&
+		log_error "Root directory for dependency $DEPEND already exists!" 2
 
-	local base_root=$INSTANCE_ROOT_DIR/$DEPEND
-	if [[ ! $DEPEND ]] && [[ ! $ISROOTDEP ]]; then
-		echo "Root dependency not specified."
-		exit 1
-	fi
-
-	if [[ -d $INSTANCE_ROOT ]]; then 
-		echo $EXEC_NAME": Root directory for $SANDBOX exists. Aborting." 
-		exit 1
-	fi
-
-	if [[ ! -d $base_root ]] && [[ $DEPEND ]]; then
-		echo $EXEC_NAME": Directory not found for $DEPEND root dependency."
-		exit 1
-	fi
-
-
+	touch $LOCK_FILE
+	trap on_exit EXIT
 }
 
+select_mirror () {
+	log "$ARROW Selecting mirror..."
+	
+	local mirrors=$(cat $INSTANCE_PACMAN_MIRRORLIST | grep Server)
+
+	for mirror_candidate in $mirrors; do 
+		[[ $mirror_candidate != *http* ]] && continue
+		mirror_candidate="${mirror_candidate%'$repo'/*}iso/latest"
+		local response=$(curl -s -o /dev/null -w "%{http_code}" $mirror_candidate/)
+		[[ $? == 0 ]] && [[ $response == 200 ]] && MIRROR=$mirror_candidate && break
+		log "$ARROW_RED $mirror_candidate is unavailable."
+	done
+
+	if [[ ! $MIRROR ]]; then
+		log_error $ARROW_RED "All candidate mirrors are unavailable." "Operation aborted." 1
+	fi
+
+	log_to_file "Selected $MIRROR/"
+}
+
+obtain_tarball() {
+	log "$ARROW Downloading bootstrap tarball..." \
+	    "Downloading bootstrap tarball"
+	curl --output-dir $PACWRAP_CACHE_DIR \
+		-O $MIRROR/$ARCHLINUX_TARBALL \
+		-O $MIRROR/$ARCHLINUX_TARBALL.sig
+	[[ $? != 0 ]] && log_error $ARROW_RED "Download of bootstrap tarball failed." \
+					      "Operation aborted." 1
+}
+
+check_tarball () {
+	local key_exec=($(type -P pacman-key gpg))
+	local date_current=$(date +%Y.%m.01 --date='next month')
+	local date_cache=
+
+	if [[ ! -f $ARCHLINUX_TARBALL_CACHE ]]; then
+		select_mirror
+		obtain_tarball
+	fi	
+
+	log "$ARROW Verifying bootstrap tarball..." \
+            "Verifying bootstrap tarball"
+	
+	${key_exec[0]} --verify $ARCHLINUX_TARBALL_CACHE.sig 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+
+	if [[ $? == 0 ]]; then
+		date_cache=$(tar --occurrence=1 -axOf $ARCHLINUX_TARBALL_CACHE root.x86_64/version)
+		log_to_file "Successful verification of tarball version $date_cache"
+	else
+		log_error $ARROW_RED "Checksum failure occurred. Check pacwrap -Uvl for further details." \
+				     "Operation aborted." 1
+	fi
+
+	if [[ $date_cache != $date_current ]]; then
+		log "$ARROW Tarball is out of date: $BOLD$date_cache$RESET != $BOLD$date_current$RESET"
+
+		[[ ! $MIRROR ]] && select_mirror
+		
+		local remote_sum=$(curl -s $MIRROR/sha256sums.txt | tail -n1)
+		local sum=$(sha256sum $ARCHLINUX_TARBALL_CACHE 2>/dev/null)		
+		
+		if [[ "${remote_sum% *}" != "${sum% *}" ]]; then
+			obtain_tarball
+			check_tarball
+			return
+		else
+			log_error $ARROW_RED "Upstream mirror is out of date." \
+				             "Skipping..."
+		fi
+	fi
+}
 
 init_struct () {
-	log $ARROW "Pre-initializing structures.."
+	log "$ARROW Pre-initializing structures..." \
+	    "Pre-initializing structures"
 
 	mkdir -p $INSTANCE_ROOT $INSTANCE_HOME \
 		$INSTANCE_ROOT/etc \
 		$INSTANCE_ROOT/var/lib/pacman \
-		$INSTANCE_ROOT/etc/pacman.d/ \
-		$INSTANCE_ROOT/etc/fonts/conf.d
+		$INSTANCE_ROOT/etc/pacman.d/hooks \
+		$INSTANCE_ROOT/etc/fonts/conf.d \
+		$INSTANCE_ROOT/usr/lib32
 
-	if [[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]; then 
-		echo "Directory creation failed." 
-		exit 1
-	fi
+	([[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]) && 
+		log_error "Directory creation failed." 2
 
-	cp $INSTANCE_CONFIG_DIR/pacman/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
-	cp $INSTANCE_CONFIG_DIR/pacman/pacman.conf $INSTANCE_CONFIG_DIR/pacman/sync/pacman.$SANDBOX.conf
-	cp $INSTANCE_CONFIG_DIR/pacman/pacman.conf $INSTANCE_CONFIG_DIR/pacman/syncdb/pacman.$SANDBOX.conf	
-	cp $INSTANCE_CONFIG_DIR/pacman/pacman.install.conf $INSTANCE_ROOT/etc/pacman.install.conf
-	cp $INSTANCE_CONFIG_DIR/pacman.d/mirrorlist $INSTANCE_ROOT/etc/pacman.d/mirrorlist
-	
+	cp $INSTANCE_PACMAN_CFG_DIR/pacman.conf $INSTANCE_ROOT/etc/pacman.conf
+	cp $INSTANCE_PACMAN_CFG_DIR/pacman.conf $(return_pacman_sync)
+	cp $INSTANCE_PACMAN_CFG_DIR/pacman.conf $(return_pacman_syncdb)
+
+	local pacman_hooks=('20-systemd-sysusers'
+			    '30-systemd-tmpfiles' 
+			    '30-systemd-daemon-reload'
+			    '30-systemd-sysctl'
+			    '30-systemd-catalog'
+			    '30-systemd-update'
+		    	    '30-systemd-udev-reload'
+			    '30-systemd-hwdb'
+		    	    'dbus-reload')
+
+	for pacman_hook in ${pacman_hooks[@]}; do
+		ln -s /dev/null $INSTANCE_ROOT/etc/pacman.d/hooks/$pacman_hook.hook
+	done
+
 	echo "$LANG ${LANG#*.}" > $INSTANCE_ROOT/etc/locale.gen
 	echo "LANG=$LANG" > $INSTANCE_ROOT/etc/locale.conf
 	echo "user:x:1000:1000::/home/user:/bin/bash" >> $INSTANCE_ROOT/etc/passwd
 	echo "$MACHINE_ID" > $INSTANCE_ROOT/etc/machine-id
-	echo 'PS1="'$SANDBOX'> "' > $INSTANCE_HOME/.bashrc
-	local t="ROOT"
-	local d=
+	echo 'PS1="'$INSTANCE'> "' > $INSTANCE_HOME/.bashrc
 
-
-	if [[ $ISDEP ]] || [[ $ISROOTDEP ]]; then
-		cp $INSTANCE_CONFIG_DIR/pacman/pacman.template.conf $INSTANCE_CONFIG_DIR/pacman/template/pacman.$SANDBOX.conf
-		mkdir -p $INSTANCE_DATA_DIR/database/$SANDBOX
+	if [[ $C_TYPE == "DEP" ]] || [[ $C_TYPE == "BASE" ]]; then
+		cp $INSTANCE_PACMAN_CFG_DIR/pacman.template.conf $(return_pacman_template)
+		mkdir -p $INSTANCE_DB_DIR/$INSTANCE
 	fi
 
-	if [[ ! $ISROOTDEP ]]; then
-		if [[ -f $INSTANCE_CONFIG_DIR/root/$DEPEND ]]; then
-			source $INSTANCE_CONFIG_DIR/root/$DEPEND
-			DEPS+=("$DEPEND")
-			d="${DEPS[@]}"
+	populate_deps
+	generate_config
+}
+
+populate_deps() {
+	if [[ $C_TYPE != "BASE" ]]; then
+		if [[ -f $DEPEND_CONFIG_FILE ]]; then
+			source $DEPEND_CONFIG_FILE
+			DEPS+=("$DEPEND")	
+			INSTANCE_CONFIG[$INSTANCE,1]="deps=(${DEPS[@]})"
 		else
-			d="$DEPEND"
+			INSTANCE_CONFIG[$INSTANCE,1]="deps=($DEPEND)"
 		fi
-	fi	
-
-	if [[ $ISDEP ]]; then
-		t="DEP"
-	elif [[ $ISROOTDEP ]]; then
-		t="BASE"
-	fi	
-
-	local config=$(cat << _CONFIG
-##
-\n## Configuration for $SANDBOX container
-\n## generated on $(date "+%F %T") by $EXEC_SCRIPT.
-\n##
-
-\n\n# Container type (DO NOT EDIT)
-\nTYPE=$t
-
-\n\n# Container dependency array (DO NOT EDIT)
-\nDEPS=($d)
-
-\n\n# Forcibly apply pacman -Sy to container
-\n# Not applicable to ROOT containers
-\nSYNC_PACMANDB=0
-_CONFIG
-)
-	echo -e $config > $INSTANCE_CONFIG
+	fi
 }
 
 init_chroot () {	
-	log $ARROW "Bootstrapping base packages..."
-	fakechroot fakeroot pacman -Syu \
-   	--root $INSTANCE_ROOT \
-    	--dbpath $INSTANCE_ROOT/var/lib/pacman \
-    	--config $INSTANCE_ROOT/etc/$PACMAN_CONFIG \
-	--cache $INSTANCE_CACHE_DIR \
-	--logfile "$LOG_FILE" \
-    	base lib32-glibc \
-	--noconfirm 2>/dev/null 1>>$VERBOSE
-	export PACWRAP_CREATE=1
-	$SYNC_SCRIPT -yyyy $SANDBOX
+	local exclude_params="
+	--exclude=etc/ca-certificates/extracted/cadir 
+	--exclude=etc/credstore*
+	--exclude=version 
+	--exclude=pkglist.x86_64.txt 
+	--exclude=sys 
+	--exclude=opt 
+	--exclude=run
+	--exclude=boot
+	--exclude=mnt"
 
-	local gnupg=$(get_directory_pop $INSTANCE_DATA_DIR/pacman/gnupg) 
-	local sync=$(get_directory_pop $INSTANCE_DATA_DIR/pacman/sync) 
+	[[ $DEPEND ]] && exclude_params+=" --exclude=usr/lib --exclude=usr/bin/ --exclude=usr/share"	
+	
+	log_to_file "Extracting bootstrap tarball"
+	echo -n $ARROW "Extracting bootstrap tarball"
+	tar xkf "$PACWRAP_CACHE_DIR/archlinux-bootstrap-x86_64.tar.gz" --strip-components=1 \
+		-C "$INSTANCE_ROOT" --checkpoint=.15000 $exclude_params 2>>$OUTPUT_DEST
+	echo
 
-	if [[ $sync == 0 ]]; then
+	[[ $DEPEND ]] && $SYNC_SCRIPT -Syyyy $INSTANCE
+
+	local gnupg=$(get_directory_pop $INSTANCE_PACMAN_GNUPG) 
+	local sync=$(get_directory_pop $INSTANCE_PACMAN_SYNC) 
+
+	[[ $sync == 0 ]] &&
 		cp -vr $INSTANCE_ROOT/var/lib/pacman/sync $INSTANCE_DATA_DIR/pacman  1>>$OUTPUT_DEST 2>>$OUTPUT_DEST 
-	fi
 
-	if [[ $gnupg == 0 ]]; then
-		init_trust	
-	fi
-
+	[[ $gnupg == 0 ]] && init_trust
 }
 
 get_directory_pop() {
@@ -262,68 +302,79 @@ get_directory_pop() {
 }
 
 init_trust () {
-	log $BAR_GREEN "Initializing pacman trust database..."
+	log "$BAR_GREEN Initializing pacman trust database..." \
+	    "Initializing pacman trust database"
 	$EXEC_SCRIPT $PARAMS pacman-key --init 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
-	log $ARROW "Populating pacman trust database..."
+	log "$ARROW Populating pacman trust database..."
 	$EXEC_SCRIPT $PARAMS pacman-key --populate 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 }
 
 finalise () {
-	log $ARROW "Generating locale..."
+	log "$ARROW Generating locale..."
 	$EXEC_SCRIPT $PARAMS locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
-	log $ARROW "Updating certificate trust..."
-	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	log "$ARROW Updating certificate trust..."
+	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>$OUTPUT_DEST 2p>>$OUTPUT_DEST
+	log "$ARROW Some housekeeping..."
+	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
 
-	[[ ! $ISROOTDEP ]] && [[ $DEPEND ]] && sync_foreign_database		
-	cleanup
-	$SYNC_SCRIPT -g $SANDBOX
+	[[ $C_TYPE != "BASE" ]] && [[ $DEPEND ]] && sync_foreign_database
+
+	$SYNC_SCRIPT -Sg $INSTANCE
+
+	[[ $C_TYPE == "BASE" ]] && update_instance
+        [[ ${#ARGS[@]} -gt 1 ]] && install_packages
 }
 
-sync_foreign_database () {
-	source $INSTANCE_CONFIG
-	local dbsyncpkgs=()
-	local i=0
-	for dep in ${DEPS[@]}; do
-		dbsyncpkgs[i++]="$($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>|\<lib32-glibc\>//g")"
-	done
-	if [[ ${dbsyncpkgs[@]} ]]; then
-		log $ARROW "Synchronizing pacman database against foreign packages..."
-		$EXEC_SCRIPT $PARAMS pacman -Su \
-		--dbonly \
-		--logfile /tmp/pacman.log \
-		--noconfirm ${dbsyncpkgs[@]} 2>/dev/null 1>>$VERBOSE
+
+update_instance () {
+	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
+	$EXEC_SCRIPT $PARAMS pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+}
+
+install_packages () {
+	[[ $SWITCH != *n* ]] && echo -e "$BAR Install specified packages \n$BOLD\n${ARGS[@]}" 
+
+	if [[ ! $(query_confirm_Yn "Proceed with installation?") ]]; then
+		log_error $ARROW_RED "Installation aborted by user." "Operation cancelled."
+		return
+	fi
+
+	log_to_file "Installing specified packages"
+	$EXEC_SCRIPT $PARAMS pacman -Sy ${ARGS[@]} --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	if [[ $? != 0 ]]; then
+		log_error $ARROW_RED "Installation failed." \
+				     "Use pacwrap -Cv and examine stdout for details."
+	else
+		generate_config ${ARGS[@]}	
+		log " Installation of specified packages is complete!" \
+		    "Installation complete"
 	fi
 }
 
-cleanup () {
-	log $ARROW "Some housekeeping..."
-	rm -v -r \
-	$INSTANCE_ROOT/boot \
-	$INSTANCE_ROOT/mnt \
-	$INSTANCE_ROOT/root \
-	$INSTANCE_ROOT/srv \
-	$INSTANCE_ROOT/sys \
-	$INSTANCE_ROOT/opt \
-	$INSTANCE_ROOT/run \
-	$INSTANCE_ROOT/dev \
-	$INSTANCE_ROOT/etc/pacman.install.conf \
-	$INSTANCE_ROOT/etc/pacman.d/mirrorlist 1>>$OUTPUT_DEST
+sync_foreign_database () {
+	log "$ARROW Synchronizing pacman database against foreign packages..." \
+	    "Synchronising pacman database against foreign packages"
+	
+	rm -r "$INSTANCE_ROOT/var/lib/pacman/local"
+	cp -rn "$INSTANCE_DEPEND_ROOT/var/lib/pacman/local" "$INSTANCE_ROOT/var/lib/pacman/"
+
+	local deps=$(return_dependencies)	
+	local dbsyncpkgs=()
+	local i=0
+	
+	for dep in ${deps[@]}; do
+		dbsyncpkgs[i++]="$($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>//g")"
+	done
+
+	[[ ${dbsyncpkgs[@]} ]] &&
+		$EXEC_SCRIPT $PARAMS pacman -Su \
+		--dbonly \
+		--logfile /tmp/pacman.log \
+		--noconfirm ${dbsyncpkgs[@]} 2>/dev/null 1>>$VERBOSE	
 }
 
-log () {
-	echo -e "$@ $RESET"
-	local i=
-	local log=
-	local log_output=()
- 	for string in $@; do [[ $string == *[* ]] && continue
-        	log_output[i++]="$string"
-    	done
-	echo -e "[$(date '+%FT%H:%M:%S%z')] [$EXEC_NAME] ${log_output[@]}" >>$LOG_FILE
-}
-
-abort () {
-	log $BAR "Operation aborted by user."
-	exit 1
+on_exit() {
+	[[ ! $PACWRAP_UTILS ]] && [[ -f $LOCK_FILE ]] && rm $LOCK_FILE
 }
 
 main $@

@@ -34,7 +34,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.8 ${BOLD}BETA$RESET"
+VER="v0.9.8 R2 ${BOLD}BETA$RESET"
 
 EXEC_SCRIPT="pacwrap-exec"
 CREATE_SCRIPT="pacwrap-create"
@@ -231,6 +231,13 @@ set_progress_label() {
 	done
 	
 	progress_bar
+}
+
+advance_progress() {
+	if [[ $amt ]]; then
+		((amt_done+=$1))
+		progress_bar
+	fi
 }
 
 progress_bar() {

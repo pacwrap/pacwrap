@@ -44,8 +44,6 @@ main () {
 
 	[[ ! $SWITCH ]] && log_error "No switch provided." 1
 
-	log_to_file "Running '$RUNTIME_ARGS'"
-
 	if [[ $SWITCH == *g* ]]; then
 		log "$ARROW Configuring container..."
 		local instance=${ARGS[0]}
@@ -111,6 +109,8 @@ parse_args () {
 }
 
 script_init () {
+	log_to_file "Running '$RUNTIME_ARGS'"
+
 	[[ $SWITCH == *y* ]] && SYNC_UPDATE=1
 	[[ $SWITCH == *u* ]] && SYNC_UPGRADE=1
 	[[ $SWITCH == *yy* ]] && SYNC_FOREIGN=1
@@ -178,11 +178,7 @@ invoke_update_link() {
 		local link=$INSTANCE_DB_DIR/$dep
 		invoke_link_deletion
 		#log_to_file "Deleted stray files from $dep/$item in $instance."
-
-		if [[ $amt ]]; then
-			((amt_done++))
-			progress_bar
-		fi
+		advance_progress 1
 	done
 
 	for item in ${linkfiles[@]}; do
@@ -195,11 +191,7 @@ invoke_update_link() {
 
 		cp -flR $src $dest 2>>$OUTPUT_DEST 1>>$OUTPUT_DEST
 		log_to_file "Linked $instance/$item against $dep/$item."	
-
-		if [[ $amt ]]; then
-			((amt_done++))
-			progress_bar
-		fi
+		advance_progress 1
 	done
 
 	[[ $(return_type) == "DEP" ]] && invoke_generate_cache
@@ -230,8 +222,7 @@ update_links() {
 		if [[ $syncreq ]]; then
 			invoke_update_link $instance
 		else
-			((amt_done+=8))
-			progress_bar
+			advance_progress 8
 		fi
 	done; SYNC= && echo
 }
@@ -273,7 +264,8 @@ invoke_generate_cache() {
 
 check_root() {
 	if [[ ! -d $INSTANCE_ROOT_DIR/$instance ]]; then
-		log_error $ARROW_RED "Root for $BOLD$instance$RESET not found." "Skipping..."
+		log_error $LOG_ERR_WARN "Root for $BOLD$instance$RESET not found."
+		log_to_file "Root for $instance not found."
 		return 1
 	fi
 }
@@ -341,14 +333,9 @@ sync_pacman_conf () {
 
 	echo -e $header > $pacmanconf
 	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
-	log_to_file "Generated $pacmanconf."
-	
-	if [[ $amt ]]; then
-		((amt_done++))
-		progress_bar
-	fi
-
+	advance_progress 1
 	syncdb_pacman_conf	
+	log_to_file "Generated pacman configs for $instance"	
 }
 
 syncdb_pacman_conf() {
@@ -366,12 +353,7 @@ syncdb_pacman_conf() {
 	ignorepkg+="## End of automated configuration ##"
 	echo -e $header > $pacmanconf
 	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
-	log_to_file "Generated $pacmanconf."
-
-	if [[ $amt ]]; then
-		((amt_done++))
-		progress_bar
-	fi
+	advance_progress 1
 }
 
 invoke_update() {
@@ -379,9 +361,7 @@ invoke_update() {
 
 	[[ ${updated[$instance]} ]] && return
 	updated[$instance]=1
-	log "$BAR_GREEN Checking $instance for updates..." \
-	    "Checking $instance container for updates..."
-
+	log "$BAR_GREEN Checking $instance for updates..."
 
 	local type=$(return_type);
 	local syncdb=$(return_sync_pacmandb)
@@ -406,7 +386,8 @@ invoke_update() {
 
 	if ([[ $SYNC_FOREIGN ]] || ([[ $result ]] && [[ $SYNC_UPGRADE ]])) && 
 	    [[ $(return_type) != "BASE" ]]; then
-		log "$ARROW Synchronizing database against foreign packages..."
+		log "$ARROW Synchronizing database against foreign packages..." \
+			"Synchronizing $instance against foreign packages"
 		$EXEC_SCRIPT $instance pacman -Su \
 			--logfile /tmp/pacman.log \
 			--dbonly --noconfirm \
@@ -419,18 +400,17 @@ invoke_update() {
 		log " Database synchronization complete!"
 	fi
 
-	if [[ ! $result ]]; then
-		log "$ARROW Container $BOLD$instance$RESET is up to date!" \
-		    "Database up-to-date for $instance."
+	if [[ ! $result ]]; then 
+		log "$ARROW Container $BOLD$instance$RESET is up to date!"
 		return
 	fi
-
+	
 	echo -e "$BAR Package changes: $RESET \n\n$result\n"
 	
 	[[ ! $SYNC_UPGRADE ]] && return
 	[[ ! $(query_confirm_Yn "Proceed with installation on $instance") ]] && return
 
-	log_to_file "Updating $instance container.."
+	log_to_file "Upgrading $instance container.."
 	$EXEC_SCRIPT $instance pacman -Su \
 		--logfile /tmp/pacman.log \
 		--noconfirm 2>/dev/null
