@@ -249,6 +249,10 @@ progress_bar() {
 	print_progress_bar $((PROGRESS_LENGTH+1)) $bar_percent $percent
 }
 
+localized_text() {
+	eval "echo \$$1_EN"
+}
+
 query_confirm_yN () {
 	if [[ $SWITCH == *n* ]]; then		
 		echo 1	

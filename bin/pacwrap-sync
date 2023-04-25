@@ -274,10 +274,13 @@ update_config() {
 	declare -A skip
 	
 	local i=
-	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qqe)	
 	local old_local_pkgs=$(return_packages)
 	local package_list=()
-
+	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qqe)
+	[[ $? != 0 ]] && 
+		log_error $ARROW_RED "Query of pacman database failed." \
+				     "Use pacwrap -Sv and examine stdout for details." 1
+	
 	if [[ $(return_type) != "BASE" ]]; then
 		local pkgs=$($EXEC_SCRIPT $(return_dependency) pacman -Qqe)
 	
@@ -305,7 +308,6 @@ sync_pacman_conf () {
 	
 	declare -A skip
 	local template="cat $(return_pacman_template $dep)"
-
 	local pacmanconf=$(return_pacman_sync $instance)
 	local ignorepkg="## Start of automated configuration ##\n"
 	
@@ -313,6 +315,9 @@ sync_pacman_conf () {
 		for depc in $(return_dependencies); do
 			local skiplist=
 			local pkgs=$($EXEC_SCRIPT $depc pacman -Qq)
+			[[ $? != 0 ]] && 
+				log_error $ARROW_RED "Query of pacman database failed." \
+						     "Use pacwrap -Sv and examine stdout for details."
 			for pkg in $pkgs; do
 			 	[[ ${skip[$pkg]} ]] && continue
 				ignorepkg+="IgnorePkg  = $pkg\n"
@@ -335,13 +340,15 @@ sync_pacman_conf () {
 	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
 	advance_progress 1
 	syncdb_pacman_conf	
-	log_to_file "Generated pacman configs for $instance"	
 }
 
 syncdb_pacman_conf() {
 	local pacmanconf=$(return_pacman_syncdb $instance)
-	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qq)
 	local ignorepkg="## Start of automated configuration ##\n"
+	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qq)
+	[[ $? != 0 ]] && 
+		log_error $ARROW_RED "Query of pacman database failed." \
+				     "Use pacwrap -Sv and examine stdout for details." 1
 	
 	if [[ $(return_type) != "BASE" ]]; then	
 		for pkg in $local_pkgs; do
@@ -459,6 +466,8 @@ configure_containers () {
 		[[ $? == 1 ]] && continue	
 		update_config
 	done; echo
+
+	log_to_file "Configured containers: $@"
 }
 
 abort () {	
