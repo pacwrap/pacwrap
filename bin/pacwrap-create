@@ -166,7 +166,7 @@ obtain_tarball() {
 
 check_tarball () {
 	local key_exec=($(type -P pacman-key gpg))
-	local date_current=$(date +%Y.%m.01 --date='this month')
+	local date_current=$(date +%Y.%m --date='this month')
 	local date_cache=
 
 	if [[ ! -f $ARCHLINUX_TARBALL_CACHE ]]; then
@@ -180,8 +180,9 @@ check_tarball () {
 	${key_exec[0]} --verify $ARCHLINUX_TARBALL_CACHE.sig 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 
 	if [[ $? == 0 ]]; then
-		date_cache=$(tar --occurrence=1 -axOf $ARCHLINUX_TARBALL_CACHE root.x86_64/version)
-		log_to_file "Successful verification of tarball version $date_cache"
+		local date=$(tar --occurrence=1 -axOf $ARCHLINUX_TARBALL_CACHE root.x86_64/version) 
+		date_cache=$(date +%Y.%m -d $(echo $date | sed -e 's/\./\-/g'))
+		log_to_file "Successful verification of tarball version $date"
 	else
 		log_error $ARROW_RED "Checksum failure occurred. Check pacwrap -Uvl for further details." \
 				     "Operation aborted." 1
@@ -285,15 +286,14 @@ init_chroot () {
 		-C "$INSTANCE_ROOT" --checkpoint=.15000 $exclude_params 2>>$OUTPUT_DEST
 	echo
 
-	[[ $DEPEND ]] && $SYNC_SCRIPT -Syyyy $INSTANCE
+	[[ $C_TYPE != "BASE" ]] && $SYNC_SCRIPT -Syyyy $INSTANCE
 
 	local gnupg=$(get_directory_pop $INSTANCE_PACMAN_GNUPG) 
 	local sync=$(get_directory_pop $INSTANCE_PACMAN_SYNC) 
 
-	[[ $sync == 0 ]] &&
-		cp -vr $INSTANCE_ROOT/var/lib/pacman/sync $INSTANCE_DATA_DIR/pacman  1>>$OUTPUT_DEST 2>>$OUTPUT_DEST 
-
-	[[ $gnupg == 0 ]] && init_trust
+	[[ $sync == 0 ]] && cp -vr $INSTANCE_ROOT/var/lib/pacman/sync \
+				   $INSTANCE_DATA_DIR/pacman  1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	[[ $gnupg == 0 ]] && init_trust	
 }
 
 get_directory_pop() {
@@ -314,21 +314,10 @@ finalise () {
 	$EXEC_SCRIPT $PARAMS locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
 	log "$ARROW Updating certificate trust..."
 	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>$OUTPUT_DEST 2p>>$OUTPUT_DEST
-	log "$ARROW Some housekeeping..."
-	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
-
-	[[ $C_TYPE != "BASE" ]] && [[ $DEPEND ]] && sync_foreign_database
-
+	[[ $C_TYPE != "BASE" ]] && sync_foreign_database
 	$SYNC_SCRIPT -Sg $INSTANCE
-
-	[[ $C_TYPE == "BASE" ]] && update_instance
-        [[ ${#ARGS[@]} -gt 1 ]] && install_packages
-}
-
-
-update_instance () {
-	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
-	$EXEC_SCRIPT $PARAMS pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	[[ $C_TYPE == "BASE" ]] && sync_base_packages
+	[[ ${#ARGS[@]} -gt 1 ]] && install_packages
 }
 
 install_packages () {
@@ -349,6 +338,13 @@ install_packages () {
 		log " Installation of specified packages is complete!" \
 		    "Installation complete"
 	fi
+}
+
+sync_base_packages () {
+	log "$ARROW Some housekeeping..." "Removing arch-install-scripts"	
+	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
+	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
+	$EXEC_SCRIPT $PARAMS pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
 }
 
 sync_foreign_database () {

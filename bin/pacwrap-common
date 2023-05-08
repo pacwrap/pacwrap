@@ -34,12 +34,13 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.8 R2 ${BOLD}BETA$RESET"
+VER="v0.9.9 ${BOLD}BETA$RESET"
 
 EXEC_SCRIPT="pacwrap-exec"
 CREATE_SCRIPT="pacwrap-create"
 UTILS_SCRIPT="pacwrap-utils"
 SYNC_SCRIPT="pacwrap-sync"
+PS_SCRIPT="pacwrap-ps"
 
 LOG_ERR_HELP=1
 LOG_ERR_WARN=2
@@ -60,6 +61,7 @@ INSTANCE_ROOT_DIR=$PACWRAP_DATA_DIR/root
 INSTANCE_HOME_DIR=$PACWRAP_DATA_DIR/home
 INSTANCE_CONFIG_DIR=$PACWRAP_CONFIG_DIR/root
 INSTANCE_DB_DIR=$PACWRAP_DATA_DIR/database	
+INSTANCE_RUNTIME_DIR="$XDG_RUNTIME_DIR/.pacwrap"
 
 INSTANCE_PACMAN_DIR="$PACWRAP_DATA_DIR/pacman"
 INSTANCE_PACMAN_GNUPG="$INSTANCE_PACMAN_DIR/gnupg"
@@ -120,7 +122,7 @@ populate_configuration() {
 	INSTANCE_CONFIG[$instance,0]=$TYPE
 	INSTANCE_CONFIG[$instance,1]="deps=(${DEPS[@]})"
 	INSTANCE_CONFIG[$instance,2]=$SYNC_PACMANDB
-	INSTANCE_CONFIG[$instance,3]="pkgs=(${PKG[@]})"
+	INSTANCE_CONFIG[$instance,3]="pkgs=(${PKGS[@]})"
 }
 
 return_sync_pacmandb() {
@@ -333,7 +335,7 @@ generate_config() {
 	local config=$(cat << _CONFIG
 ##\n## Configuration for $instance container\n## generated on $(date "+%F %T") by $EXEC_NAME.
 \n##\n\n# Container type (DO NOT EDIT)\nTYPE=($(return_type))\n\n# Container dependency array (DO NOT EDIT)
-\nDEPS=($(return_dependencies))\n\n# Container explicit install array\nPKG=($@)\n\n# Forcibly apply pacman -Sy to container
+\nDEPS=($(return_dependencies))\n\n# Container explicit install array\nPKGS=($@)\n\n# Forcibly apply pacman -Sy to container
 \n# Not applicable to ROOT containers\nSYNC_PACMANDB=$(return_sync_pacmandb)
 _CONFIG
 )
@@ -341,6 +343,8 @@ _CONFIG
 }
 
 runtime_check() {
+	[[ $(id -u) -lt 1000 ]] && log_error "$EXEC_NAME cannot be executed within a privileged context." 1
+
 	if [[ ! $(type -P bwrap) ]] || [[ ! $(type -P bwrap) ]] || [[ ! $(type -P pacman-key gpg) ]]; then
 		cat << _WARN 
 $BOLD${RED}error:$RESET Requisite dependencies are missing. 

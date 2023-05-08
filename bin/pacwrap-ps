@@ -1,0 +1,262 @@
+#!/bin/bash
+#
+#  pacwrap -- process script
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+source pacwrap-common
+
+declare -A PROCESS
+declare -A INSTANCE
+declare -A START
+declare -A RUNTIME_ARGS
+declare -A PROCESS_CHILDREN
+
+EXEC_NAME="pacwrap-ps"
+KILL_PARAM="-1"
+
+main () {
+	export PACWRAP_UTILS=1
+	trap exit INT
+
+	local roots=()
+	local rootdeps=()
+	local baserootdeps=()
+	local syncroots=()
+	local links=
+
+	parse_args $@
+	init 1
+
+	[[ $SWITCH != h* ]] && 
+	[[ $SWITCH != v ]] && 
+	[[ $SWITCH != s* ]] &&
+	[[ $SWITCH != v* ]] &&
+		log_to_file "Running '$RUNTIME_ARGS'"
+
+	case $SWITCH in
+		k*)
+			kill_instance ${roots[@]}
+			;;
+		h*)
+			pacwrap --help=ps
+			;;
+		*)
+			summary; local sum=$?
+			[[ $sum == 1 ]] && if [[ $1 ]]; then
+				log_error $LOG_ERR_HELP "invalid arguments -- '$(echo P$SWITCH ${ARGS[@]})'"	
+			else
+				log_error "operation not specified." 2
+			fi
+			;;
+	esac
+}
+
+script_init () { 
+	[[ $SWITCH == s* ]] && SHOW_HEADER=1
+	[[ $SWITCH == *n* ]] || [[ $SHOW_HEADER ]] && SHOW_CONTAINER=1
+	[[ $SWITCH == *id* ]] || [[ $SHOW_HEADER ]] && SHOW_PID=1
+	[[ $SWITCH == *x* ]] && SHOW_RUNTIME=1
+	[[ $SWITCH == *u* ]] && SHOW_UPTIME=1
+	[[ $SWITCH == *c* ]] && SHOW_PIDS=1
+	
+	ENUM_SKIP=$([[ ${ARGS[@]} ]] && echo 1)
+
+	if [[ ${ARGS[@]} ]]; then 
+		roots=()
+		for instance in $ARGS; do
+			roots+=("$instance")
+		done
+	fi
+
+	populate_process_array
+
+	[[ ! ${#PROCESS[@]} > 0 ]] && if [[ ${ARGS[@]} ]]; then	
+		log_error "Invalid arguments specified to enumerate." 1
+	else
+ 		log_error "No containers running with $EXEC_SCRIPT to enumerate." 1
+	fi
+	
+}
+
+parse_args () {
+	for var in "$@"; do
+		case $var in 
+			-[0-9]*)
+				KILL_PARAM="$var"
+				;;
+			--list|-l)
+				SWITCH=l$SWITCH
+				;;
+			-v|--version)
+				SWITCH=v
+				;;
+			-P*)
+				SWITCH=$(echo $var | cut -c 3-)
+				;;	
+			*)
+				ARGS+=("$var")
+				;;
+			esac
+	done
+}
+
+summary() {
+	IFS=; local ps_list=$(enumerate_ps_list ${roots[@]})
+	[[ ! $ps_list ]] && return 1	
+	echo -e $([[ $SHOW_HEADER ]] && column_headers)$ps_list | column -t -s '	'
+}
+
+populate_process_array() {	
+	for i in /proc/[0-9]*; do
+		[[ -s $i/cmdline ]] || [[ ! -f $i/cmdline ]] && continue
+
+		local cmdlist=(); while read -r -d '' cmd || [[ $cmd ]]; do
+			cmdlist+=("$cmd")
+		done <$i/cmdline
+		
+		[[ ${cmdlist[1]} != *pacwrap-exec ]] && continue
+		
+		local skip=$ENUM_SKIP
+		local pid=${i##*/}
+		local instance=${cmdlist[2]}; [[ ${cmdlist[2]} == -* ]] && 
+		      instance=${cmdlist[3]}
+
+		for ins in ${roots[@]}; do
+			[[ $instance == $ins ]] || [[ $ins == $pid ]] && skip=
+		done
+
+		[[ $skip ]] && continue
+		
+		local pmod=$(stat -c '%Y' /proc/$pid) 
+	
+		if [[ -f $INSTANCE_RUNTIME_DIR/$pid ]] && [[ $(stat -c '%Y' $INSTANCE_RUNTIME_DIR/$pid) == $pmod ]]; then
+			local instance=$instance
+			local start=
+			local runtime_args=""
+			source $INSTANCE_RUNTIME_DIR/$pid
+			INSTANCE[$pid]="$instance"
+			START[$pid]="$start"
+			RUNTIME_ARGS[$pid]="$runtime_args"	
+		else
+			log_error $LOG_ERR_WARN "Runtime metadata for $pid was modified or not found."
+			INSTANCE[$pid]="$instance"
+			START[$pid]="$pmod"
+			RUNTIME_ARGS[$pid]="${cmdlist[@]}"
+		fi
+
+		PROCESS[$pid]="${pid}"	
+	done
+}
+
+format_time() {
+	if [[ $1 -le 60 ]]; then
+		printf "%ss" $1
+	elif [[ $1 -le 3600 ]]; then	
+		local minutes=$(($1/60)) 
+		local seconds=$(($1-$((minutes*60))))
+
+		printf "%sm %ss" $minutes $seconds
+	elif [[ $1 -gt 3600 ]]; then	
+		local hour=$(($1/60/60))
+		local minute=$(($1/60))
+		local minutes=$(($minute-$((hour*60))))
+		local seconds=$(($1-$((minute*60))))
+	
+		if [[ $1 -lt 86400 ]]; then
+			printf "%sh %sm %ss" $hour $minutes $seconds
+		else
+			printf "%sd %sh %sm %ss" $(($hour/24)) $hour $minutes $seconds
+		fi
+	fi
+}
+
+get_arrow() {
+	echo $(if [[ $1 == 0 ]]; then echo $ARROW_GREEN; else echo $ARROW_RED; fi)
+}
+
+kill_instance() {
+
+	if [[ ! $SWITCH_NOCONFIRM ]]; then
+		printf "$BAR %s $RESET\n\n" "Instances"
+		for pid in ${PROCESS[@]}; do 
+			echo -n "$BOLD${INSTANCE[$pid]}$RESET ($pid) "
+		done; echo -e "\n"
+	fi
+
+	[[ ! $(query_confirm_yN "Kill processes") ]] && return
+
+	for parent_pid in ${PROCESS[@]}; do	
+		[[ ! -d /proc/$parent_pid/ ]] && continue
+		
+		for pid in $(get_child_ids $parent_pid); do
+			[[ ! -d /proc/$pid/ ]] && continue
+			kill $KILL_PARAM $pid
+			log "$(get_arrow $?) Killed ${INSTANCE[$parent_pid]} ($pid)"
+		done
+	done
+}
+
+get_child_ids() {
+	local child="/proc/$1/task/$1/children"
+	local pids=()
+
+	while true; do
+		local procid=$(cat $child) 
+		[[ ! $procid ]] && break
+		procid=${procid%% *}
+		child="/proc/$procid/task/$procid/children"		
+		pids+=($procid)
+	done
+	echo ${pids[@]}
+}
+
+enumerate_ps_list() {
+	for pid in ${PROCESS[@]}; do
+		local instance=${INSTANCE[$pid]}
+		local runtime_args=
+		local time=
+		local pids="$pid"
+		local vars=()
+
+		if [[ ${START[$pid]} ]]; then
+			time=$(format_time $(($(date +%s)-${START[$pid]})))
+		else		
+			[[ $SHOW_PID ]] && printf "\n%s" $pid
+			continue
+		fi
+
+		[[ $SHOW_PIDS ]] && pids=$(get_child_ids $pid)
+		[[ $SHOW_PID ]] && vars+=($pid)
+		[[ $SHOW_CONTAINER ]] && vars+=($instance)
+		[[ $SHOW_UPTIME ]] &&  vars+=($time)
+		[[ $SHOW_PIDS ]] && vars+=($pids)
+		[[ $SHOW_RUNTIME ]] && vars+=(${RUNTIME_ARGS[$pid]})
+		[[ ${#vars[@]} > 0 ]] && printf "\n%s\t%s\t%s\t%s\t%s" ${vars[@]}
+	done
+}
+
+column_headers() {	
+	printf "$BOLD%s\t%s\t%s\t%s\t%s$RESET\n" \
+		$([[ $SHOW_PID ]] && echo PID) \
+		$([[ $SHOW_CONTAINER ]] && echo Container) \
+		$([[ $SHOW_UPTIME ]] && echo Uptime) \
+		$([[ $SHOW_PIDS ]] && echo Child PIDs) \
+		$([[ $SHOW_RUNTIME ]] && echo Command) 	
+}
+
+main $@

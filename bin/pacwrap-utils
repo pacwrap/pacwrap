@@ -102,13 +102,12 @@ summary() {
 	declare -A size
 	local total=0
 
+	[[ $SWITCH == *b* ]] && NUMFMT="echo"
+
 	parse_du
 
 	if [[ $SWITCH != *ddd* ]]; then
-		local tmpfile=$(mktemp)	
-		list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} > $tmpfile
-		cat $tmpfile | column -t
-		rm $tmpfile
+		list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} | column -t -s '	'
 	fi
 		
 	if [[ $SWITCH == *d* ]]; then			
@@ -119,11 +118,11 @@ summary() {
 
 		printf "\n${BOLD}Diskspace consumption summary$RESET\n"
 		printf "\n%s\t%s\n" "Total   " "  $($NUMFMT $total)"
-		
+
 		[[ $SWITCH != *dd* ]] || [[ $SWITCH == *dddd* ]] && return
 
 		printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$RESET"
-		printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " "  $($NUMFMT $actual_size)"
+		printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " " $($NUMFMT $actual_size)"
 	fi
 }
 

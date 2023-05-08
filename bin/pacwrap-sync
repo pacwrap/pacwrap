@@ -47,8 +47,8 @@ main () {
 	if [[ $SWITCH == *g* ]]; then
 		log "$ARROW Configuring container..."
 		local instance=${ARGS[0]}
-		check_root "pacman.conf generation"
-		sync_pacman_conf
+		check_root $instance
+		[[ $? != 1 ]] && sync_pacman_conf
 		exit
 	fi
 
@@ -121,8 +121,7 @@ script_init () {
 
 	if [[ ${ARGS[@]} ]]; then 
 		roots=()
-		for instance in $ARGS; do
-			check_root "container" 
+		for instance in $ARGS; do check_root $instance
 			[[ $? == 1 ]] && continue
 			[[ $(return_type) != "ROOT" ]] && 
 			[[ ! $PACWRAP_CREATE ]] && continue 	
@@ -203,17 +202,16 @@ invoke_update_link() {
 update_links() {
 	local amt_done=0
 	local amt=$((${#@} * 8))
-	local check_root="link synchronization"
 	
 	SYNC=1
 	init_progress
 	set_progress_label "Linking structures" $ARROW
 
-	for instance in "$@"; do check_root $check_root
+	for instance in "$@"; do check_root $instance
 		[[ $? == 1 ]] && continue		
 		local syncreq=$SYNC_OVERRIDE
 	
-		for instance_dep in $(return_dependencies); do check_root $check_root
+		for instance_dep in $(return_dependencies); do check_root $instance_dep
 			[[ $? == 1 ]] && break
 			[[ $syncreq ]] && invoke_update_link $instance_dep
 			[[ ${synced[$instance_dep]} ]] && syncreq=1		
@@ -228,8 +226,7 @@ update_links() {
 }
 
 cleanup_cache() {
-	for instance in "$@"; do				
-		check_root "cache file operation"
+	for instance in "$@"; do check_root $instance				
 		[[ $? == 1 ]] && continue
 	
 		local linkfiles=${LINKFILES[@]}
@@ -265,9 +262,9 @@ invoke_generate_cache() {
 }
 
 check_root() {
-	if [[ ! -d $INSTANCE_ROOT_DIR/$instance ]]; then
-		log_error $LOG_ERR_WARN "Root for $BOLD$instance$RESET not found."
-		log_to_file "Root for $instance not found."
+	if [[ ! -d $INSTANCE_ROOT_DIR/$1 ]]; then
+		log_error $LOG_ERR_WARN "Root for $BOLD$1$RESET not found."
+		log_to_file "Root for $1 not found."
 		return 1
 	fi
 }
@@ -440,8 +437,7 @@ invoke_update() {
 }
 
 update () {	
-	for instance in "$@"; do	
-		check_root "update"
+	for instance in "$@"; do check_root $instance
 		[[ $? == 1 ]] && continue	
 		for dep in $(return_dependencies); do
 			invoke_update $dep 
@@ -461,7 +457,7 @@ configure_containers () {
 	init_progress
 	set_progress_label "Configuring containers" $ARROW
 
-	for instance in "$@"; do check_root "container configuration"
+	for instance in "$@"; do check_root $instance
 		[[ $? == 1 ]] && continue	
 		sync_pacman_conf
 		update_config

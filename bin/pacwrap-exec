@@ -99,11 +99,30 @@ execute_sandbox () {
 		echo "Try 'pacwrap -h' for more information on valid operational parameters."
 		exit 1
 	fi
-	
+
+	runtime_config ${ARGS[@]}
 	source $INSTANCE_SCRIPT
 }
 
+
+runtime_config() {
+	trap on_exit EXIT
+	
+	[[ ! -d $INSTANCE_RUNTIME_DIR ]] && mkdir $INSTANCE_RUNTIME_DIR
+	
+	local config=$(cat << _CONFIG
+##\n## Runtime session \n## generated on $(date "+%F %T") by $EXEC_NAME.
+\n##\n
+\ninstance=$INSTANCE
+\nstart=$(date +%s)
+\nruntime_args="$@"
+_CONFIG
+)
+	echo -e $config > $INSTANCE_RUNTIME_DIR/$$
+}
+
 execute_fakeroot() {
+	runtime_config "$@"
 	(exec bwrap \
 	--bind $INSTANCE_ROOT / \
 	--ro-bind /usr/lib/libfakeroot /usr/lib/libfakeroot/ \
@@ -136,6 +155,10 @@ execute_fakeroot() {
 	--new-session \
 	--die-with-parent \
 	fakechroot fakeroot "$@")
+}
+
+on_exit() {
+	[[ -f $XDG_RUNTIME_DIR/.pacwrap/$$ ]] && rm $XDG_RUNTIME_DIR/.pacwrap/$$
 }
 
 main $@

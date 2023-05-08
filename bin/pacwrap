@@ -28,6 +28,9 @@ main () {
 	distro_warn
 
 	case $SWITCH in 
+		P)
+			$PS_SCRIPT ${ARGS[@]}
+			;;	
 		C)
 			$CREATE_SCRIPT ${ARGS[@]}
 			;;
@@ -61,6 +64,9 @@ parse_args () {
 	ARGS=()
 	for var in "$@"; do
 		case $var in
+			--process|-P)
+				SWITCH=P
+				;;
 			--create|-C) 
 				SWITCH=C
 				;;
@@ -83,7 +89,7 @@ parse_args () {
 			-v|--version)
 				SWITCH=v
 				;;
-			-E*|-C*|-S*|-U*)
+			-E*|-C*|-S*|-U*|-P*)
 				ARGS+=("$var")
 				SWITCH=$(echo $var | cut -c 2-2)
 				;;
