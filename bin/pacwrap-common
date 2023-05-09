@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  PacWrap -- common script
+#  Pacwrap -- common script
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -18,6 +18,8 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+[[ $RUNTIME_ARGS ]] && return 
+
 RUNTIME_ARGS="$0 $@"
 
 BOLD=$(tput bold)
@@ -34,8 +36,9 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.9 ${BOLD}BETA$RESET"
+VER="v0.9.10 ${BOLD}BETA$RESET"
 
+MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
 CREATE_SCRIPT="pacwrap-create"
 UTILS_SCRIPT="pacwrap-utils"
@@ -73,15 +76,17 @@ INSTANCE_PACMAN_CFG_DIR="$PACWRAP_CONFIG_DIR/pacman"
 
 init() {
 	runtime_check
+	
+	case $SWITCH in
+		*n*)		WITCH_NOCONFIRM=1;;
+		*v*)		RBOSE="/dev/stdout";;
+		*h*|*V*)	manual_script;;
+	esac
 
-	[[ $SWITCH == *n* ]] && SWITCH_NOCONFIRM=1
-	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
 	[[ ! -f $LOG_FILE ]] && touch $LOG_FILE
-
 	[[ ! $1 ]] && [[ -f $LOCK_FILE ]] && 
 		log_error "pacwrap is locked: $LOCK_FILE$RESET" 2
 	
-
 	local list="ls -U -1F $INSTANCE_ROOT_DIR"
 	local rootlist=$($list 2>/dev/null | grep -i "/" | tr -d "/")
 
@@ -91,13 +96,14 @@ init() {
 		populate_container_array
 	done
 
-	if [[ $SWITCH == v ]]; then
-		VER_DISPLAY=$EXEC_NAME pacwrap -v 
-		exit	
-	fi
-
 	script_init
 	perform_datadir_check
+}
+
+manual_script() {
+	VER_DISPLAY=$EXEC_NAME
+	source $MAN_SCRIPT
+	exit
 }
 
 populate_container_array() {
@@ -354,5 +360,23 @@ Please make sure that the following binaries are present in \$PATH:
 
 _WARN
 		exit 2
+	fi
+}
+
+function distro_warn() {
+	source /etc/os-release
+	[[ ! $ID == "arch" ]] && cat << _WARN
+$BOLD${RED}WARNING:$RESET You are running pacwrap on an unsupported distribution of Linux or Unix.
+
+Support is not guaranteed. Use at your ${BOLD}OWN$RESET risk.
+
+_WARN
+}
+
+log_invalid_arguments() {
+	if [[ $1 ]]; then
+		log_error $LOG_ERR_HELP "invalid arguments -- '$(echo $SWITCH ${ARGS[@]})'"	
+	else
+		log_error "operation not specified." 2
 	fi
 }

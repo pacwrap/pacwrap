@@ -9,12 +9,15 @@ install:
 	cp ./bin/pacwrap-sync ${DESTDIR}${BIN_DIR}/pacwrap-sync
 	cp ./bin/pacwrap-utils ${DESTDIR}${BIN_DIR}/pacwrap-utils
 	cp ./bin/pacwrap-ps ${DESTDIR}${BIN_DIR}/pacwrap-ps
+	cp ./bin/pacwrap-man ${DESTDIR}${BIN_DIR}/pacwrap-man
+
 
 uninstall:
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap-common
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap-create
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap-exec
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap-sync
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap-utils
-	rm  ${DESTDIR}${BIN_DIR}/pachwrap-ps
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-common
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-create
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-exec
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-sync
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-utils
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-ps
+	rm  ${DESTDIR}${BIN_DIR}/pacwrap-man

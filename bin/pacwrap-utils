@@ -36,51 +36,20 @@ main () {
 	parse_args $@
 	init
 
-	[[ $SWITCH != h* ]] && 
-	[[ $SWITCH != v ]] && 
-	[[ $SWITCH != ls* ]] &&
-	[[ $SWITCH != v* ]] &&
-		log_to_file "Running '$RUNTIME_ARGS'"
+	[[ $SWITCH != ls* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
-		c*)
-			if [[ -f /usr/bin/paccache ]]; then
-				paccache --cachedir $INSTANCE_CACHE_DIR ${ARGS[@]}
-			fi
-			;;
-		i*)
-			initialize_data_directory
-			;;
-		r*)
-			replicate ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}
-			;;
-		v*)
-			edit_file 1
-			;;
-		e*)
-			edit_file	
-			;;		
-		ls*)
-			summary	
-			;;
-		l*)
-			link_root
-			;;			
-		d*)
-			[[ $SWITCH == *r* ]] && delete "root" "$INSTANCE_ROOT_DIR" 
-			[[ $SWITCH == *h* ]] && delete "home" "$INSTANCE_HOME_DIR"
-			;;			
-		h*)
-			pacwrap --help=utils
-			;;
-		*)
-			if [[ $1 ]]; then
-				echo $EXEC_NAME": invalid option -- '$(echo $1 | cut -c 2-)'"
-			else
-				echo $EXEC_NAME": operation not specified."
-			fi
-				echo "Try '$EXEC_NAME -h' for more information on valid operational parameters."
-			;;
+		c*)	[[ -f /usr/bin/paccache ]] && 
+			paccache --cachedir $INSTANCE_CACHE_DIR ${ARGS[@]};;
+		i*)	initialize_data_directory;;
+		r*)	replicate ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]};;
+		v*)	edit_file 1;;
+		e*)	edit_file;;		
+		ls*)	summary;;
+		l*)	link_root;;			
+		d*)	[[ $SWITCH == *r* ]] && delete "root" "$INSTANCE_ROOT_DIR" 
+			[[ $SWITCH == *h* ]] && delete "home" "$INSTANCE_HOME_DIR";;			
+		*)	log_invalid_arguments $1
 	esac
 }
 
@@ -127,25 +96,13 @@ summary() {
 }
 
 parse_args () {
-	for var in "$@"; do
-		case $var in 
-			--list|-l)
-				SWITCH=l$SWITCH
-				;;
-			-v|--version)
-				SWITCH=v
-				;;
-			-U*)
-				SWITCH=$(echo $var | cut -c 3-)
-				;;	
-			--cfg-dir=*)
-				REPLICATION_CONFIG_DIR=$(echo $var | cut -c 11-)
-				;;		
-			*)
-				ARGS+=("$var")
-				;;
-			esac
-	done
+	for var in "$@"; do case $var in 
+			--list|-l)	SWITCH=l$SWITCH;;
+			-V|--version)	SWITCH=V;;
+			-U*)		SWITCH=$(echo $var | cut -c 3-);;	
+			--cfg-dir=*)	REPLICATION_CONFIG_DIR=$(echo $var | cut -c 11-);;		
+			*)		ARGS+=("$var");;
+	esac; done
 }
 
 replicate() {

@@ -42,14 +42,15 @@ main () {
 	parse_args $@
 	init $PACWRAP_CREATE
 
-	[[ ! $SWITCH ]] && log_error "No switch provided." 1
+	[[ ! $SWITCH ]] && log_invalid_arguments
 
 	if [[ $SWITCH == *g* ]]; then
-		log "$ARROW Configuring container..."
 		local instance=${ARGS[0]}
-		check_root $instance
-		[[ $? != 1 ]] && sync_pacman_conf
-		exit
+	
+		[[ ! -d $INSTANCE_ROOT_DIR/$instance ]] && return 
+	
+		log "$ARROW Configuring container..."
+		sync_pacman_conf && return
 	fi
 
 	if [[ $SYNC_UPGRADE ]] || ([[ $SYNC_UPDATE ]] && [[ ! $SYNC_FORCE ]]); then
@@ -84,28 +85,14 @@ main () {
 }
 
 parse_args () {
-	for var in "$@"; do
-		case $var in 
-			--generate-config|-g)
-				SWITCH=g$SWITCH
-				;;
-			--update|-u)
-				SWITCH=u$SWITCH
-				;;
-			--no-confirm|-n)
-				SWITCH=n$SWITCH
-				;;
-			--sync|-y)
-				SWITCH=y$SWITCH
-				;;		
-			-S*)
-				SWITCH=$(echo $var | cut -c 3-)
-				;;
-			*)
-				ARGS+=("$var")
-				;;
-			esac
-	done
+	for var in "$@"; do case $var in 
+		--generate-config|-g)	SWITCH=g$SWITCH;;
+		--update|-u)		SWITCH=u$SWITCH;;
+		--no-confirm|-n)	SWITCH=n$SWITCH;;
+		--sync|-y)		SWITCH=y$SWITCH;;		
+		-S*)			SWITCH=$(echo $var | cut -c 3-);;
+		*)			ARGS+=("$var");;
+	esac; done
 }
 
 script_init () {

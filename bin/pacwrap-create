@@ -54,36 +54,15 @@ main () {
 
 parse_args () {
 	ArGS=()
-	for var in "$@"; do
-		case $var in 
-			-v|--version)
-				VER_DISPLAY=$EXEC_NAME pacwrap -v
-				exit
-				;;
-			--dep=*)
-				DEPEND=$(echo $var | cut -c 7-)
-				;;	
-			--verbose)
-				SWITCH=v$SWITCH
-				;;
-			--is-dep)
-				SWITCH=d$SWITCH
-				;;
-			--is-base)
-				SWITCH=b$SWITCH
-				;;
-			-C*)
-				SWITCH=$(echo $var | cut -c 3-)$SWITCH
-				;;
-			-*)
-				SWITCH=$(echo $var | cut -c 2-)$SWITCH
-				;;
-			*)
-				ARGS+=("$var")
-				;;
-			esac
-		CLI_INVOCATION+="$var "
-	done
+	for var in "$@"; do case $var in 
+		--dep=*) 	DEPEND=$(echo $var | cut -c 7-);;	
+		--verbose) 	SWITCH=v$SWITCH;;
+		--is-dep) 	SWITCH=d$SWITCH ;;
+		--is-base) 	SWITCH=b$SWITCH;;
+		-C*) 		SWITCH=$(echo $var | cut -c 3-)$SWITCH;;
+		-*) 		SWITCH=$(echo $var | cut -c 2-)$SWITCH;;
+		*) 		ARGS+=("$var");;
+	esac; CLI_INVOCATION+="$var "; done
 }
 
 script_init () {

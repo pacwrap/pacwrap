@@ -27,78 +27,50 @@ main () {
 	parse_args "$@"
 	init 1
 
-	[[ ! $INSTANCE ]] &&
-		log_error $LOG_ERR_HELP "Target not specified." 1
-	
-
-	[[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] &&
-		log_error $LOG_ERR_HELP "Container $INSTANCE not found." 1
-	
-
 	case $SWITCH in 
-		*rc*|*cr*) 
-			execute_fakeroot "${ARGS[@]}"	
-			;;		
-		*rs*|*sr*)	
-			execute_fakeroot bash
-			;;
-		s)
-			execute_sandbox bash			
-			;;
-		*)
-			execute_sandbox "${ARGS[@]}"	
-			;;
+		*rc*|*cr*)	execute_fakeroot "${ARGS[@]}";;		
+		*rs*|*sr*)	execute_fakeroot bash;;
+		s)		execute_sandbox bash;;
+		*)		execute_sandbox "${ARGS[@]}";;
 	esac
 }
 
 script_init () {
+	[[ ! $INSTANCE ]] &&
+		log_error $LOG_ERR_HELP "Target not specified." 1
+	
 	INSTANCE_ROOT=$INSTANCE_ROOT_DIR/$INSTANCE
 	INSTANCE_HOME=$INSTANCE_HOME_DIR/$INSTANCE
 	INSTANCE_USER=user
 	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
 	INSTANCE_SCRIPT="$PACWRAP_CONFIG_DIR/bwrap/$INSTANCE.sh"
+	
+	[[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] &&
+		log_error $LOG_ERR_HELP "Container $INSTANCE not found." 1
+		
 }
-
 
 parse_args () {
 	ARGS=()
 	local sbdefined=
 
-	for var in "$@"; do
-		case $var in 
-			--root)
-				SWITCH=r$SWITCH
-				;;
-			--shell)
-				SWITCH=s$SWITCH
-				;;
-			--dep)
-				SWITCH=d$SWITCH
-				;;	
-			--exec)
-				SWITCH=rc$SWITCH
-				;;
-			-E*)
-				SWITCH=$(echo $var | cut -c 3-)$SWITCH				
-				;;
-			*)
-				if [[ ! $sbdefined ]]; then 
-					INSTANCE=$var
-					sbdefined=1
-					continue
-				fi
-				ARGS+=("$var")
-				;;
-		esac
-	done
+	for var in "$@"; do case $var in 
+		-h)		SWITCH=h;;
+		-V)		SWITCH=V;;
+		--root)		SWITCH=r$SWITCH;;
+		--shell)	SWITCH=s$SWITCH;;
+		--dep)		SWITCH=d$SWITCH;;	
+		--exec)		SWITCH=rc$SWITCH;;
+		-E*)		SWITCH=$(echo $var | cut -c 3-)$SWITCH;;
+		*)		[[ $sbdefined ]] && ARGS+=("$var") && continue		
+				INSTANCE=$var
+				sbdefined=1;;
+	esac; done
 }
 
 execute_sandbox () {
-	if [[ ! -f $INSTANCE_SCRIPT ]]; then
-		echo "$EXEC_NAME $BOLD${RED}ERROR$RESET: Script $INSTANCE_SCRIPT not found."
-		echo "Try 'pacwrap -h' for more information on valid operational parameters."
-		exit 1
-	fi
+	[[ ! -f $INSTANCE_SCRIPT ]] && 
+		log_error $LOG_ERR_HELP	"Script $INSTANCE_SCRIPT not found." 1
 
 	runtime_config ${ARGS[@]}
 	source $INSTANCE_SCRIPT
@@ -106,7 +78,7 @@ execute_sandbox () {
 
 
 runtime_config() {
-	trap on_exit EXIT
+	trap on_exit_invocation EXIT
 	
 	[[ ! -d $INSTANCE_RUNTIME_DIR ]] && mkdir $INSTANCE_RUNTIME_DIR
 	
@@ -157,8 +129,13 @@ execute_fakeroot() {
 	fakechroot fakeroot "$@")
 }
 
-on_exit() {
+on_exit_invocation() {
 	[[ -f $XDG_RUNTIME_DIR/.pacwrap/$$ ]] && rm $XDG_RUNTIME_DIR/.pacwrap/$$
+	on_exit
+}
+
+on_exit() {
+	return
 }
 
 main $@

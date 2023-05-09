@@ -42,28 +42,13 @@ main () {
 	parse_args $@
 	init 1
 
-	[[ $SWITCH != h* ]] && 
-	[[ $SWITCH != v ]] && 
-	[[ $SWITCH != s* ]] &&
-	[[ $SWITCH != v* ]] &&
-		log_to_file "Running '$RUNTIME_ARGS'"
+	[[ $SWITCH != s* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
-		k*)
-			kill_instance ${roots[@]}
-			;;
-		h*)
-			pacwrap --help=ps
-			;;
-		*)
-			summary; local sum=$?
-			[[ $sum == 1 ]] && if [[ $1 ]]; then
-				log_error $LOG_ERR_HELP "invalid arguments -- '$(echo P$SWITCH ${ARGS[@]})'"	
-			else
-				log_error "operation not specified." 2
-			fi
-			;;
-	esac
+		k*)	kill_instance ${roots[@]};;
+		*)	summary; local sum=$?
+			[[ $sum == 1 ]] && log_invalid_arguments $1
+		esac
 }
 
 script_init () { 
@@ -94,25 +79,12 @@ script_init () {
 }
 
 parse_args () {
-	for var in "$@"; do
-		case $var in 
-			-[0-9]*)
-				KILL_PARAM="$var"
-				;;
-			--list|-l)
-				SWITCH=l$SWITCH
-				;;
-			-v|--version)
-				SWITCH=v
-				;;
-			-P*)
-				SWITCH=$(echo $var | cut -c 3-)
-				;;	
-			*)
-				ARGS+=("$var")
-				;;
-			esac
-	done
+	for var in "$@"; do case $var in 
+		-[0-9]*)	KILL_PARAM="$var";;
+		-V|--version)	SWITCH=V;;
+		-P*)		SWITCH=$(echo $var | cut -c 3-);;	
+		*)		ARGS+=("$var");;
+	esac; done
 }
 
 summary() {
@@ -129,8 +101,10 @@ populate_process_array() {
 			cmdlist+=("$cmd")
 		done <$i/cmdline
 		
+		[[ ${cmdlist[1]} != *pacwrap* ]] && continue
+		[[ ${cmdlist[@]} != *-E* ]] && 
 		[[ ${cmdlist[1]} != *pacwrap-exec ]] && continue
-		
+
 		local skip=$ENUM_SKIP
 		local pid=${i##*/}
 		local instance=${cmdlist[2]}; [[ ${cmdlist[2]} == -* ]] && 
