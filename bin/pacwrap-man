@@ -20,8 +20,6 @@
 
 source pacwrap-common
 
-EXEC_NAME="pacwrap-man"
-
 HEADER=$BOLD
 HEADER_RESET=$RESET
 TAB=$(echo -e '\t')
@@ -41,12 +39,11 @@ main () {
 }
 
 parse_args () {
-	ARGS=()
 	for var in "$@"; do case $var in
 		--help=*)	HELP=("$(echo $var | cut -c 8-)")
-				SWITCH=h;;
-		-h|--help)	SWITCH=h;;
-		-V|--version)	SWITCH=V;;
+				SWITCH="h";;
+		-h|--help)	SWITCH="h";;
+		-V|--version)	SWITCH="V";;
 		*)		ARGS+=("$var")
 	esac; done
 }

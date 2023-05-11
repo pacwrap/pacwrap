@@ -23,14 +23,12 @@ source pacwrap-common
 declare -A PROCESS
 declare -A INSTANCE
 declare -A START
-declare -A RUNTIME_ARGS
+declare -A RUNTIME
 declare -A PROCESS_CHILDREN
 
-EXEC_NAME="pacwrap-ps"
 KILL_PARAM="-1"
 
 main () {
-	export PACWRAP_UTILS=1
 	trap exit INT
 
 	local roots=()
@@ -42,17 +40,17 @@ main () {
 	parse_args $@
 	init 1
 
-	[[ $SWITCH != s* ]] && log_to_file "Running '$RUNTIME_ARGS'"
+	[[ $SWITCH != Ps* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
-		k*)	kill_instance ${roots[@]};;
+		Pk*)	kill_instance ${roots[@]};;
 		*)	summary; local sum=$?
 			[[ $sum == 1 ]] && log_invalid_arguments $1
 		esac
 }
 
 script_init () { 
-	[[ $SWITCH == s* ]] && SHOW_HEADER=1
+	[[ $SWITCH == Ps* ]] && SHOW_HEADER=1
 	[[ $SWITCH == *n* ]] || [[ $SHOW_HEADER ]] && SHOW_CONTAINER=1
 	[[ $SWITCH == *id* ]] || [[ $SHOW_HEADER ]] && SHOW_PID=1
 	[[ $SWITCH == *x* ]] && SHOW_RUNTIME=1
@@ -80,17 +78,19 @@ script_init () {
 
 parse_args () {
 	for var in "$@"; do case $var in 
-		-[0-9]*)	KILL_PARAM="$var";;
-		-V|--version)	SWITCH=V;;
-		-P*)		SWITCH=$(echo $var | cut -c 3-);;	
-		*)		ARGS+=("$var");;
+		-[0-9]|-[0-9][0-9])	KILL_PARAM="$var";;
+		-n|--noconfirm) 	SWITCH+="n";;
+		-k|--kill) 		SWITCH="k";;
+		-V|--version)		SWITCH="V";;
+		-P*)			SWITCH+=$(echo $var | cut -c 3-);;	
+		*)			ARGS+=("$var");;
 	esac; done
 }
 
 summary() {
 	IFS=; local ps_list=$(enumerate_ps_list ${roots[@]})
 	[[ ! $ps_list ]] && return 1	
-	echo -e $([[ $SHOW_HEADER ]] && column_headers)$ps_list | column -t -s '	'
+	echo -e $([[ $SHOW_HEADER ]] && column_headers)$ps_list | column -t -s $(echo -e '\t')
 }
 
 populate_process_array() {	
@@ -125,12 +125,12 @@ populate_process_array() {
 			source $INSTANCE_RUNTIME_DIR/$pid
 			INSTANCE[$pid]="$instance"
 			START[$pid]="$start"
-			RUNTIME_ARGS[$pid]="$runtime_args"	
+			RUNTIME[$pid]="$runtime_args"	
 		else
 			log_error $LOG_ERR_WARN "Runtime metadata for $pid was modified or not found."
 			INSTANCE[$pid]="$instance"
 			START[$pid]="$pmod"
-			RUNTIME_ARGS[$pid]="${cmdlist[@]}"
+			RUNTIME[$pid]="${cmdlist[@]}"
 		fi
 
 		PROCESS[$pid]="${pid}"	
@@ -219,7 +219,7 @@ enumerate_ps_list() {
 		[[ $SHOW_CONTAINER ]] && vars+=($instance)
 		[[ $SHOW_UPTIME ]] &&  vars+=($time)
 		[[ $SHOW_PIDS ]] && vars+=($pids)
-		[[ $SHOW_RUNTIME ]] && vars+=(${RUNTIME_ARGS[$pid]})
+		[[ $SHOW_RUNTIME ]] && vars+=(${RUNTIME[$pid]})
 		[[ ${#vars[@]} > 0 ]] && printf "\n%s\t%s\t%s\t%s\t%s" ${vars[@]}
 	done
 }

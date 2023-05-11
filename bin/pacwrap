@@ -20,10 +20,9 @@
 
 source pacwrap-common
 
-EXEC_NAME="pacwrap"
-
 main () {
 	parse_args "$@"
+	runtime_check
 
 	[[ $SWITCH != V ]] && [[ $SWITCH != h ]] && distro_warn
 
@@ -34,13 +33,11 @@ main () {
 		S)	source $(type -P $SYNC_SCRIPT);;
 		U)	source $(type -P $UTILS_SCRIPT);;
 		h|V)	manual_script;;
-		*)	ARGS=($@)
-			log_invalid_arguments $1
+		*)	log_invalid_arguments $1
 		esac
 }
 
 parse_args () {
-	ARGS=()
 	for var in "$@"; do case $var in
 		--process|-P)		SWITCH=P;;
 		--create|-C)		SWITCH=C;;
@@ -52,6 +49,7 @@ parse_args () {
 		-h|--help)		SWITCH=h;;
 		-V|--version)		SWITCH=V;;
 		-E*|-C*|-S*|-U*|-P*)	SWITCH=$(echo $var | cut -c 2-2);;
+		*) 			ARGS+=("$var")
 	esac; done
 }
 

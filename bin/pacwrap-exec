@@ -20,17 +20,14 @@
 
 source pacwrap-common
 
-EXEC_NAME="pacwrap-exec"
-
 main () {
-	export PACWRAP_EXEC=1
 	parse_args "$@"
 	init 1
 
 	case $SWITCH in 
 		*rc*|*cr*)	execute_fakeroot "${ARGS[@]}";;		
 		*rs*|*sr*)	execute_fakeroot bash;;
-		s)		execute_sandbox bash;;
+		*s)		execute_sandbox bash;;
 		*)		execute_sandbox "${ARGS[@]}";;
 	esac
 }
@@ -51,17 +48,15 @@ script_init () {
 }
 
 parse_args () {
-	ARGS=()
 	local sbdefined=
 
 	for var in "$@"; do case $var in 
-		-h)		SWITCH=h;;
-		-V)		SWITCH=V;;
-		--root)		SWITCH=r$SWITCH;;
-		--shell)	SWITCH=s$SWITCH;;
-		--dep)		SWITCH=d$SWITCH;;	
-		--exec)		SWITCH=rc$SWITCH;;
-		-E*)		SWITCH=$(echo $var | cut -c 3-)$SWITCH;;
+		-V|--version)	SWITCH="V";;
+		--root)		SWITCH+="r";;
+		--shell)	SWITCH+="s";;
+		--dep)		SWITCH+="d";;	
+		--exec)		SWITCH+="rc";;
+		-E*)		SWITCH+=$(echo $var | cut -c 3-);;
 		*)		[[ $sbdefined ]] && ARGS+=("$var") && continue		
 				INSTANCE=$var
 				sbdefined=1;;

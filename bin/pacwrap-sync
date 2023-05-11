@@ -24,13 +24,10 @@ declare -A updated
 declare -A synced
 declare -A syncreq
 
-EXEC_NAME="pacwrap-sync"
-EXEC_SCRIPT="pacwrap-exec --root --exec"
-
+EXEC_SCRIPT="$EXEC_SCRIPT  --root --exec"
 LINKFILES=("bin" "lib" "lib32" "share")
 
 main () {
-	export PACWRAP_UTILS=1
 	trap abort INT
 
 	local roots=()
@@ -42,13 +39,13 @@ main () {
 	parse_args $@
 	init $PACWRAP_CREATE
 
-	[[ ! $SWITCH ]] && log_invalid_arguments
+	[[ ! $SWITCH ]] || 
+	([[ ! $SYNC_UPDATE ]] && [[ ! $SYNC_UPGRADE ]] && [[ ! $SYNC_CONFIG ]]) && 
+	log_invalid_arguments $@
 
-	if [[ $SWITCH == *g* ]]; then
+	if [[ $SYNC_CONFIG ]]; then
 		local instance=${ARGS[0]}
-	
-		[[ ! -d $INSTANCE_ROOT_DIR/$instance ]] && return 
-	
+		[[ ! $instance ]] || [[ ! -d $INSTANCE_ROOT_DIR/$instance ]] && return 	
 		log "$ARROW Configuring container..."
 		sync_pacman_conf && return
 	fi
@@ -86,11 +83,13 @@ main () {
 
 parse_args () {
 	for var in "$@"; do case $var in 
-		--generate-config|-g)	SWITCH=g$SWITCH;;
-		--update|-u)		SWITCH=u$SWITCH;;
-		--no-confirm|-n)	SWITCH=n$SWITCH;;
-		--sync|-y)		SWITCH=y$SWITCH;;		
-		-S*)			SWITCH=$(echo $var | cut -c 3-);;
+		-V|--version)		SWITCH="V";;
+		--generate-config|-g)	SWITCH+="g";;
+		--update|-u)		SWITCH+="u";;
+		--noconfirm|-n)		SWITCH+="n";;
+		--explicit|-e)		SWITCH+="e";;
+		--sync|-y)		SWITCH+="y";;		
+		-S*)			SWITCH+=$(echo $var | cut -c 3-);;
 		*)			ARGS+=("$var");;
 	esac; done
 }
@@ -98,11 +97,13 @@ parse_args () {
 script_init () {
 	log_to_file "Running '$RUNTIME_ARGS'"
 
+	[[ $SWITCH == g ]] && SYNC_CONFIG=1
 	[[ $SWITCH == *y* ]] && SYNC_UPDATE=1
 	[[ $SWITCH == *u* ]] && SYNC_UPGRADE=1
 	[[ $SWITCH == *yy* ]] && SYNC_FOREIGN=1
 	[[ $SWITCH == *yyy* ]] && SYNC_OVERRIDE=1
 	[[ $SWITCH == *yyyy* ]] && SYNC_FORCE=1
+	[[ $SWITCH == *e* ]] && SYNC_EXPLICIT_FOREIGN=1
 
 	syncroots=(${roots[@]})
 
@@ -259,7 +260,6 @@ check_root() {
 update_config() {
 	declare -A skip
 	
-	local i=
 	local old_local_pkgs=$(return_packages)
 	local package_list=()
 	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qqe)
@@ -277,7 +277,7 @@ update_config() {
 
 	for pkg in $local_pkgs; do
 		[[ ${skip[$pkg]} ]] && continue
-		package_list[i++]="$pkg"
+		package_list+=("$pkg")
 	done
 
 	[[ "$(echo ${package_list[@]})" != "$(echo ${old_local_pkgs[@]})" ]] &&
@@ -351,6 +351,7 @@ syncdb_pacman_conf() {
 
 invoke_update() {
 	local instance=$1
+	local dbsyncpkgs=
 
 	[[ ${updated[$instance]} ]] && return
 	updated[$instance]=1
@@ -381,15 +382,16 @@ invoke_update() {
 	    [[ $(return_type) != "BASE" ]]; then
 		log "$ARROW Synchronizing database against foreign packages..." \
 			"Synchronizing $instance against foreign packages"
+		
+		[[ $SYNC_EXPLICIT_FOREIGN ]] && dbsyncpkgs=$(get_foreign_packages)
+		
 		$EXEC_SCRIPT $instance pacman -Su \
 			--logfile /tmp/pacman.log \
 			--dbonly --noconfirm \
-			--config=/tmp/pacman.conf 2>/dev/null 1>$VERBOSE
-
+			--config=/tmp/pacman.conf ${dbsyncpkgs[@]} 2>/dev/null 1>$VERBOSE
 		[[ $? != 0 ]] && 
 			log_error $ARROW_RED "Foreign database synchronization failed." \
 					     "Use pacwrap -Sv and examine stdout for details." 1
-
 		log " Database synchronization complete!"
 	fi
 

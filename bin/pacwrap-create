@@ -19,20 +19,15 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 source pacwrap-common
-
-EXEC_NAME="pacwrap-create" 
-
+export PACWRAP_CREATE=1
+	
 main () {	
 	trap exit INT
-	export PACWRAP_CREATE=1
-		
-	local args=$@
-
+	
 	parse_args "$@"
 	init $PACWRAP_UTILS
 
 	local instance=$INSTANCE
-	local args="$0 $@"
 
 	log "$BAR_GREEN Initializing container $INSTANCE..." \
 	    "Initializing container $INSTANCE running '$RUNTIME_ARGS'"
@@ -53,14 +48,12 @@ main () {
 }
 
 parse_args () {
-	ArGS=()
 	for var in "$@"; do case $var in 
+		-V|--version)	SWITCH="V";;
 		--dep=*) 	DEPEND=$(echo $var | cut -c 7-);;	
-		--verbose) 	SWITCH=v$SWITCH;;
-		--is-dep) 	SWITCH=d$SWITCH ;;
-		--is-base) 	SWITCH=b$SWITCH;;
-		-C*) 		SWITCH=$(echo $var | cut -c 3-)$SWITCH;;
-		-*) 		SWITCH=$(echo $var | cut -c 2-)$SWITCH;;
+		--is-dep) 	SWITCH+="d";;
+		--is-base) 	SWITCH+="b";;
+		-C*) 		SWITCH+=$(echo $var | cut -c 3-);;
 		*) 		ARGS+=("$var");;
 	esac; CLI_INVOCATION+="$var "; done
 }
@@ -79,7 +72,7 @@ script_init () {
 	ARCHLINUX_TARBALL="archlinux-bootstrap-x86_64.tar.gz" 
 	ARCHLINUX_TARBALL_CACHE="$PACWRAP_CACHE_DIR/$ARCHLINUX_TARBALL" 
 
-	PARAMS="$INSTANCE --root --exec"	
+	EXEC_SCRIPT="$EXEC_SCRIPT $INSTANCE --root --exec"	
 	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
 	
 	case $SWITCH in
@@ -283,16 +276,16 @@ get_directory_pop() {
 init_trust () {
 	log "$BAR_GREEN Initializing pacman trust database..." \
 	    "Initializing pacman trust database"
-	$EXEC_SCRIPT $PARAMS pacman-key --init 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	$EXEC_SCRIPT pacman-key --init 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 	log "$ARROW Populating pacman trust database..."
-	$EXEC_SCRIPT $PARAMS pacman-key --populate 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	$EXEC_SCRIPT pacman-key --populate 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 }
 
 finalise () {
 	log "$ARROW Generating locale..."
-	$EXEC_SCRIPT $PARAMS locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
+	$EXEC_SCRIPT locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
 	log "$ARROW Updating certificate trust..."
-	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>$OUTPUT_DEST 2p>>$OUTPUT_DEST
+	$EXEC_SCRIPT update-ca-trust 1>>$OUTPUT_DEST 2p>>$OUTPUT_DEST
 	[[ $C_TYPE != "BASE" ]] && sync_foreign_database
 	$SYNC_SCRIPT -Sg $INSTANCE
 	[[ $C_TYPE == "BASE" ]] && sync_base_packages
@@ -308,7 +301,7 @@ install_packages () {
 	fi
 
 	log_to_file "Installing specified packages"
-	$EXEC_SCRIPT $PARAMS pacman -Sy ${ARGS[@]} --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT pacman -Sy ${ARGS[@]} --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
 	if [[ $? != 0 ]]; then
 		log_error $ARROW_RED "Installation failed." \
 				     "Use pacwrap -Cv and examine stdout for details."
@@ -321,9 +314,9 @@ install_packages () {
 
 sync_base_packages () {
 	log "$ARROW Some housekeeping..." "Removing arch-install-scripts"	
-	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
+	$EXEC_SCRIPT pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
 	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
-	$EXEC_SCRIPT $PARAMS pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
 }
 
 sync_foreign_database () {
@@ -333,16 +326,10 @@ sync_foreign_database () {
 	rm -r "$INSTANCE_ROOT/var/lib/pacman/local"
 	cp -rn "$INSTANCE_DEPEND_ROOT/var/lib/pacman/local" "$INSTANCE_ROOT/var/lib/pacman/"
 
-	local deps=$(return_dependencies)	
-	local dbsyncpkgs=()
-	local i=0
-	
-	for dep in ${deps[@]}; do
-		dbsyncpkgs[i++]="$($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>//g")"
-	done
+	local dbsyncpkgs=$(get_foreign_packages)
 
 	[[ ${dbsyncpkgs[@]} ]] &&
-		$EXEC_SCRIPT $PARAMS pacman -Su \
+		$EXEC_SCRIPT pacman -Su \
 		--dbonly \
 		--logfile /tmp/pacman.log \
 		--noconfirm ${dbsyncpkgs[@]} 2>/dev/null 1>>$VERBOSE	

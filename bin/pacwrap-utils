@@ -19,12 +19,11 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 source pacwrap-common
+export PACWRAP_UTILS=1
 
-EXEC_NAME="pacwrap-utils"
 NUMFMT="numfmt --to=si --suffix=B --round=nearest --from-unit=1000 --format=%2f "
 
 main () {
-	export PACWRAP_UTILS=1
 	trap exit INT
 
 	local roots=()
@@ -36,18 +35,18 @@ main () {
 	parse_args $@
 	init
 
-	[[ $SWITCH != ls* ]] && log_to_file "Running '$RUNTIME_ARGS'"
+	[[ $SWITCH != Uls* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
-		c*)	[[ -f /usr/bin/paccache ]] && 
+		Uc*)	[[ -f /usr/bin/paccache ]] && 
 			paccache --cachedir $INSTANCE_CACHE_DIR ${ARGS[@]};;
-		i*)	initialize_data_directory;;
-		r*)	replicate ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]};;
-		v*)	edit_file 1;;
-		e*)	edit_file;;		
-		ls*)	summary;;
-		l*)	link_root;;			
-		d*)	[[ $SWITCH == *r* ]] && delete "root" "$INSTANCE_ROOT_DIR" 
+		Ui*)	initialize_data_directory;;
+		Ur*)	replicate ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]};;
+		Uv*)	edit_file 1;;
+		Ue*)	edit_file;;		
+		Uls*)	summary;;
+		Ul*)	link_root;;			
+		Ud*)	[[ $SWITCH == *r* ]] && delete "root" "$INSTANCE_ROOT_DIR" 
 			[[ $SWITCH == *h* ]] && delete "home" "$INSTANCE_HOME_DIR";;			
 		*)	log_invalid_arguments $1
 	esac
@@ -76,7 +75,7 @@ summary() {
 	parse_du
 
 	if [[ $SWITCH != *ddd* ]]; then
-		list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} | column -t -s '	'
+		list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} | column -t -s "$(echo -e '\t')"
 	fi
 		
 	if [[ $SWITCH == *d* ]]; then			
@@ -97,9 +96,16 @@ summary() {
 
 parse_args () {
 	for var in "$@"; do case $var in 
-			--list|-l)	SWITCH=l$SWITCH;;
-			-V|--version)	SWITCH=V;;
-			-U*)		SWITCH=$(echo $var | cut -c 3-);;	
+			--noconfirm|-n)	SWITCH+="n";;
+			--list|-ls)	SWITCH+="ls";;
+			--edit|-e)	SWITCH+="e";;
+			--view|-v)	SWITCH+="v";;
+			--replicate|-r)	SWITCH+="r";;
+			--delete|-d)	SWITCH+="d";;
+			--link|-l)	SWITCH+="l";;
+			--tar|-t)	SWITCH+="t";;
+			-V|--version)	SWITCH="V";;
+			-U*)		SWITCH+=$(echo $var | cut -c 3-);;	
 			--cfg-dir=*)	REPLICATION_CONFIG_DIR=$(echo $var | cut -c 11-);;		
 			*)		ARGS+=("$var");;
 	esac; done
@@ -404,10 +410,10 @@ edit_file() {
 				log "$ARROW_GREEN Changes written." \
 				    "Changes written to $file."
 			else
-				log "$BAR_GREEN No changes made"
+				log "$ARROW No changes made"
 			fi
 		else
-			log "$BAR_GREEN No changes made."
+			log "$ARROW No changes made."
 		fi
 
 		rm $tmpfile

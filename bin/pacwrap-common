@@ -18,9 +18,12 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+ARGS=()
+
 [[ $RUNTIME_ARGS ]] && return 
 
 RUNTIME_ARGS="$0 $@"
+EXEC_NAME="${0##*/}"
 
 BOLD=$(tput bold)
 RED=$(tput setaf 1)
@@ -36,7 +39,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.10 ${BOLD}BETA$RESET"
+VER="v0.9.11 ${BOLD}BETA$RESET"
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
@@ -49,7 +52,6 @@ LOG_ERR_HELP=1
 LOG_ERR_WARN=2
 LOG_ERR_ERROR=3
 
-declare -A INSTANCE_CONFIG
 [[ ! $PACWRAP_DATA_DIR ]] && PACWRAP_DATA_DIR="$HOME/.local/share/pacwrap"
 [[ ! $PACWRAP_CACHE_DIR ]] && PACWRAP_CACHE_DIR="$HOME/.cache/pacwrap"
 [[ ! $PACWRAP_CONFIG_DIR ]] && PACWRAP_CONFIG_DIR="$HOME/.config/pacwrap"
@@ -59,6 +61,8 @@ VERBOSE="/dev/null"
 LOCK_FILE="$PACWRAP_DATA_DIR/pacwrap.lck"	
 LOG_FILE="$PACWRAP_DATA_DIR/pacwrap.log"
 OUTPUT_DEST=$LOG_FILE
+
+declare -A INSTANCE_CONFIG
 
 INSTANCE_ROOT_DIR=$PACWRAP_DATA_DIR/root
 INSTANCE_HOME_DIR=$PACWRAP_DATA_DIR/home
@@ -75,11 +79,12 @@ INSTANCE_PACMAN_CACHE="$PACWRAP_CACHE_DIR/pkg"
 INSTANCE_PACMAN_CFG_DIR="$PACWRAP_CONFIG_DIR/pacman"
 
 init() {
-	runtime_check
+	[[ $EXEC_NAME != "pacwrap" ]] && 
+		runtime_check
 	
 	case $SWITCH in
 		*n*)		WITCH_NOCONFIRM=1;;
-		*v*)		RBOSE="/dev/stdout";;
+		*v*)		VERBOSE="/dev/stdout";;
 		*h*|*V*)	manual_script;;
 	esac
 
@@ -257,6 +262,16 @@ progress_bar() {
 	print_progress_bar $((PROGRESS_LENGTH+1)) $bar_percent $percent
 }
 
+get_foreign_packages() {
+	local dbsyncpkgs=()
+	local deps=$(return_dependencies)	
+		
+	for dep in ${deps[@]}; do
+		dbsyncpkgs+=("$($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>//g")")
+	done
+	echo ${dbsyncpkgs[@]}
+}
+
 localized_text() {
 	eval "echo \$$1_EN"
 }
@@ -351,12 +366,14 @@ _CONFIG
 runtime_check() {
 	[[ $(id -u) -lt 1000 ]] && log_error "$EXEC_NAME cannot be executed within a privileged context." 1
 
-	if [[ ! $(type -P bwrap) ]] || [[ ! $(type -P bwrap) ]] || [[ ! $(type -P pacman-key gpg) ]]; then
+	if [[ ! $(type -P bwrap) ]] || [[ ! $(type -P zstd ) ]] || 
+	   [[ ! $(type -P fakechroot) ]] || [[ ! $(type -P fakeroot) ]] || 
+	   [[ ! $(type -P pacman-key gpg) ]]; then
 		cat << _WARN 
 $BOLD${RED}error:$RESET Requisite dependencies are missing. 
 Please make sure that the following binaries are present in \$PATH:
 
- ${BOLD}bwrap$RESET, ${BOLD}zstd$RESET, ${BOLD}pacman-key$RESET or ${BOLD}gpg$RESET.
+ ${BOLD}bwrap$RESET, ${BOLD}fakechroot${BOLD}, ${BOLD}fakeroot$RESET, ${BOLD}zstd$RESET, ${BOLD}pacman-key$RESET or ${BOLD}gpg$RESET.
 
 _WARN
 		exit 2
