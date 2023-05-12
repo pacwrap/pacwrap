@@ -38,7 +38,7 @@ main () {
 	[[ $SWITCH != Uls* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
-		Uc*)	[[ -f /usr/bin/paccache ]] && 
+		Uc*)	[[ $(type -p paccache) ]] && 
 			paccache --cachedir $INSTANCE_CACHE_DIR ${ARGS[@]};;
 		Ui*)	initialize_data_directory;;
 		Ur*)	replicate ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]};;

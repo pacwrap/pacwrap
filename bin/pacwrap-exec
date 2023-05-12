@@ -23,8 +23,9 @@ source pacwrap-common
 main () {
 	parse_args "$@"
 	init 1
-
+	
 	case $SWITCH in 
+		*pS*|*pQ*|*pR*)	execute_pacman;;
 		*rc*|*cr*)	execute_fakeroot "${ARGS[@]}";;		
 		*rs*|*sr*)	execute_fakeroot bash;;
 		*s)		execute_sandbox bash;;
@@ -51,16 +52,31 @@ parse_args () {
 	local sbdefined=
 
 	for var in "$@"; do case $var in 
+		--explicit)	continue;;
+		--pacman)	SWITCH+="p";;
 		-V|--version)	SWITCH="V";;
 		--root)		SWITCH+="r";;
 		--shell)	SWITCH+="s";;
-		--dep)		SWITCH+="d";;	
-		--exec)		SWITCH+="rc";;
+		--exec)		SWITCH+="rc";;	
 		-E*)		SWITCH+=$(echo $var | cut -c 3-);;
+		-*|-Q*|-R*)	if [[ $SWITCH == Ep* ]]; then SWITCH+=$(echo $var | cut -c 2-); else ARGS+=("$var"); fi;;
 		*)		[[ $sbdefined ]] && ARGS+=("$var") && continue		
 				INSTANCE=$var
 				sbdefined=1;;
 	esac; done
+}
+
+execute_pacman() {
+	local runtime_args="pacman -$(echo $SWITCH | cut -c 3-)"
+	
+	[[ ${#ARGS[@]} > 0 ]] && runtime_args+=" ${ARGS[@]}"
+	([[ $SWITCH == *S* ]] || [[ $SWITCH == *R* ]]) &&
+	 [[ ! $(query_confirm_yN "Execute $RESET'$YELLOW$runtime_args$RESET'$BOLD on $INSTANCE") ]] && return
+	
+	execute_fakeroot $runtime_args --noconfirm --log=/tmp/pacman.log 2>$VERBOSE
+	[[ $? == 0 ]] && 
+	([[ $SWITCH == *S ]] || [[ $SWITCH == *R* ]]) && 
+	$SYNC_SCRIPT -Sgp $INSTANCE
 }
 
 execute_sandbox () {

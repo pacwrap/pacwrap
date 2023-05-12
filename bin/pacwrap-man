@@ -34,8 +34,6 @@ main () {
 		*V*)	version;;
 		*)	log_invalid_arguments $1
 	esac
-
-	distro_warn
 }
 
 parse_args () {
@@ -82,8 +80,8 @@ cat << _VERSION
 $VER_DISPLAY $VER
 Copyright (C) 2023 Xavier R.M.
 
-Website: https://pacwrap.sapphirus.org/
-Github: https://git.sapphirus.org/
+Website: https://git.sapphirus.org/pacwrap
+Github: https://github.com/sapphirusberyl/pacwrap
 
 This program may be freely redistributed under
 the terms of the GNU General Public License v3.
@@ -110,44 +108,30 @@ _USAGE
 man_execute() {
 cat <<_USAGE
 ${HEADER}EXECUTE OPTIONS$HEADER_RESET
-${SUB_HEADER}--sandbox=TARGET$RESET
-${SUB_TEXT}Specify the target sandbox to execute with bubblewrap.
-
 ${SUB_HEADER}-r, --root$RESET
 ${SUB_TEXT}Execute operation with fakeroot. Facilitates a command with faked root privileges.
 	
 ${SUB_HEADER}-s, --shell$RESET
 ${SUB_TEXT}Invoke a bash shell
 
+${SUB_HEADER}-p, --pacman$RESET
+${SUB_TEXT}Execute arguments with pacman in specified target.
+
+${SUB_HEADER}-c, --exec$RESET
+${SUB_TEXT}Execute application with arguments in specified target.
+
 _USAGE
 }
-
-
-
 
 man_sync() {
 	cat << _USAGE
 ${HEADER}SYNCHRONIZAtION OPTIONS$HEADER_RESET
-_USAGE
 
-case $HELP in
-	Sy*) 
-
-	cat << _USAGE
-${SUB_HEADER}-[yyyy], --sync$RESET
-${SUB_TEXT}Synchronize containers and their databases. Additional suffixes will force synchronization operations.
-_USAGE
-	;;
-	*)
-cat << _USAGE
-${SUB_HEADER}-[yyyy], --sync$RESET
-${SUB_TEXT}Synchronize containers and their databases. Additional suffixes will force synchronization operations.
+${SUB_HEADER}-y, --sync$RESET
+${SUB_TEXT}Synchronize containers and their databases. Specify up to 4 times to force synchronization operations.
 
 ${SUB_HEADER}-u, --update$RESET
-${SUB_TEXT}Executes chroot update routine.
-
-${SUB_HEADER}-y$RESET
-${SUB_TEXT}Trigger a container synchronization event.
+${SUB_TEXT}Execute container update routine.
 
 ${SUB_HEADER}-n, --no-confirm$RESET
 ${SUB_TEXT}Override confirmation prompts and confirm all operations. 
@@ -156,7 +140,6 @@ ${SUB_HEADER}-g, --generate-config$RESET
 ${SUB_TEXT}Generate a new pacman.conf for specified targets.
 	
 _USAGE
-esac
 }
 
 man_utils() {
@@ -165,29 +148,68 @@ ${HEADER}UTILITY OPTIONS$HEADER_RESET
 ${SUB_HEADER}-d, --delete$RESET
 ${SUB_TEXT}Deletes the root and home directories of specified targets.
 	
+${SUB_HEADER}-ls, --summarylist$RESET
+${SUB_TEXT}Summarize information on container filesystems and their associated dependencies.
+
+$TAB${SUB_HEADER}-d$RESET
+$TAB${SUB_TEXT}Specify up to 4 times to display different sets of space consumption statistics.
+
+${SUB_HEADER}-e, --edit$RESET
+${SUB_TEXT}Edit configuration files associated with pacwrap and containers in specified $EDITOR.
+
+$TAB${SUB_HEADER}-c$RESET
+$TAB${SUB_TEXT}Edit container configuration for target.
+
+$TAB${SUB_HEADER}-p$RESET
+$TAB${SUB_TEXT}Edit global pacman.conf template.
+
+$TAB${SUB_HEADER}-pt$RESET
+$TAB${SUB_TEXT}Edit pacman.conf template for target.
+
+${SUB_HEADER}-v, --view$RESET
+${SUB_TEXT}View configuration files associated with pacwrap and containers in specified $EDITOR.
+
+$TAB${SUB_HEADER}-ip$RESET
+$TAB${SUB_TEXT}View sync pacman.conf for target.
+
+$TAB${SUB_HEADER}-ips$RESET
+$TAB${SUB_TEXT}View syncdb pacman.conf for target.
+
+$TAB${SUB_HEADER}-l$RESET
+$TAB${SUB_TEXT}View pacwrap.log
+
 ${SUB_HEADER}-r, --replicate$RESET
 ${SUB_TEXT}Replicate target container from configuration.
+	
+${SUB_HEADER}-t, --tar$RESET
+${SUB_TEXT}Grab configuration files from specified tar archive.
 
 ${SUB_HEADER}-l, --link$RESET
 ${SUB_TEXT}Create a symbolic link of a target container's filesystem directory and initialize a home directory.
 
 ${SUB_HEADER}-i, --initialize$RESET
-${SUB_TEXT}Re-initialize configuration files. This can be used to synchronize pacwrap's mirrorlist with your system.
+${SUB_TEXT}Initialize configuration files. This can be used to synchronize pacwrap's mirrorlist with your system.
 
-${SUB_HEADER}-ls, --summarylist$RESET
-${SUB_TEXT}SUmmarize information on container filesystems and their associated dependencies.
+_USAGE
+}
 
-${SUB_HEADER}-e, --edit$RESET
-${SUB_TEXT}Edit configuration files associated with pacwrap and containers.
+man_copyright() {
+cat << _USAGE
+${HEADER}AUTHORS$HEADER_RESET
+${SUB_TEXT}Copyright (c) 2023 - Xavier R.M.
+
+${HEADER}LICENSE$HEADER_RESET
+${SUB_TEXT}This program may be freely redistributed under
+$TAB${TAB}the terms of the GNU General Public License v3.
 
 _USAGE
 }
 
 man_version() {
 cat << _USAGE
-	${HEADER}VERSION$HEADER_RESET
-	${SUB_TEXT}pacwrap $VER$RESET
-	
+${HEADER}VERSION$HEADER_RESET
+${SUB_TEXT}pacwrap $VER$RESET
+
 _USAGE
 }
 
@@ -207,14 +229,16 @@ ${SUB_HEADER}-C, --create$RESET
 ${SUB_TEXT}Facilitates the creation of container filesystems.
 
 ${SUB_HEADER}-S, --sync$RESET
-${SUB_TEXT}Synhcronize package databases and update packages in target chroots. 
-$TAB${TAB}pacwrap-sync is invoked which facilitates an update and synchronization operation on specified targets.
+${SUB_TEXT}Synchronize package databases and update packages in target containers. 
+
+${SUB_HEADER}--explicit$RESET
+${SUB_TEXT}Passes through arguments to pacman in specified target.
 
 ${SUB_HEADER}-U, --utils$RESET
 ${SUB_TEXT}Invoke miscellaneous utilities to manage containers.
 
 ${SUB_HEADER}-P, --process$RESET
-${SUB_TEXT}Report information and manage running container processes
+${SUB_TEXT}Report information and manage running container processes.
 
 ${SUB_HEADER}-E, --execute$RESET
 ${SUB_TEXT}Executes application in target container using bubblewrap.
@@ -239,6 +263,7 @@ print_manual() {
 	man_summary
 
 	case $HELP in
+		COPYRIGHT|copyright|cr)	man_copyright;;
 		VERSION|version|V|v)	man_version;;
 		UTILS|utils|U|u) 	man_utils;;
 		SYNC|sync|s*|S*) 	man_sync;;
@@ -248,10 +273,13 @@ print_manual() {
 					man_execute
 					man_sync
 					man_utils
-					man_version;;
-		*)
-		[[ $HELP ]] && log_error "Operation '$HELP' not documented" 1
+					man_version
+					man_copyright;;
+		*) 
+			[[ $HELP ]] && log_error "Operation '$HELP' not documented" 1
 	esac
+
+	if [[ ! $HELP ]]; then distro_warn; fi
 }
 
 main $@

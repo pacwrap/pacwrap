@@ -29,7 +29,7 @@ main () {
 	case $SWITCH in 
 		P)	source $(type -P $PS_SCRIPT);;	
 		C)	source $(type -P $CREATE_SCRIPT);;
-		E)	source $(type -P $EXEC_SCRIPT);;
+		E*)	source $(type -P $EXEC_SCRIPT);;
 		S)	source $(type -P $SYNC_SCRIPT);;
 		U)	source $(type -P $UTILS_SCRIPT);;
 		h|V)	manual_script;;
@@ -39,6 +39,7 @@ main () {
 
 parse_args () {
 	for var in "$@"; do case $var in
+		--explicit)		SWITCH=Ep;;
 		--process|-P)		SWITCH=P;;
 		--create|-C)		SWITCH=C;;
 		--execute|-E)		SWITCH=E;;
@@ -50,7 +51,7 @@ parse_args () {
 		-V|--version)		SWITCH=V;;
 		-E*|-C*|-S*|-U*|-P*)	SWITCH=$(echo $var | cut -c 2-2);;
 		*) 			ARGS+=("$var")
-	esac; done
+	esac; [[ $SWITCH ]] && break; done
 }
 
 main $@

@@ -40,14 +40,17 @@ main () {
 	init $PACWRAP_CREATE
 
 	[[ ! $SWITCH ]] || 
-	([[ ! $SYNC_UPDATE ]] && [[ ! $SYNC_UPGRADE ]] && [[ ! $SYNC_CONFIG ]]) && 
-	log_invalid_arguments $@
+	([[ ! $SYNC_UPDATE ]] && [[ ! $SYNC_UPGRADE ]] && 
+	 [[ ! $SYNC_CONFIG ]] && [[ ! $UPDATE_CONFIG ]]) && 
+		log_invalid_arguments $@
 
-	if [[ $SYNC_CONFIG ]]; then
+	if [[ $UPDATE_CONFIG ]] || [[ $SYNC_CONFIG ]]; then
 		local instance=${ARGS[0]}
 		[[ ! $instance ]] || [[ ! -d $INSTANCE_ROOT_DIR/$instance ]] && return 	
 		log "$ARROW Configuring container..."
-		sync_pacman_conf && return
+		[[ $SYNC_CONFIG ]] && sync_pacman_conf
+		[[ $UPDATE_CONFIG ]] && update_config
+		return
 	fi
 
 	if [[ $SYNC_UPGRADE ]] || ([[ $SYNC_UPDATE ]] && [[ ! $SYNC_FORCE ]]); then
@@ -61,8 +64,7 @@ main () {
 	[[ ${#roots[@]} > 0 ]] && [[ ! $SYNC_FORCE ]] && 
 		log "$BAR_GREEN Starting contingent container upgrade..."
 
-	for b in ${baserootdeps[@]}; do
-		[[ ${syncreq[$(return_base)]} ]] && syncreq=1 && break; done
+	for b in ${baserootdeps[@]}; do [[ ${syncreq[$(return_base)]} ]] && syncreq=1 && break; done
 
 	if [[ $SYNC_OVERRIDE ]] || [[ $syncreq ]]; then
 		update_links ${syncroots[@]} 
@@ -70,15 +72,22 @@ main () {
 		[[ $SYNC_FORCE ]] && return
 	fi
 	
-	[[ ${#roots[@]} -le 0 ]] && return
+	if [[ ${#roots[@]} -le 0 ]]; then
+		[[ $PACWRAP_PASSTHROUGH ]] && system_update
+		log "$ARROW_GREEN Transaction complete."
+		return
+	fi
 
 	if [[ $SYNC_UPGRADE ]] || [[ $SYNC_UPDATE ]]; then
 		configure_containers ${roots[@]}
 		update ${roots[@]}
-		[[ -f /usr/bin/paccache ]] && 
-			paccache --cachedir $INSTANCE_PACMAN_CACHE -r -k 1 --min-mtime "14 days ago"
-		
+		[[ $(type -p paccache) ]] && 
+			paccache --cachedir $INSTANCE_PACMAN_CACHE $PACWRAP_PACCACHE_ARGUMENTS
 	fi
+
+	[[ $PACWRAP_PASSTHROUGH ]] && system_update
+
+	log "$ARROW_GREEN Transaction complete."
 }
 
 parse_args () {
@@ -87,7 +96,7 @@ parse_args () {
 		--generate-config|-g)	SWITCH+="g";;
 		--update|-u)		SWITCH+="u";;
 		--noconfirm|-n)		SWITCH+="n";;
-		--explicit|-e)		SWITCH+="e";;
+		--explicit-foreign|-ef)	SWITCH+="ef";;
 		--sync|-y)		SWITCH+="y";;		
 		-S*)			SWITCH+=$(echo $var | cut -c 3-);;
 		*)			ARGS+=("$var");;
@@ -97,13 +106,14 @@ parse_args () {
 script_init () {
 	log_to_file "Running '$RUNTIME_ARGS'"
 
-	[[ $SWITCH == g ]] && SYNC_CONFIG=1
+	[[ $SWITCH == *g ]] && SYNC_CONFIG=1
+	[[ $SWITCH == *gp ]] && UPDATE_CONFIG=1
 	[[ $SWITCH == *y* ]] && SYNC_UPDATE=1
 	[[ $SWITCH == *u* ]] && SYNC_UPGRADE=1
 	[[ $SWITCH == *yy* ]] && SYNC_FOREIGN=1
 	[[ $SWITCH == *yyy* ]] && SYNC_OVERRIDE=1
 	[[ $SWITCH == *yyyy* ]] && SYNC_FORCE=1
-	[[ $SWITCH == *e* ]] && SYNC_EXPLICIT_FOREIGN=1
+	[[ $SWITCH == *ef* ]] && SYNC_EXPLICIT_FOREIGN=1
 
 	syncroots=(${roots[@]})
 
@@ -283,8 +293,7 @@ update_config() {
 	[[ "$(echo ${package_list[@]})" != "$(echo ${old_local_pkgs[@]})" ]] &&
 		generate_config ${package_list[@]}
 	
-	((amt_done++))
-	progress_bar
+	advance_progress 1	
 }
 
 sync_pacman_conf () {	
@@ -438,6 +447,19 @@ update () {
 	log_to_file "Updated containers: $(echo $@)"
 }
 
+system_update() {
+	local pacman_args="S"
+
+	[[ $SYNC_UPDATE ]] && pacman_args+="y"
+	[[ $SYNC_FOREIGN ]] && pacman_args+="y"
+	[[ $SYNC_UPGRADE ]] && pacman_args+="u"
+
+	local pacman="sudo pacman -$pacman_args"
+		
+	[[ ${#pacman_args} > 0 ]] && 
+	[[ $(query_confirm_Yn "Execute $RESET'$YELLOW$pacman$RESET'$BOLD on system") ]] &&
+		$pacman
+}
 
 configure_containers () {	
 	local amt=$((${#@}*3))
