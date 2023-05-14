@@ -39,7 +39,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.12 ${BOLD}BETA$RESET"
+VER="v0.9.13 BETA"
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
@@ -198,16 +198,16 @@ log_error() {
 			exit
 			;;
 		$ARROW_RED)
-			printf "$ARROW_RED %s\n %s\n" "$2" "$3"		
+			printf "$ARROW_RED %s\n %s\n" "$2" "$3"	>&2
 			log_to_file "$2"
 			[[ $4 ]] && exit $4
 			;;
 		$LOG_ERR_WARN)
-			printf "$BOLD$YELLOW%s$RESET %s\n" "warning:" "$2"
+			printf "$BOLD$YELLOW%s$RESET %s\n" "warning:" "$2" >&2
 			[[ $3 ]] && exit $3
 			;;
 		*)
-			printf "$BOLD$RED%s$RESET %s\n" "error:" "$1"
+			printf "$BOLD$RED%s$RESET %s\n" "error:" "$1" >&2
 			[[ $2 ]] && exit $2
 			;;
 	esac

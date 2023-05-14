@@ -56,7 +56,8 @@ script_init () {
 	[[ $SWITCH == *x* ]] && SHOW_RUNTIME=1
 	[[ $SWITCH == *u* ]] && SHOW_UPTIME=1
 	[[ $SWITCH == *c* ]] && SHOW_PIDS=1
-	
+	[[ $SWITCH == *b* ]] && SHOW_BWRAP=1
+
 	ENUM_SKIP=$([[ ${ARGS[@]} ]] && echo 1)
 
 	if [[ ${ARGS[@]} ]]; then 
@@ -79,7 +80,12 @@ script_init () {
 parse_args () {
 	for var in "$@"; do case $var in 
 		-[0-9]|-[0-9][0-9])	KILL_PARAM="$var";;
-		-n|--noconfirm) 	SWITCH+="n";;
+		-n|--noconfirm|--name) 	SWITCH+="n";;
+		--summary|-s)		SWITCH+="s";;
+		--identifier|-id)	SWITCH+="id";;
+		--uptime|-u)		SWITCH+="s";;
+		--cmd|-x)		SWITCH+="x";;
+		--show-bubblewrap|-b)	SWITCH+="b";;
 		-k|--kill) 		SWITCH="k";;
 		-V|--version)		SWITCH="V";;
 		-P*)			SWITCH+=$(echo $var | cut -c 3-);;	
@@ -100,21 +106,28 @@ populate_process_array() {
 		local cmdlist=(); while read -r -d '' cmd || [[ $cmd ]]; do
 			cmdlist+=("$cmd")
 		done <$i/cmdline
-		
-		[[ ${cmdlist[1]} != *pacwrap* ]] && continue
-		[[ ${cmdlist[@]} != *-E* ]] && 
+	
+		[[ ${cmdlist[1]} != *pacwrap* ]] && [[ ${cmdlist[0]} != bwrap ]] && continue
+		[[ ${cmdlist[0]} != bwrap ]] && [[ ${cmdlist[@]} != *-E* ]] &&
 		[[ ${cmdlist[1]} != *pacwrap-exec ]] && continue
 
-		local skip=$ENUM_SKIP
 		local pid=${i##*/}
-		local instance=${cmdlist[2]}; [[ ${cmdlist[2]} == -* ]] && 
-		      instance=${cmdlist[3]}
+		local instance=
 
-		for ins in ${roots[@]}; do
+		if [[ ${cmdlist[0]} != bwrap ]]; then 	
+			instance=${cmdlist[2]}; [[ ${cmdlist[2]} == -* ]] && 
+		      	instance=${cmdlist[3]}
+		else
+			local bwrap_path=; for cmd in ${cmdlist[@]}; do
+				[[ $cmd != $PACWRAP_DATA_DIR/root/* ]] && continue
+				bwrap_path=${cmd##*/root/}; instance=${bwrap_path%%/*}
+				break
+			done; [[ ! $instance ]] && continue	
+		fi
+
+		local skip=$ENUM_SKIP; for ins in ${roots[@]}; do
 			[[ $instance == $ins ]] || [[ $ins == $pid ]] && skip=
-		done
-
-		[[ $skip ]] && continue
+		done; [[ $skip ]] && continue
 		
 		local pmod=$(stat -c '%Y' /proc/$pid) 
 	
@@ -125,15 +138,37 @@ populate_process_array() {
 			source $INSTANCE_RUNTIME_DIR/$pid
 			INSTANCE[$pid]="$instance"
 			START[$pid]="$start"
-			RUNTIME[$pid]="$runtime_args"	
+			RUNTIME[$pid]="$runtime_args"
+			PROCESS[$pid]="${pid}"	
+		elif [[ ${cmdlist[0]} == bwrap ]]; then 
+			local parent_id=$(cat /proc/$pid/status | grep PPid); parent_id=${parent_id##*	}
+			local parent_runtime=${RUNTIME[$parent_id]}
+		
+			if [[ ! $SHOW_BWRAP ]]; then
+				skip=; for p in $(get_child_ids $parent_id); do
+					[[ $p == $pid ]] && skip=1 && break
+				done; [[ $skip ]] && continue
+			fi
+		
+			[[ ! $parent_runtime ]] && log_error $LOG_ERR_WARN "Runtime metadata for $pid was not found."
+			
+			INSTANCE[$pid]="$instance"
+			START[$pid]="$pmod"
+			RUNTIME[$pid]="$(if [[ $parent_runtime ]]; then echo $parent_runtime; else echo "bwrap"; fi)"		
+			PROCESS[$pid]="${pid}"	
 		else
-			log_error $LOG_ERR_WARN "Runtime metadata for $pid was modified or not found."
+			if [[ -f $INSTANCE_RUNTIME_DIR/$pid  ]]; then
+				log_error $LOG_ERR_WARN "Runtime metadata for $pid was modified."
+			else
+				log_error $LOG_ERR_WARN "Runtime metadata for $pid was not found."
+			fi
+
 			INSTANCE[$pid]="$instance"
 			START[$pid]="$pmod"
 			RUNTIME[$pid]="${cmdlist[@]}"
+			PROCESS[$pid]="${pid}"	
 		fi
 
-		PROCESS[$pid]="${pid}"	
 	done
 }
 
