@@ -23,7 +23,7 @@ source pacwrap-common
 main () {
 	parse_args "$@"
 	init 1
-	
+
 	case $SWITCH in 
 		*pS*|*pQ*|*pR*)	execute_pacman;;
 		*rc*|*cr*)	execute_fakeroot "${ARGS[@]}";;		
@@ -49,17 +49,16 @@ script_init () {
 }
 
 parse_args () {
-	local sbdefined=
-
-	for var in "$@"; do case $var in 
+	local sbdefined=; for var in "$@"; do case $var in 
+		-v|--verbose)	SWITCH+="v";;
 		--explicit)	continue;;
 		--pacman)	SWITCH+="p";;
 		-V|--version)	SWITCH="V";;
 		--root)		SWITCH+="r";;
 		--shell)	SWITCH+="s";;
 		--exec)		SWITCH+="rc";;	
-		-E*)		SWITCH+=$(echo $var | cut -c 3-);;
-		-*|-Q*|-R*)	if [[ $SWITCH == Ep* ]]; then SWITCH+=$(echo $var | cut -c 2-); else ARGS+=("$var"); fi;;
+		-E*)		SWITCH+="${var:2}";;
+		-*|-Q*|-R*)	if [[ $SWITCH == Ep* ]]; then SWITCH+="${var:1}"; else ARGS+=("$var"); fi;;
 		*)		[[ $sbdefined ]] && ARGS+=("$var") && continue		
 				INSTANCE=$var
 				sbdefined=1;;
@@ -67,7 +66,7 @@ parse_args () {
 }
 
 execute_pacman() {
-	local runtime_args="pacman -$(echo $SWITCH | cut -c 3-)"
+	local runtime_args="pacman -${SWITCH:2}"
 	
 	[[ ${#ARGS[@]} > 0 ]] && runtime_args+=" ${ARGS[@]}"
 	([[ $SWITCH == *S* ]] || [[ $SWITCH == *R* ]]) &&
@@ -79,11 +78,22 @@ execute_pacman() {
 	$SYNC_SCRIPT -Sgp $INSTANCE
 }
 
+check_concurrent() {
+	[[ ! $1 ]] && return
+
+	local processes=($($PS_SCRIPT -Pid $INSTANCE))
+
+	[[ ${#processes[@]} -gt $1 ]] && 
+		log_error "Concurrency limit exceeded: $1 > ${#processes[@]}." 1
+}
+
 execute_sandbox () {
 	[[ ! -f $INSTANCE_SCRIPT ]] && 
 		log_error $LOG_ERR_HELP	"Script $INSTANCE_SCRIPT not found." 1
 
 	runtime_config ${ARGS[@]}
+	check_concurrent $(return_concurrent_limit $INSTANCE)
+	
 	source $INSTANCE_SCRIPT
 }
 

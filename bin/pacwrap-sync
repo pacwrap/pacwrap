@@ -61,6 +61,12 @@ main () {
 		update ${baserootdeps[@]} ${rootdeps[@]}
 	fi
 
+	if [[ ! $SYNC_FORCE ]] && [[ ${#roots[@]} -le 0 ]]; then
+		[[ $PACWRAP_PASSTHROUGH ]] && system_update
+		log "$ARROW_GREEN Transaction complete."
+		return
+	fi
+
 	[[ ${#roots[@]} > 0 ]] && [[ ! $SYNC_FORCE ]] && 
 		log "$BAR_GREEN Starting contingent container upgrade..."
 
@@ -70,13 +76,7 @@ main () {
 		update_links ${syncroots[@]} 
 		cleanup_cache ${rootdeps[@]} ${baserootdeps[@]}
 		[[ $SYNC_FORCE ]] && return
-	fi
-	
-	if [[ ${#roots[@]} -le 0 ]]; then
-		[[ $PACWRAP_PASSTHROUGH ]] && system_update
-		log "$ARROW_GREEN Transaction complete."
-		return
-	fi
+	fi	
 
 	if [[ $SYNC_UPGRADE ]] || [[ $SYNC_UPDATE ]]; then
 		configure_containers ${roots[@]}
@@ -98,7 +98,7 @@ parse_args () {
 		--noconfirm|-n)		SWITCH+="n";;
 		--explicit-foreign|-ef)	SWITCH+="ef";;
 		--sync|-y)		SWITCH+="y";;		
-		-S*)			SWITCH+=$(echo $var | cut -c 3-);;
+		-S*)			SWITCH+="${var:2}";;
 		*)			ARGS+=("$var");;
 	esac; done
 }
@@ -397,7 +397,7 @@ invoke_update() {
 		$EXEC_SCRIPT $instance pacman -Su \
 			--logfile /tmp/pacman.log \
 			--dbonly --noconfirm \
-			--config=/tmp/pacman.conf ${dbsyncpkgs[@]} 2>/dev/null 1>$VERBOSE
+			--config=/tmp/pacman.conf ${dbsyncpkgs[@]} 2>$VERBOSE 1>$VERBOSE
 		[[ $? != 0 ]] && 
 			log_error $ARROW_RED "Foreign database synchronization failed." \
 					     "Use pacwrap -Sv and examine stdout for details." 1
@@ -454,7 +454,7 @@ system_update() {
 	[[ $SYNC_FOREIGN ]] && pacman_args+="y"
 	[[ $SYNC_UPGRADE ]] && pacman_args+="u"
 
-	local pacman="sudo pacman -$pacman_args"
+	local pacman="$PACWRAP_PASSTHROUGH_CMD -$pacman_args"
 		
 	[[ ${#pacman_args} > 0 ]] && 
 	[[ $(query_confirm_Yn "Execute $RESET'$YELLOW$pacman$RESET'$BOLD on system") ]] &&

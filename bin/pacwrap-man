@@ -38,7 +38,7 @@ main () {
 
 parse_args () {
 	for var in "$@"; do case $var in
-		--help=*)	HELP=("$(echo $var | cut -c 8-)")
+		--help=*)	HELP=("${var:7}")
 				SWITCH="h";;
 		-h|--help)	SWITCH="h";;
 		-V|--version)	SWITCH="V";;
@@ -130,11 +130,11 @@ ${HEADER}PROCESS OPTIONS$HEADER_RESET
 ${SUB_HEADER}-s, --summary$RESET
 ${SUB_TEXT}Show process summary of running containers and display column header
 
-${SUB_HEADER}-b, --show-bubblewrap$RESET
-${SUB_TEXT}Enumerate child bubblewrap processes.
+${SUB_HEADER}-k, --kill$RESET
+${SUB_TEXT}Kill enumerated processes.
 
-${SUB_HEADER}-c, --children$RESET
-${SUB_TEXT}Display Child PIDs column.
+$TAB${SUB_HEADER}-##$RESET
+$TAB${SUB_TEXT}Signal flag. Default is 1 (${BOLD}SIGHUP$RESET) if otherwise unspecified.
 
 ${SUB_HEADER}-n, --name$RESET
 ${SUB_TEXT}Display container column. Shown with --summary.
@@ -142,17 +142,26 @@ ${SUB_TEXT}Display container column. Shown with --summary.
 ${SUB_HEADER}-id, --identifier$RESET
 ${SUB_TEXT}Display process identifier column. Shown with --summary.
 
+${SUB_HEADER}-c, --children$RESET
+${SUB_TEXT}Display Child PIDs column.
+
 ${SUB_HEADER}-u, --uptime$RESET
 ${SUB_TEXT}Show process uptime.
 
-${SUB_HEADER}-x, --cmd$RESET
-${SUB_TEXT}Display command column.
+${SUB_HEADER}-x, --exec$RESET
+${SUB_TEXT}Display executable column.
 
-${SUB_HEADER}-k, --kill$RESET
-${SUB_TEXT}Kill enumerated processes.
+${SUB_HEADER}-a, --args$RESET
+${SUB_TEXT}Display arguments column.
 
-${SUB_HEADER}-##$RESET
-${SUB_TEXT}Signal flag. Default is 2 if otherwise unspecified.
+${SUB_HEADER}-w, --wrap$RESET
+${SUB_TEXT}Wrap large argument columns instead of truncate.
+
+${SUB_HEADER}-b, --eunmerate-bwrap$RESET
+${SUB_TEXT}Enumerate child bubblewrap process tree.
+
+${SUB_HEADER}-t, --eunmerate-tree$RESET
+${SUB_TEXT}Enumerate child process tree.
 
 _USAGE
 }

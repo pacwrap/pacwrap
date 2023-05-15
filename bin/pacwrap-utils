@@ -96,6 +96,7 @@ summary() {
 
 parse_args () {
 	for var in "$@"; do case $var in 
+			-v|--verbose)	SWITCH+="v";;
 			--noconfirm|-n)	SWITCH+="n";;
 			--list|-ls)	SWITCH+="ls";;
 			--edit|-e)	SWITCH+="e";;
@@ -105,8 +106,8 @@ parse_args () {
 			--link|-l)	SWITCH+="l";;
 			--tar|-t)	SWITCH+="t";;
 			-V|--version)	SWITCH="V";;
-			-U*)		SWITCH+=$(echo $var | cut -c 3-);;	
-			--cfg-dir=*)	REPLICATION_CONFIG_DIR=$(echo $var | cut -c 11-);;		
+			-U*)		SWITCH+="${var:2}";;	
+			--cfg-dir=*)	REPLICATION_CONFIG_DIR="${var:10}";;		
 			*)		ARGS+=("$var");;
 	esac; done
 }

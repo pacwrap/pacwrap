@@ -21,12 +21,15 @@
 source pacwrap-common
 
 declare -A PROCESS
+declare -A CHILD_PROCESS
 declare -A INSTANCE
 declare -A START
-declare -A RUNTIME
+declare -A CMD_EXEC
+declare -A CMD_ARGS
 declare -A PROCESS_CHILDREN
 
 KILL_PARAM="-1"
+COL_FMT_ARG="T"
 
 main () {
 	trap exit INT
@@ -40,7 +43,7 @@ main () {
 	parse_args $@
 	init 1
 
-	[[ $SWITCH != Ps* ]] && log_to_file "Running '$RUNTIME_ARGS'"
+	[[ $SWITCH == Pk* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
 		Pk*)	kill_instance ${roots[@]};;
@@ -53,10 +56,13 @@ script_init () {
 	[[ $SWITCH == Ps* ]] && SHOW_HEADER=1
 	[[ $SWITCH == *n* ]] || [[ $SHOW_HEADER ]] && SHOW_CONTAINER=1
 	[[ $SWITCH == *id* ]] || [[ $SHOW_HEADER ]] && SHOW_PID=1
-	[[ $SWITCH == *x* ]] && SHOW_RUNTIME=1
+	[[ $SWITCH == *a* ]] && SHOW_ARGS=1	
+	[[ $SWITCH == *x* ]] && SHOW_EXEC=1
 	[[ $SWITCH == *u* ]] && SHOW_UPTIME=1
 	[[ $SWITCH == *c* ]] && SHOW_PIDS=1
-	[[ $SWITCH == *b* ]] && SHOW_BWRAP=1
+	[[ $SWITCH == *t* ]] && ENUMERATE_TREE=1
+	[[ $SWITCH == *b* ]] && ENUMERATE_BWRAP=1
+	[[ $SWITCH == *w* ]] && COL_FMT_ARG="W"
 
 	ENUM_SKIP=$([[ ${ARGS[@]} ]] && echo 1)
 
@@ -67,7 +73,7 @@ script_init () {
 		done
 	fi
 
-	populate_process_array
+	enumerate_process_array
 
 	[[ ! ${#PROCESS[@]} > 0 ]] && if [[ ${ARGS[@]} ]]; then	
 		log_error "Invalid arguments specified to enumerate." 1
@@ -81,96 +87,129 @@ parse_args () {
 	for var in "$@"; do case $var in 
 		-[0-9]|-[0-9][0-9])	KILL_PARAM="$var";;
 		-n|--noconfirm|--name) 	SWITCH+="n";;
+		--enumerate-bwrap|-b)	SWITCH+="b";;
+		--enumerate-tree|-t)	SWITCH+="t";;
 		--summary|-s)		SWITCH+="s";;
 		--identifier|-id)	SWITCH+="id";;
+		--wrap|-w)		SWITCH+="w";;
 		--uptime|-u)		SWITCH+="s";;
-		--cmd|-x)		SWITCH+="x";;
-		--show-bubblewrap|-b)	SWITCH+="b";;
+		--args|-a)		SWITCH+="a";;
+		--exec|-x)		SWITCH+="x";;
 		-k|--kill) 		SWITCH="k";;
 		-V|--version)		SWITCH="V";;
-		-P*)			SWITCH+=$(echo $var | cut -c 3-);;	
+		-P*)			SWITCH+="${var:2}";;	
 		*)			ARGS+=("$var");;
 	esac; done
 }
 
 summary() {
+	local col_fmt=$([[ $SHOW_ARGS ]] && [[ $SHOW_HEADER ]] && echo -${COL_FMT_ARG}ARGS)
 	IFS=; local ps_list=$(enumerate_ps_list ${roots[@]})
 	[[ ! $ps_list ]] && return 1	
-	echo -e $([[ $SHOW_HEADER ]] && column_headers)$ps_list | column -t -s $(echo -e '\t')
+	echo -e $([[ $SHOW_HEADER ]] && column_headers)$ps_list | column -t --table-columns $(column_params) $col_fmt -d -s $(echo -e '\t')
 }
 
-populate_process_array() {	
+enumerate_process_array() {	
 	for i in /proc/[0-9]*; do
 		[[ -s $i/cmdline ]] || [[ ! -f $i/cmdline ]] && continue
 
 		local cmdlist=(); while read -r -d '' cmd || [[ $cmd ]]; do
 			cmdlist+=("$cmd")
-		done <$i/cmdline
-	
-		[[ ${cmdlist[1]} != *pacwrap* ]] && [[ ${cmdlist[0]} != bwrap ]] && continue
-		[[ ${cmdlist[0]} != bwrap ]] && [[ ${cmdlist[@]} != *-E* ]] &&
-		[[ ${cmdlist[1]} != *pacwrap-exec ]] && continue
+		done <$i/cmdline 
 
-		local pid=${i##*/}
+		local pid=${i##*/}	
+
+		[[ ${cmdlist[1]} != *pacwrap* ]] && [[ ${cmdlist[0]} != bwrap ]] && [[ ! ${CHILD_PROCESS[$pid]} ]] && continue
+		[[ ${cmdlist[0]} != bwrap ]] && [[ ! ${CHILD_PROCESS[$pid]} ]] && 
+		[[ ${cmdlist[1]} != *pacwrap-exec ]] && [[ ${cmdlist[@]} != *-E* ]] && continue
+
 		local instance=
 
 		if [[ ${cmdlist[0]} != bwrap ]]; then 	
 			instance=${cmdlist[2]}; [[ ${cmdlist[2]} == -* ]] && 
 		      	instance=${cmdlist[3]}
+		elif [[ ${CHILD_PROCESS[$pid]} ]]; then
+			[[ ! $ENUMERATE_BWRAP ]] && continue
 		else
 			local bwrap_path=; for cmd in ${cmdlist[@]}; do
 				[[ $cmd != $PACWRAP_DATA_DIR/root/* ]] && continue
 				bwrap_path=${cmd##*/root/}; instance=${bwrap_path%%/*}
 				break
-			done; [[ ! $instance ]] && continue	
+			done; [[ ! $instance ]] && continue
+		fi
+		
+		if [[ ${CHILD_PROCESS[$pid]} ]]; then
+			[[ ! $ENUMERATE_TREE ]] && [[ ! $ENUMERATE_BWRAP ]] && continue
+			instance="${INSTANCE[${CHILD_PROCESS[$pid]}]}"	
 		fi
 
 		local skip=$ENUM_SKIP; for ins in ${roots[@]}; do
 			[[ $instance == $ins ]] || [[ $ins == $pid ]] && skip=
 		done; [[ $skip ]] && continue
-		
+
+		local cmd="${cmdlist[@]}"
 		local pmod=$(stat -c '%Y' /proc/$pid) 
 	
 		if [[ -f $INSTANCE_RUNTIME_DIR/$pid ]] && [[ $(stat -c '%Y' $INSTANCE_RUNTIME_DIR/$pid) == $pmod ]]; then
 			local instance=$instance
 			local start=
-			local runtime_args=""
+			local runtime_args=
+
 			source $INSTANCE_RUNTIME_DIR/$pid
-			INSTANCE[$pid]="$instance"
-			START[$pid]="$start"
-			RUNTIME[$pid]="$runtime_args"
-			PROCESS[$pid]="${pid}"	
+			
+			CMD_EXEC[$pid]="${cmdlist[1]}"
+			cmd=${cmd#*${cmdlist[1]}}
+			CMD_ARGS[$pid]="${cmd:1}"
+			enumerate_process 1
 		elif [[ ${cmdlist[0]} == bwrap ]]; then 
 			local parent_id=$(cat /proc/$pid/status | grep PPid); parent_id=${parent_id##*	}
-			local parent_runtime=${RUNTIME[$parent_id]}
+			local parent_runtime=${CMD_EXEC[$parent_id]}
 		
-			if [[ ! $SHOW_BWRAP ]]; then
-				skip=; for p in $(get_child_ids $parent_id); do
-					[[ $p == $pid ]] && skip=1 && break
+			if [[ ! $ENUMERATE_BWRAP ]]; then
+				skip=; for p in ${CHILD_PROCESS[@]}; do					
+				[[ $p == $pid ]] && skip=1 && break
 				done; [[ $skip ]] && continue
 			fi
 		
 			[[ ! $parent_runtime ]] && log_error $LOG_ERR_WARN "Runtime metadata for $pid was not found."
-			
-			INSTANCE[$pid]="$instance"
-			START[$pid]="$pmod"
-			RUNTIME[$pid]="$(if [[ $parent_runtime ]]; then echo $parent_runtime; else echo "bwrap"; fi)"		
-			PROCESS[$pid]="${pid}"	
-		else
-			if [[ -f $INSTANCE_RUNTIME_DIR/$pid  ]]; then
-				log_error $LOG_ERR_WARN "Runtime metadata for $pid was modified."
-			else
-				log_error $LOG_ERR_WARN "Runtime metadata for $pid was not found."
-			fi
 
-			INSTANCE[$pid]="$instance"
-			START[$pid]="$pmod"
-			RUNTIME[$pid]="${cmdlist[@]}"
-			PROCESS[$pid]="${pid}"	
+			CMD_EXEC[$pid]="${cmdlist[0]}"	
+			CMD_ARGS[$pid]="${cmd#* }"
+			enumerate_process
+		else
+			if [[ ! ${CHILD_PROCESS[$pid]} ]]; then	
+				if [[ -f $INSTANCE_RUNTIME_DIR/$pid  ]]; then
+					log_error $LOG_ERR_WARN "Runtime metadata for $pid was modified."
+				else
+					log_error $LOG_ERR_WARN "Runtime metadata for $pid was not found."
+				fi
+			fi
+			CMD_EXEC[$pid]="${cmd%% *}"
+			cmd=${cmd# *${cmdlist[0]}}
+			CMD_ARGS[$pid]="${cmd#* }"
+			enumerate_process
 		fi
 
 	done
 }
+
+enumerate_process() {
+	INSTANCE[$pid]="$instance"	
+	PROCESS[$pid]="$pid"		
+	START[$pid]="$pmod"
+
+	[[ ! $ENUMERATE_TREE ]] && 
+	[[ ! $1 ]] && return 
+	
+	PROCESS_CHILDREN[$pid]=$(get_child_ids $pid)
+
+	for p in ${PROCESS_CHILDREN[$pid]}; do
+		[[ ${CHILD_PROCESS[$p]} ]] ||
+		[[ ${PROCESS[$p]} ]] && continue
+		CHILD_PROCESS[$p]="$pid"
+	done
+}
+
 
 format_time() {
 	if [[ $1 -le 60 ]]; then
@@ -199,7 +238,6 @@ get_arrow() {
 }
 
 kill_instance() {
-
 	if [[ ! $SWITCH_NOCONFIRM ]]; then
 		printf "$BAR %s $RESET\n\n" "Instances"
 		for pid in ${PROCESS[@]}; do 
@@ -212,7 +250,7 @@ kill_instance() {
 	for parent_pid in ${PROCESS[@]}; do	
 		[[ ! -d /proc/$parent_pid/ ]] && continue
 		
-		for pid in $(get_child_ids $parent_pid); do
+		for pid in $(get_child_ids ${PROCESS_CHILDREN[$parent_pid]}); do
 			[[ ! -d /proc/$pid/ ]] && continue
 			kill $KILL_PARAM $pid
 			log "$(get_arrow $?) Killed ${INSTANCE[$parent_pid]} ($pid)"
@@ -225,13 +263,14 @@ get_child_ids() {
 	local pids=()
 
 	while true; do
-		local procid=$(cat $child) 
+		local procid=$(cat $child 2>/dev/null) 
 		[[ ! $procid ]] && break
 		procid=${procid%% *}
 		child="/proc/$procid/task/$procid/children"		
 		pids+=($procid)
 	done
-	echo ${pids[@]}
+
+	echo "${pids[@]} "
 }
 
 enumerate_ps_list() {
@@ -239,7 +278,6 @@ enumerate_ps_list() {
 		local instance=${INSTANCE[$pid]}
 		local runtime_args=
 		local time=
-		local pids="$pid"
 		local vars=()
 
 		if [[ ${START[$pid]} ]]; then
@@ -248,13 +286,14 @@ enumerate_ps_list() {
 			[[ $SHOW_PID ]] && printf "\n%s" $pid
 			continue
 		fi
+		
 
-		[[ $SHOW_PIDS ]] && pids=$(get_child_ids $pid)
 		[[ $SHOW_PID ]] && vars+=($pid)
 		[[ $SHOW_CONTAINER ]] && vars+=($instance)
 		[[ $SHOW_UPTIME ]] &&  vars+=($time)
-		[[ $SHOW_PIDS ]] && vars+=($pids)
-		[[ $SHOW_RUNTIME ]] && vars+=(${RUNTIME[$pid]})
+		[[ $SHOW_PIDS ]] && vars+=("${PROCESS_CHILDREN[$pid]} ")
+		[[ $SHOW_EXEC ]] && vars+=(${CMD_EXEC[$pid]})
+		[[ $SHOW_ARGS ]] && vars+=(${CMD_ARGS[$pid]})
 		[[ ${#vars[@]} > 0 ]] && printf "\n%s\t%s\t%s\t%s\t%s" ${vars[@]}
 	done
 }
@@ -265,7 +304,18 @@ column_headers() {
 		$([[ $SHOW_CONTAINER ]] && echo Container) \
 		$([[ $SHOW_UPTIME ]] && echo Uptime) \
 		$([[ $SHOW_PIDS ]] && echo Child PIDs) \
-		$([[ $SHOW_RUNTIME ]] && echo Command) 	
+		$([[ $SHOW_EXEC ]] && echo Executable) \
+		$([[ $SHOW_ARGS ]] && echo Arguments) 	
+}
+
+column_params() {
+	printf "%s%s%s%s%s%s" \
+	$([[ $SHOW_PID ]] && echo PID) \
+	$([[ $SHOW_CONTAINER ]] && echo ,CONTAINER) \
+	$([[ $SHOW_UPTIME ]] && echo ,UPTIME) \
+	$([[ $SHOW_PIDS ]] && echo ,CHILDREN) \
+	$([[ $SHOW_EXEC ]] && echo ,EXEC) \
+	$([[ $SHOW_ARGS ]] && echo ,ARGS)
 }
 
 main $@

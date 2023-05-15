@@ -39,17 +39,18 @@ main () {
 
 parse_args () {
 	for var in "$@"; do case $var in
+		-v|--verbose)		SWITCH+=v;;
 		--explicit)		SWITCH=Ep;;
 		--process|-P)		SWITCH=P;;
 		--create|-C)		SWITCH=C;;
 		--execute|-E)		SWITCH=E;;
 		--sync|-S)		SWITCH=S;;
 		--utils|-U)		SWITCH=U;;
-		--help=*)		HELP=("$(echo $var | cut -c 8-)")
+		--help=*)		HELP="${var:7}"
 					SWITCH=h;;
 		-h|--help)		SWITCH=h;;
 		-V|--version)		SWITCH=V;;
-		-E*|-C*|-S*|-U*|-P*)	SWITCH=$(echo $var | cut -c 2-2);;
+		-E*|-C*|-S*|-U*|-P*)	SWITCH=${var:1:1};;
 		*) 			ARGS+=("$var")
 	esac; [[ $SWITCH ]] && break; done
 }

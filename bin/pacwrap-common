@@ -39,7 +39,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.13 BETA"
+VER="v0.9.14 BETA"
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
@@ -56,6 +56,7 @@ LOG_ERR_ERROR=3
 [[ ! $PACWRAP_CACHE_DIR ]] && PACWRAP_CACHE_DIR="$HOME/.cache/pacwrap"
 [[ ! $PACWRAP_CONFIG_DIR ]] && PACWRAP_CONFIG_DIR="$HOME/.config/pacwrap"
 [[ ! $PACWRAP_PACCACHE_ARGUMENTS ]] && PACWRAP_PACCACHE_ARGUMENTS="-rk 1"
+[[ ! $PACWRAP_PASSTHROUGH_CMD ]] && PACWRAP_PASSTHROUGH_CMD="sudo pacman"
 
 VERBOSE="/dev/null"
 
@@ -83,11 +84,10 @@ init() {
 	[[ $EXEC_NAME != "pacwrap" ]] && 
 		runtime_check
 	
-	case $SWITCH in
-		*n*)		WITCH_NOCONFIRM=1;;
-		*v*)		VERBOSE="/dev/stdout";;
-		*h*|*V*)	manual_script;;
-	esac
+	[[ $SWITCH == *n* ]] && SWITCH_NOCONFIRM=1
+	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
+	[[ $SWITCH == *V* ]] ||
+	[[ $SWITCH == *h* ]] && manual_script
 
 	[[ ! -f $LOG_FILE ]] && touch $LOG_FILE
 	[[ ! $1 ]] && [[ -f $LOCK_FILE ]] && 
@@ -135,6 +135,11 @@ populate_configuration() {
 	INSTANCE_CONFIG[$instance,1]="deps=(${DEPS[@]})"
 	INSTANCE_CONFIG[$instance,2]=$SYNC_PACMANDB
 	INSTANCE_CONFIG[$instance,3]="pkgs=(${PKGS[@]})"
+	INSTANCE_CONFIG[$instance,4]=$CONCURRENT_LIMIT	
+}
+
+return_concurrent_limit() {
+	echo ${INSTANCE_CONFIG[$1,4]}
 }
 
 return_sync_pacmandb() {
@@ -358,7 +363,8 @@ generate_config() {
 ##\n## Configuration for $instance container\n## generated on $(date "+%F %T") by $EXEC_NAME.
 \n##\n\n# Container type (DO NOT EDIT)\nTYPE=($(return_type))\n\n# Container dependency array (DO NOT EDIT)
 \nDEPS=($(return_dependencies))\n\n# Container explicit install array\nPKGS=($@)\n\n# Forcibly apply pacman -Sy to container
-\n# Not applicable to ROOT containers\nSYNC_PACMANDB=$(return_sync_pacmandb)
+\n# Not applicable to ROOT containers\nSYNC_PACMANDB=$(return_sync_pacmandb)\n\n# Limit concurrent containers running
+\nCONCURRENRT_LIMIT=$(return_concurrent_limit $instance)
 _CONFIG
 )
 	echo -e $config > $INSTANCE_CONFIG_DIR/$instance

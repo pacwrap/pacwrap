@@ -49,11 +49,12 @@ main () {
 
 parse_args () {
 	for var in "$@"; do case $var in 
+		-v|--verbose)	SWITCH+="v";;
 		-V|--version)	SWITCH="V";;
-		--dep=*) 	DEPEND=$(echo $var | cut -c 7-);;	
+		--dep=*) 	DEPEND="${var:6}";;	
 		--is-dep) 	SWITCH+="d";;
 		--is-base) 	SWITCH+="b";;
-		-C*) 		SWITCH+=$(echo $var | cut -c 3-);;
+		-C*) 		SWITCH+="${var:2}";;
 		*) 		ARGS+=("$var");;
 	esac; CLI_INVOCATION+="$var "; done
 }
@@ -72,7 +73,7 @@ script_init () {
 	ARCHLINUX_TARBALL="archlinux-bootstrap-x86_64.tar.gz" 
 	ARCHLINUX_TARBALL_CACHE="$PACWRAP_CACHE_DIR/$ARCHLINUX_TARBALL" 
 
-	EXEC_SCRIPT="$EXEC_SCRIPT $INSTANCE --root --exec"	
+	PARAMS="$INSTANCE --root --exec"	
 	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
 	
 	case $SWITCH in
@@ -276,16 +277,16 @@ get_directory_pop() {
 init_trust () {
 	log "$BAR_GREEN Initializing pacman trust database..." \
 	    "Initializing pacman trust database"
-	$EXEC_SCRIPT pacman-key --init 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	$EXEC_SCRIPT $PARAMS pacman-key --init 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 	log "$ARROW Populating pacman trust database..."
-	$EXEC_SCRIPT pacman-key --populate 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
+	$EXEC_SCRIPT $PARAMS pacman-key --populate 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST
 }
 
 finalise () {
 	log "$ARROW Generating locale..."
-	$EXEC_SCRIPT locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
+	$EXEC_SCRIPT $PARAMS locale-gen 1>>$OUTPUT_DEST 2>>$OUTPUT_DEST	
 	log "$ARROW Updating certificate trust..."
-	$EXEC_SCRIPT update-ca-trust 1>>$OUTPUT_DEST 2p>>$OUTPUT_DEST
+	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>$OUTPUT_DEST 2p>>$OUTPUT_DEST
 	[[ $C_TYPE != "BASE" ]] && sync_foreign_database
 	$SYNC_SCRIPT -Sg $INSTANCE
 	[[ $C_TYPE == "BASE" ]] && sync_base_packages
@@ -301,7 +302,7 @@ install_packages () {
 	fi
 
 	log_to_file "Installing specified packages"
-	$EXEC_SCRIPT pacman -Sy ${ARGS[@]} --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT $PARAMS pacman -Sy ${ARGS[@]} --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
 	if [[ $? != 0 ]]; then
 		log_error $ARROW_RED "Installation failed." \
 				     "Use pacwrap -Cv and examine stdout for details."
@@ -314,9 +315,9 @@ install_packages () {
 
 sync_base_packages () {
 	log "$ARROW Some housekeeping..." "Removing arch-install-scripts"	
-	$EXEC_SCRIPT pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
+	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
 	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
-	$EXEC_SCRIPT pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT $PARAMS pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
 }
 
 sync_foreign_database () {
@@ -327,12 +328,14 @@ sync_foreign_database () {
 	cp -rn "$INSTANCE_DEPEND_ROOT/var/lib/pacman/local" "$INSTANCE_ROOT/var/lib/pacman/"
 
 	local dbsyncpkgs=$(get_foreign_packages)
+	
+	echo $VERBOSE
 
 	[[ ${dbsyncpkgs[@]} ]] &&
-		$EXEC_SCRIPT pacman -Su \
+		$EXEC_SCRIPT $PARAMS pacman -Su \
 		--dbonly \
 		--logfile /tmp/pacman.log \
-		--noconfirm ${dbsyncpkgs[@]} 2>/dev/null 1>>$VERBOSE	
+		--noconfirm ${dbsyncpkgs[@]} 2>$VERBOSE 1>>$VERBOSE	
 }
 
 on_exit() {
