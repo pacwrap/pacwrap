@@ -294,7 +294,7 @@ finalise () {
 }
 
 install_packages () {
-	[[ $SWITCH != *n* ]] && echo -e "$BAR Install specified packages \n$BOLD\n${ARGS[@]}" 
+	[[ $SWITCH != *n* ]] && echo -e "$BAR Install specified packages \n$BOLD\n${ARGS[@]}\n" 
 
 	if [[ ! $(query_confirm_Yn "Proceed with installation?") ]]; then
 		log_error $ARROW_RED "Installation aborted by user." "Operation cancelled."
@@ -329,8 +329,6 @@ sync_foreign_database () {
 
 	local dbsyncpkgs=$(get_foreign_packages)
 	
-	echo $VERBOSE
-
 	[[ ${dbsyncpkgs[@]} ]] &&
 		$EXEC_SCRIPT $PARAMS pacman -Su \
 		--dbonly \

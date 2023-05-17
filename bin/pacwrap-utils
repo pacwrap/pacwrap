@@ -94,6 +94,14 @@ summary() {
 	fi
 }
 
+
+check_active_instances() {
+	local running_instances=($($PS_SCRIPT -Pid ${instances[@]} 2>/dev/null))
+	[[ ${#running_instances[@]} > 0 ]] && 
+		log_error $ARROW_RED "There are running instances of the containers specified." \
+				     "Please close or terminate them to perform this operation." 1
+}
+
 parse_args () {
 	for var in "$@"; do case $var in 
 			-v|--verbose)	SWITCH+="v";;
@@ -154,6 +162,8 @@ replicate() {
 
 	[[ ! $SWITCH_NOCONFIRM ]] && echo -e "$BAR Replicate \n\n${instances[@]}\n"	
 	[[ ! "$(query_confirm_yN "Proceed with replication?")" ]] && return
+
+	check_active_instances
 
 	invoke_replication ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}
 }
@@ -245,6 +255,8 @@ delete() {
 	[[ ! $instances ]] && log_error $LOG_ERR_HELP "Instance not specified."
 	[[ ! $SWITCH_NOCONFIRM ]]  && printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete $1" "$instances"
 	[[ ! "$(query_confirm_yN "Proceed with $1?")" ]] && return
+
+	check_active_instances
 
 	for instance in $instances; do
 		if [[ ! -d $2/$instance ]]; then

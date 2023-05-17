@@ -39,7 +39,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.14 BETA"
+VER="v0.9.15 BETA"
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
@@ -87,7 +87,7 @@ init() {
 	[[ $SWITCH == *n* ]] && SWITCH_NOCONFIRM=1
 	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
 	[[ $SWITCH == *V* ]] ||
-	[[ $SWITCH == *h* ]] && manual_script
+	[[ $SWITCH == h* ]] && manual_script
 
 	[[ ! -f $LOG_FILE ]] && touch $LOG_FILE
 	[[ ! $1 ]] && [[ -f $LOCK_FILE ]] && 

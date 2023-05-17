@@ -127,8 +127,8 @@ man_process() {
 	cat << _USAGE
 ${HEADER}PROCESS OPTIONS$HEADER_RESET
 
-${SUB_HEADER}-s, --summary$RESET
-${SUB_TEXT}Show process summary of running containers and display column header
+${SUB_HEADER}-s, --status$RESET
+${SUB_TEXT}Display process status of running containers.
 
 ${SUB_HEADER}-k, --kill$RESET
 ${SUB_TEXT}Kill enumerated processes.
@@ -136,32 +136,29 @@ ${SUB_TEXT}Kill enumerated processes.
 $TAB${SUB_HEADER}-##$RESET
 $TAB${SUB_TEXT}Signal flag. Default is 1 (${BOLD}SIGHUP$RESET) if otherwise unspecified.
 
-${SUB_HEADER}-n, --name$RESET
-${SUB_TEXT}Display container column. Shown with --summary.
-
 ${SUB_HEADER}-id, --identifier$RESET
-${SUB_TEXT}Display process identifier column. Shown with --summary.
+${SUB_TEXT}List process identifiers. Shown by default with --status.
 
-${SUB_HEADER}-c, --children$RESET
-${SUB_TEXT}Display Child PIDs column.
+${SUB_HEADER}-n, --name$RESET
+${SUB_TEXT}List containers. Shown by default with --status.
 
 ${SUB_HEADER}-u, --uptime$RESET
-${SUB_TEXT}Show process uptime.
+${SUB_TEXT}Display process uptime.
 
-${SUB_HEADER}-x, --exec$RESET
-${SUB_TEXT}Display executable column.
+${SUB_HEADER}-e, --exec$RESET
+${SUB_TEXT}List executables.
 
-${SUB_HEADER}-a, --args$RESET
-${SUB_TEXT}Display arguments column.
+${SUB_HEADER}-x, --args$RESET
+${SUB_TEXT}List arguments.
 
 ${SUB_HEADER}-w, --wrap$RESET
 ${SUB_TEXT}Wrap large argument columns instead of truncate.
 
-${SUB_HEADER}-b, --eunmerate-bwrap$RESET
-${SUB_TEXT}Enumerate child bubblewrap process tree.
-
 ${SUB_HEADER}-t, --eunmerate-tree$RESET
-${SUB_TEXT}Enumerate child process tree.
+${SUB_TEXT}Enumerate process tree.
+
+${SUB_HEADER}-b, --eunmerate-bwrap$RESET
+${SUB_TEXT}Enumerate process tree with bubblewrap processes.
 
 _USAGE
 }
@@ -190,7 +187,13 @@ cat << _USAGE
 ${HEADER}UTILITY OPTIONS$HEADER_RESET
 ${SUB_HEADER}-d, --delete$RESET
 ${SUB_TEXT}Deletes the root and home directories of specified targets.
-	
+
+$TAB${SUB_HEADER}-r$RESET
+$TAB${SUB_TEXT}Delete root directory of container
+
+$TAB${SUB_HEADER}-h$RESET
+$TAB${SUB_TEXT}Delete home directory of container
+
 ${SUB_HEADER}-ls, --summarylist$RESET
 ${SUB_TEXT}Summarize information on container filesystems and their associated dependencies.
 

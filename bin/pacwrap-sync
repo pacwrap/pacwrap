@@ -55,8 +55,10 @@ main () {
 
 	if [[ $SYNC_UPGRADE ]] || ([[ $SYNC_UPDATE ]] && [[ ! $SYNC_FORCE ]]); then
 		log "$BAR_GREEN Starting container upgrade..."
-		[[ ! $SWITCH_NOCONFIRM ]] && echo -e $BAR "Update container \n\n${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}\n"
-		[[ ! "$(query_confirm_Yn "Proceed with update?")" ]] && return
+		if [[ ${ARGS[@]} ]]; then
+			[[ ! $SWITCH_NOCONFIRM ]] && echo -e $BAR "Update container \n\n${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}\n"
+			[[ ! "$(query_confirm_Yn "Proceed with update?")" ]] && return
+		fi
 		configure_containers ${baserootdeps[@]} ${rootdeps[@]}
 		update ${baserootdeps[@]} ${rootdeps[@]}
 	fi

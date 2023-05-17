@@ -45,7 +45,11 @@ script_init () {
 	
 	[[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] &&
 		log_error $LOG_ERR_HELP "Container $INSTANCE not found." 1
-		
+
+	[[ ! -d $INSTANCE_RUNTIME_DIR ]] && mkdir $INSTANCE_RUNTIME_DIR
+	
+	touch $INSTANCE_RUNTIME_DIR/$$
+	trap on_exit_invocation EXIT	
 }
 
 parse_args () {
@@ -81,7 +85,7 @@ execute_pacman() {
 check_concurrent() {
 	[[ ! $1 ]] && return
 
-	local processes=($($PS_SCRIPT -Pid $INSTANCE))
+	local processes=($($PS_SCRIPT -Pid $INSTANCE 2>/dev/null))
 
 	[[ ${#processes[@]} -gt $1 ]] && 
 		log_error "Concurrency limit exceeded: $1 > ${#processes[@]}." 1
@@ -91,31 +95,12 @@ execute_sandbox () {
 	[[ ! -f $INSTANCE_SCRIPT ]] && 
 		log_error $LOG_ERR_HELP	"Script $INSTANCE_SCRIPT not found." 1
 
-	runtime_config ${ARGS[@]}
 	check_concurrent $(return_concurrent_limit $INSTANCE)
 	
 	source $INSTANCE_SCRIPT
 }
 
-
-runtime_config() {
-	trap on_exit_invocation EXIT
-	
-	[[ ! -d $INSTANCE_RUNTIME_DIR ]] && mkdir $INSTANCE_RUNTIME_DIR
-	
-	local config=$(cat << _CONFIG
-##\n## Runtime session \n## generated on $(date "+%F %T") by $EXEC_NAME.
-\n##\n
-\ninstance=$INSTANCE
-\nstart=$(date +%s)
-\nruntime_args="$@"
-_CONFIG
-)
-	echo -e $config > $INSTANCE_RUNTIME_DIR/$$
-}
-
 execute_fakeroot() {
-	runtime_config "$@"
 	(exec bwrap \
 	--bind $INSTANCE_ROOT / \
 	--ro-bind /usr/lib/libfakeroot /usr/lib/libfakeroot/ \
