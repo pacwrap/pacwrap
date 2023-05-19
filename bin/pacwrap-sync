@@ -21,6 +21,9 @@
 source pacwrap-common
 
 declare -A updated	
+declare -A upgraded
+declare -A pkglist
+declare -A pkglist_explicit
 declare -A synced
 declare -A syncreq
 
@@ -271,20 +274,16 @@ check_root() {
 
 update_config() {
 	declare -A skip
-	
+
+	obtain_explicit_packages $instance
+
 	local old_local_pkgs=$(return_packages)
 	local package_list=()
-	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qqe)
-	[[ $? != 0 ]] && 
-		log_error $ARROW_RED "Query of pacman database failed." \
-				     "Use pacwrap -Sv and examine stdout for details." 1
-	
+	local local_pkgs=${pkglist_explicit[$instance]}
+
 	if [[ $(return_type) != "BASE" ]]; then
-		local pkgs=$($EXEC_SCRIPT $(return_dependency) pacman -Qqe)
-	
-		for pkg in $pkgs; do
-			skip[$pkg]=1
-		done
+		obtain_explicit_packages $(return_dependency)
+		for pkg in ${pkglist_explicit[$(return_dependency)]}; do skip[$pkg]=1; done
 	fi
 
 	for pkg in $local_pkgs; do
@@ -293,35 +292,37 @@ update_config() {
 	done
 
 	[[ "$(echo ${package_list[@]})" != "$(echo ${old_local_pkgs[@]})" ]] &&
-		generate_config ${package_list[@]}
-	
-	advance_progress 1	
+		generate_config ${package_list[@]}	
+	advance_progress 1
+}
+
+obtain_explicit_packages() {
+	[[ ${pkglist_explicit[$1]} ]] && return
+	pkglist_explicit[$1]=$($EXEC_SCRIPT $1 pacman -Qqe)
+	[[ $? != 0 ]] && 
+		log_error $ARROW_RED "Query of pacman database failed." \
+				     "Use pacwrap -Sv and examine stdout for details." 1
 }
 
 sync_pacman_conf () {	
+	declare -A skip
+	
 	local dep=$instance
 
 	[[ $(return_type) == "ROOT" ]] && dep=$(return_dependency)
 	
-	declare -A skip
-	local template="cat $(return_pacman_template $dep)"
-	local pacmanconf=$(return_pacman_sync $instance)
+	local template="$(return_pacman_template $dep)"
+	local pacmanconf="$(return_pacman_sync $instance)"
 	local ignorepkg="## Start of automated configuration ##\n"
 	
 	if [[ $(return_type) != "BASE" ]]; then		
 		for depc in $(return_dependencies); do
-			local skiplist=
-			local pkgs=$($EXEC_SCRIPT $depc pacman -Qq)
-			[[ $? != 0 ]] && 
-				log_error $ARROW_RED "Query of pacman database failed." \
-						     "Use pacwrap -Sv and examine stdout for details."
+			obtain_packages $depc
+			
+			local pkgs=${pkglist[$depc]}
 			for pkg in $pkgs; do
-			 	[[ ${skip[$pkg]} ]] && continue
+				[[ ${skip[$pkg]} ]] && continue
 				ignorepkg+="IgnorePkg  = $pkg\n"
-			done			
-			skiplist=$pkgs$skiplist
-
-			for pkg in $skiplist; do
 				skip[$pkg]=1
 			done
 		done
@@ -334,40 +335,45 @@ sync_pacman_conf () {
 	local header="##\n## THIS pacman.conf WAS AUTOMATICALLY GENERATED on $(date "+%F %T"). \n## DO NOT EDIT\n##\n" 
 
 	echo -e $header > $pacmanconf
-	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
+	sed -z "s/###IGNOREPKG###/$ignorepkg/g" < $template >> $pacmanconf
 	advance_progress 1
-	syncdb_pacman_conf	
+	syncdb_pacman_conf
 }
 
 syncdb_pacman_conf() {
 	local pacmanconf=$(return_pacman_syncdb $instance)
 	local ignorepkg="## Start of automated configuration ##\n"
-	local local_pkgs=$($EXEC_SCRIPT $instance pacman -Qq)
-	[[ $? != 0 ]] && 
-		log_error $ARROW_RED "Query of pacman database failed." \
-				     "Use pacwrap -Sv and examine stdout for details." 1
 	
-	if [[ $(return_type) != "BASE" ]]; then	
-		for pkg in $local_pkgs; do
+	obtain_packages $instance
+
+	[[ $(return_type) != "BASE" ]] &&	
+		for pkg in ${pkglist[$instance]}; do
 			[[ ${skip[$pkg]} ]] && continue
 			ignorepkg+="IgnorePkg  = $pkg\n"
 		done
-	fi
 	
 	ignorepkg+="## End of automated configuration ##"
 	echo -e $header > $pacmanconf
-	$template | sed -z "s/###IGNOREPKG###/$ignorepkg/g" >> $pacmanconf
+	sed -z "s/###IGNOREPKG###/$ignorepkg/g" < $template >> $pacmanconf
 	advance_progress 1
+}
+
+obtain_packages() {
+	[[ ${pkglist[$1]} ]] && return
+	pkglist[$1]=$($EXEC_SCRIPT $1 pacman -Qq)
+	[[ $? != 0 ]] && 
+		log_error $ARROW_RED "Query of pacman database failed." \
+				     "Use pacwrap -Sv and examine stdout for details." 1
 }
 
 invoke_update() {
 	local instance=$1
-	local dbsyncpkgs=
 
 	[[ ${updated[$instance]} ]] && return
-	updated[$instance]=1
+	
 	log "$BAR_GREEN Checking $instance for updates..."
 
+	local dbsyncpkgs=
 	local type=$(return_type);
 	local syncdb=$(return_sync_pacmandb)
 
@@ -380,7 +386,7 @@ invoke_update() {
 		fi
 		PMSYNCED=1
 	fi
-
+	
 	local result=$($EXEC_SCRIPT $instance pacman --color always -Qu | grep -v "ignored")
 
 	if ([[ $SYNC_OVERRIDE ]] || [[ ${syncreq[$(return_base)]} ]]) && 
@@ -406,6 +412,8 @@ invoke_update() {
 		log " Database synchronization complete!"
 	fi
 
+	updated[$instance]=1
+
 	if [[ ! $result ]]; then 
 		log "$ARROW Container $BOLD$instance$RESET is up to date!"
 		return
@@ -429,9 +437,12 @@ invoke_update() {
 		log "$ARROW Generating link cache..."
 		invoke_generate_cache $instance
 		synced[$instance]=1
+		pkglist[$instance]=
+		pkglist_explicit[$instance]=
 	fi
 
 	syncreq[$(return_base)]=1
+	upgraded[$instance]=$instance
 
 	log "$ARROW_GREEN Upgrade complete!"
 }
@@ -446,7 +457,7 @@ update () {
 		invoke_update $instance
 	done
 
-	log_to_file "Updated containers: $(echo $@)"
+	[[ ${#upgraded[@]} > 0 ]] && log_to_file "Upgraded containers: $(echo ${upgraded[@]})"
 }
 
 system_update() {
@@ -463,7 +474,7 @@ system_update() {
 		$pacman
 }
 
-configure_containers () {	
+configure_containers () {
 	local amt=$((${#@}*3))
 	local amt_done=0
 
@@ -471,12 +482,10 @@ configure_containers () {
 	set_progress_label "Configuring containers" $ARROW
 
 	for instance in "$@"; do check_root $instance
-		[[ $? == 1 ]] && continue	
+		[[ $? == 1 ]] && continue
 		sync_pacman_conf
 		update_config
 	done; echo
-
-	log_to_file "Configured containers: $(echo $@)"
 }
 
 abort () {	

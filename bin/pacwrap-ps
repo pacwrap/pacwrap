@@ -46,7 +46,7 @@ main () {
 	parse_args $@
 	init 1
 
-	[[ $SWITCH == Pk* ]] && log_to_file "Running '$RUNTIME_ARGS'"
+	[[ $SWITCH == *k* ]] && log_to_file "Running '$RUNTIME_ARGS'"
 
 	case $SWITCH in
 		*k*)	kill_instance ${roots[@]};;
@@ -121,7 +121,7 @@ enumerate_process_array() {
 		local stat=($param)
 		local pid=${stat[0]}
 		local parent_id=${stat[3]}
-		local instance="-"
+		local instance=
 		
 		[[ ${stat[1]} != "(pacwrap"* ]] && [[ ${stat[1]} != "(bwrap)" ]] && 
 		[[ ! ${CHILD_PROCESS[$parent_id]} ]] && [[ ! ${CHILD_PROCESS[$pid]} ]] && continue
@@ -279,10 +279,10 @@ enumerate_ps_list() {
 			local children=(${PROCESS_CHILDREN[$pid]})
 		
 			for pid in ${children[@]}; do [[ ! ${PROCESS[$pid]} ]] && continue
-				[[ $DISPLAY_COLUMNS ]] && if [[ ${children[${#children[@]}-1]} != $pid ]]; then
-					printf "├─"
-				else
-					printf "└─"
+				if [[ $DISPLAY_COLUMNS ]]; then
+					local char='c'
+					[[ ${children[${#children[@]}-1]} == $pid ]] && char='4'
+					printf "\xE2\x94\x9$char\xE2\x94\x80"
 				fi
 				vars=(); print_process; [[ $? == 1 ]] && return 1
 			done

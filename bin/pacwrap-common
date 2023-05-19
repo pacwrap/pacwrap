@@ -39,7 +39,7 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.15 BETA"
+VER="v0.9.16 BETA"
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
@@ -186,35 +186,23 @@ return_pacman_syncdb() {
 log () {
 	printf "%s$RESET\n" "$1"
 	[[ $2 ]] && case $2 in
-		1)
-			log_to_file "$1"
-			;;
-		*)
-			log_to_file "$2"
-			;;
+		1)	log_to_file "$1";;
+		*)	log_to_file "$2";;
 	esac
 }
 
 log_error() {
 	case $1 in
-		$LOG_ERR_HELP)
-			printf "%s %s\n%s\n" "$EXEC_NAME error:" "$2" \
-			"Try 'pacwrap -h' for more information on valid operational parameters."
-			exit
-			;;
-		$ARROW_RED)
-			printf "$ARROW_RED %s\n %s\n" "$2" "$3"	>&2
-			log_to_file "$2"
-			[[ $4 ]] && exit $4
-			;;
-		$LOG_ERR_WARN)
-			printf "$BOLD$YELLOW%s$RESET %s\n" "warning:" "$2" >&2
-			[[ $3 ]] && exit $3
-			;;
-		*)
-			printf "$BOLD$RED%s$RESET %s\n" "error:" "$1" >&2
-			[[ $2 ]] && exit $2
-			;;
+		$LOG_ERR_HELP)	printf "%s %s\n%s\n" "$EXEC_NAME error:" "$2" \
+					"Try 'pacwrap -h' for more information on valid operational parameters."
+				exit;;
+		$ARROW_RED)	printf "$ARROW_RED %s\n %s\n" "$2" "$3"	>&2
+				log_to_file "$2"
+				[[ $4 ]] && exit $4;;
+		$LOG_ERR_WARN)	printf "$BOLD$YELLOW%s$RESET %s\n" "warning:" "$2" >&2
+				[[ $3 ]] && exit $3;;
+		*)		printf "$BOLD$RED%s$RESET %s\n" "error:" "$1" >&2
+				[[ $2 ]] && exit $2;;
 	esac
 }
 
@@ -343,16 +331,18 @@ initialize_data_directory() {
 	([[ ! -f $INSTANCE_PACMAN_MIRRORLIST ]] || [[ $SWITCH == *m* ]]) && cp /etc/pacman.d/mirrorlist $INSTANCE_PACMAN_MIRRORLIST
 	[[ ! -f $INSTANCE_PACMAN_CFG_DIR/pacman.conf ]] && echo -e $(pacman_conf) >  $INSTANCE_PACMAN_CFG_DIR/pacman.conf		
 
-	cat  $INSTANCE_PACMAN_CFG_DIR/pacman.conf | sed -z "s,$ins_string,$ins_string$template,g" >  $INSTANCE_PACMAN_CFG_DIR/pacman.template.conf
+	sed -z "s,$ins_string,$ins_string$template,g" < $INSTANCE_PACMAN_CFG_DIR/pacman.conf > $INSTANCE_PACMAN_CFG_DIR/pacman.template.conf
 }
 
 pacman_conf() {
 echo $(cat << _CONFIG
 [options]\nHoldPkg     = pacman glibc\nArchitecture = auto\nNoExtract   = pacman-mirrorlist\n\nColor\nCheckSpace
-\n#ParallelDownloads = 5\n\nSigLevel    = Required DatabaseOptional\nLocalFileSigLevel = Optional\n\n#[testing]
-\n#Include = /etc/pacman.d/mirrorlist\n\n[core]\nInclude = /etc/pacman.d/mirrorlist\n\n[extra]
-\nInclude = /etc/pacman.d/mirrorlist\n\n#[community-testing]\n#Include = /etc/pacman.d/mirrorlist
-\n\n[community]\nInclude = /etc/pacman.d/mirrorlist\n\n#[multilib-testing]\n#Include = /etc/pacman.d/mirrorlist
+\n#ParallelDownloads = 5\n\nSigLevel    = Required DatabaseOptional\nLocalFileSigLevel = Optional
+\n\n#[core-testing]\n#Include = /etc/pacman.d/mirrorlist
+\n\n[core]\nInclude = /etc/pacman.d/mirrorlist
+\n\n#[extra-testing]\n#Include = /etc/pacman.d/mirrorlist
+\n\n[extra]\nInclude = /etc/pacman.d/mirrorlist
+\n\n#[multilib-testing]\n#Include = /etc/pacman.d/mirrorlist
 \n\n#[multilib]\n#Include = /etc/pacman.d/mirrorlist
 _CONFIG
 )
@@ -364,7 +354,7 @@ generate_config() {
 \n##\n\n# Container type (DO NOT EDIT)\nTYPE=($(return_type))\n\n# Container dependency array (DO NOT EDIT)
 \nDEPS=($(return_dependencies))\n\n# Container explicit install array\nPKGS=($@)\n\n# Forcibly apply pacman -Sy to container
 \n# Not applicable to ROOT containers\nSYNC_PACMANDB=$(return_sync_pacmandb)\n\n# Limit concurrent containers running
-\nCONCURRENRT_LIMIT=$(return_concurrent_limit $instance)
+\nCONCURRENT_LIMIT=$(return_concurrent_limit $instance)
 _CONFIG
 )
 	echo -e $config > $INSTANCE_CONFIG_DIR/$instance

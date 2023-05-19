@@ -114,7 +114,7 @@ parse_args () {
 			--link|-l)	SWITCH+="l";;
 			--tar|-t)	SWITCH+="t";;
 			-V|--version)	SWITCH="V";;
-			-U*)		SWITCH+="${var:2}";;	
+			-U*)		SWITCH="${var:1}";;	
 			--cfg-dir=*)	REPLICATION_CONFIG_DIR="${var:10}";;		
 			*)		ARGS+=("$var");;
 	esac; done
@@ -152,7 +152,7 @@ replicate() {
 		[[ ${#ARGS[@]} -le 0 ]] && instances=$@
 		[[ ! $instances ]] && log_error $LOG_ERR_HELP "Instance not specified." 1
 
-		for instance in ${instances[@]}; do		
+		for instance in ${instances[@]}; do 
 			[[ ! -f $INSTANCE_CONFIG_DIR/$instance ]] && continue
 			source_configuration
 			populate_configuration
@@ -188,15 +188,11 @@ invoke_replication() {
 		local deps=()
 
 		for dep in ${baserootdeps[@]}; do
-			for depr in $deps_return; do
-				[[ $dep == $depr ]] && deps+=($dep)
-			done	
+			for depr in $deps_return; do [[ $dep == $depr ]] && deps+=($dep); done	
 		done
 	
 		for dep in ${rootdeps[@]}; do
-			for depr in $deps_return; do
-				[[ $dep == $depr ]] && deps+=($dep)
-			done
+			for depr in $deps_return; do [[ $dep == $depr ]] && deps+=($dep); done
 		done
 
 		for dep in ${deps[@]}; do	
@@ -204,9 +200,8 @@ invoke_replication() {
 		done
 		
 		for depr in $deps_return; do
-			if [[ ! -d $INSTANCE_ROOT_DIR/$depr ]]; then
-				log_error $LOG_ERR_HELP "Dependency $depr not fulfilled for $instance."
-			fi
+			[[ ! -d $INSTANCE_ROOT_DIR/$depr ]] &&
+				log_error "Dependency $depr not fulfilled for $instance." 1
 		done
 	
 		replicate_instance $instance
@@ -294,9 +289,8 @@ link_root() {
 	    "Created $instance -> $link" 
 }
 
-
 parse_du() {
-	for string in $(du -d 1 $INSTANCE_ROOT_DIR | tr '	' '-'); do
+	for string in $(du -d 1 $INSTANCE_ROOT_DIR | tr "$(echo -e '\t')" '-'); do
 		local bytes=${string%%-*}
 		local instance=${string##*/}
 
@@ -349,56 +343,35 @@ edit_file() {
 		local tmpfile=
 		local error=	
 		
-		if [[ ! $EDITOR ]]; then
-			EDITOR="vi"
-		fi
-
+		[[ ! $EDITOR ]] && EDITOR="vi"
 		[[ ! -f $(type -P $EDITOR) ]] &&
 			log_error "\$EDITOR was not found at $EDITOR." 1
-
 		[[ $1 ]] && dissolve=1
 
 		tmpfile=$(mktemp)
 		
 		case $SWITCH in
-			*c*)
-				file="$INSTANCE_CONFIG_DIR/$instance"
-				error="config file"
-			;;
-			*b*)
-				file="$PACWRAP_CONFIG_DIR/bwrap/$instance.sh"
+			*c*)	file="$INSTANCE_CONFIG_DIR/$instance"
+				error="config file";;
+			*b*)	file="$PACWRAP_CONFIG_DIR/bwrap/$instance.sh"
 				error="bubblewrap script $file"
-				create=1
-				;;	
-			*ips*)
-				file=$(return_pacman_syncdb $instance)
+				create=1;;	
+			*ips*)	file=$(return_pacman_syncdb $instance)
 				error="instanced pacman $file"
 				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
-				dissolve=1
-			;;
-			*ip*)
-				file=$(return_pacman_sync $instance)
+				dissolve=1;;
+			*ip*)	file=$(return_pacman_sync $instance)
 				error="instanced template $file"
 				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
-				dissolve=1
-			;;
-			*l*)
-				file="$PACWRAP_DATA_DIR/pacwrap.log"
+				dissolve=1;;
+			*l*)	file="$PACWRAP_DATA_DIR/pacwrap.log"
 				error="$file"
-				dissolve=1
-			;;
-			*pt*)
-				file=$(return_pacman_template $instance)
-				error="pacman template $file"
-			;;	
-			*p*)
-				file="$INSTANCE_PACMAN_CFG_DIR/pacman.conf"
-				error="default pacman.conf"
-			;;	
-			*)
-				printf "%s%s\n" "$RED$BOLD" "error:$RESET operation not defined."
-				return
-			;;
+				dissolve=1;;
+			*pt*)	file=$(return_pacman_template $instance)
+				error="pacman template $file";;	
+			*p*)	file="$INSTANCE_PACMAN_CFG_DIR/pacman.conf"
+				error="default pacman.conf";;	
+			*)	log_invalid_arguments 1
 		esac
 
 
@@ -409,14 +382,17 @@ edit_file() {
 			return
 		fi
 			
-		cat $file >> $tmpfile
+		[[ -f $file ]] && 
+			cat $file >> $tmpfile
+		
 		$EDITOR $tmpfile
 
 		local tmp_sum=$(sha256sum $tmpfile) 
 		local blank_sum=$(sha256sum /dev/null) 
-	
+		local config_sum=
+
 		if [[ "${tmp_sum% *}" != "${blank_sum% *}" ]] && [[ ! $dissolve ]]; then
-			local config_sum=$(sha256sum $file)
+			[[ -f $file ]] && config_sum=$(sha256sum $file)
 
 			if [[ "${tmp_sum% *}" != "${config_sum% *}" ]]; then
 				cp $tmpfile $file
