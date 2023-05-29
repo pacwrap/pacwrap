@@ -25,38 +25,37 @@ NUMFMT="numfmt --to=si --suffix=B --round=nearest --from-unit=1000 --format=%2f 
 
 main () {
 	trap exit INT
-
-	local roots=()
-	local rootdeps=()
-	local baserootdeps=()
-	local syncroots=()
+	
 	local links=
 
 	parse_args $@
 	init
 
-	[[ $SWITCH != Uls* ]] && log_to_file "Running '$RUNTIME_ARGS'"
-
 	case $SWITCH in
-		Uc*)	[[ $(type -p paccache) ]] && 
-			paccache --cachedir $INSTANCE_CACHE_DIR ${ARGS[@]};;
-		Ui*)	initialize_data_directory;;
-		Ur*)	replicate ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]};;
-		Uv*)	edit_file 1;;
-		Ue*)	edit_file;;		
-		Uls*)	summary;;
-		Ul*)	link_root;;			
-		Ud*)	[[ $SWITCH == *r* ]] && delete "root" "$INSTANCE_ROOT_DIR" 
-			[[ $SWITCH == *h* ]] && delete "home" "$INSTANCE_HOME_DIR";;			
-		*)	log_invalid_arguments $1
+		Uc*)		[[ $(type -p paccache) ]] && paccache --cachedir $INSTANCE_PACMAN_CACHE ${ARGS[@]};;
+		Uml)		initialize_data_directory;;
+		Ud*|Ulsd|Urmd)	desktop_entry;;
+		Uo*)		open;;
+		Urm*)		remove;;	
+		Ur*)		replicate;;
+		Uv*)		edit_file 1;;
+		Ue*)		edit_file;;
+		Uls*)		summary;;
+		Ul*)		link_root;;
+		*)		log_invalid_arguments $1
 	esac
 }
 
 script_init () { 
+	[[ $SWITCH != Uls* ]] && log_to_file "Running '$RUNTIME_EXEC $RUNTIME_ARGS'"
+	[[ $SWITCH == *du* ]] && SHOW_SIZE=1
+	[[ $SWITCH == *b* ]] && NUMFMT="echo"
+	[[ $SWITCH == *f* ]] && FORCE_ACTION=1
+
 	[[ $REPLICATION_CONFIG_DIR ]] && 
 		INSTANCE_CONFIG_DIR=$REPLICATION_CONFIG_DIR
 
-	local linklist=$($list 2>/dev/null | grep -i "@" | tr -d "@")
+	local linklist=$(ls -U -1F "$INSTANCE_ROOT_DIR" 2>/dev/null | grep -i "@" | tr -d "@")
 
 	for f in $linklist; do
 		links+=($f)
@@ -66,75 +65,195 @@ script_init () {
 	trap on_exit EXIT
 }
 
+parse_args () {
+	for var in "$@"; do case $var in
+			--utils)			continue;;
+			-v|--verbose)			SWITCH+="v";;
+			--force|-f)			SWITCH+="f";;
+			--noconfirm|-n)			SWITCH+="n";;
+			--desktop-entry|-d)		SWITCH+="d";;
+			--list|-ls)			SWITCH+="ls";;
+			--show-bytes|-b)		SWITCH+="b";;
+			--disk-depth|-dd)		SWITCH+="dd";;
+			--disk-util|-du)		SWITCH+="du";;
+			--disk-sum|-uu)			SWITCH+="uu";;
+			--edit|-e)			SWITCH+="e";;
+			--view|-v)			SWITCH+="v";;
+			--inspect-pacman-sync|-ips)	SWITCH+="vips";;
+			--inspect-pacman-syncdb|-idb)	SWITCH+="vidb";;
+			--pacman-temmplate|-pt)		SWITCH+="pt";;
+			--pacman|-p)			SWITCH+="p";;
+			--config|-c)			SWITCH+="c";;
+			--remove|-rm)			SWITCH+="rm";;
+			--home|-h)			SWITCH+="h";;
+			--replicate|-r|--root)		SWITCH+="r";;
+			--link|-l|--log)		SWITCH+="l";;
+			--tar|-t)			SWITCH+="t";;
+			--open|-o)			SWITCH+="o";;	
+			--mirror-list|-ml)		SWITCH+="ml";;
+			-V|--version)			SWITCH="V";;
+			-U*)				SWITCH="${var:1}";;	
+			--cfg-dir=*)			REPLICATION_CONFIG_DIR="${var:10}";;		
+			*)				ARGS+=("$var");;
+	esac; done
+}
+
 summary() {	
 	declare -A size
 	local total=0
 
-	[[ $SWITCH == *b* ]] && NUMFMT="echo"
-
-	parse_du
-
-	if [[ $SWITCH != *ddd* ]]; then
-		list_root ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]} ${links[@]} | column -t -s "$(echo -e '\t')"
-	fi
-		
-	if [[ $SWITCH == *d* ]]; then			
+	[[ $SHOW_SIZE ]] && parse_du 
+	
+	list_root | column -t -s "$DELIMITER"
+	
+	if [[ $SHOW_SIZE ]] && [[ $SWITCH == *uu* ]]; then			
 		local actual_size=${size["root"]}	
 		local diff=$(($total - $actual_size))
 		
 		[[ $diff -le 0 ]] && diff=0
 
-		printf "\n${BOLD}Diskspace consumption summary$RESET\n"
-		printf "\n%s\t%s\n" "Total   " "  $($NUMFMT $total)"
+		printf "\n${BOLD}Diskspace utilization summary$RESET\n"
+		printf "\n%s\t\t%s\n" "Total" "  $($NUMFMT $total)"
 
-		[[ $SWITCH != *dd* ]] || [[ $SWITCH == *dddd* ]] && return
+		[[ $SWITCH != *dd* ]] && return
 
-		printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$RESET"
-		printf "%s\t%s\t\n" "${BOLD}Actual$RESET:  " " $($NUMFMT $actual_size)"
+		local actual=$($NUMFMT $actual_size)
+		local difference=$($NUMFMT $diff) 
+		local space=
+
+		for ((i=${#difference}; i<=${#actual}; i++)); do space+=" "; done
+
+		printf "%s\t%s\n" "Difference" "$UNDERLINE- $($NUMFMT $diff)$space$RESET"
+		printf "%s\t\t%s\n" "${BOLD}Actual$RESET:" "  $actual"
 	fi
 }
 
+parse_du() {
+	for string in $(du -d 1 "$INSTANCE_ROOT_DIR" | tr "$DELIMITER" '-'); do
+		local bytes=${string%%-*}
+		local instance=${string##*/}
 
-check_active_instances() {
-	local running_instances=($($PS_SCRIPT -Pid ${instances[@]} 2>/dev/null))
-	[[ ${#running_instances[@]} > 0 ]] && 
-		log_error $ARROW_RED "There are running instances of the containers specified." \
-				     "Please close or terminate them to perform this operation." 1
+		size["$instance"]=$bytes
+
+		if [[ $SWITCH == *dd* ]]; then 
+			[[ $instance == "root" ]] && continue
+			local dh=$(du -d 1 "$INSTANCE_ROOT_DIR/$instance" | tail -n-1); bytes=${dh%$DELIMITER*}
+			size["$instance"]=$bytes
+		fi	
+
+		[[ $instance == "root" ]] && continue
+		((total+=bytes))	
+	done
 }
 
-parse_args () {
-	for var in "$@"; do case $var in 
-			-v|--verbose)	SWITCH+="v";;
-			--noconfirm|-n)	SWITCH+="n";;
-			--list|-ls)	SWITCH+="ls";;
-			--edit|-e)	SWITCH+="e";;
-			--view|-v)	SWITCH+="v";;
-			--replicate|-r)	SWITCH+="r";;
-			--delete|-d)	SWITCH+="d";;
-			--link|-l)	SWITCH+="l";;
-			--tar|-t)	SWITCH+="t";;
-			-V|--version)	SWITCH="V";;
-			-U*)		SWITCH="${var:1}";;	
-			--cfg-dir=*)	REPLICATION_CONFIG_DIR="${var:10}";;		
-			*)		ARGS+=("$var");;
-	esac; done
+list_root() {
+	local roots=(${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]} ${links[@]})
+
+	printf "$BOLD%s\t%s\t%s\t%s$RESET\n" "Name" "Dependency" \
+		$([[ $SHOW_SIZE ]] && echo Size) "Type"		
+
+	for instance in ${roots[@]}; do
+		local dep="-"
+		local type="LINK"
+		local bytes=0
+
+		if [[ -L "$INSTANCE_ROOT_DIR/$instance" ]]; then
+			dep="$(ls -l "$INSTANCE_ROOT_DIR/$instance" | sed -z "s,$INSTANCE_ROOT_DIR/,,g")"
+		else
+			bytes=${size["$instance"]}; type=$(return_type)
+		fi
+
+		[[ $type != BASE ]] && [[ $type != LINK ]] && dep=$(return_dependency)
+
+		printf "%s\t%s\t%s\t%s\n" "$instance" "${dep##*> }" \
+			$([[ $SHOW_SIZE ]] && echo "$($NUMFMT $bytes)") "$type"
+	done
 }
 
-replicate() {
-	local instances=() 
-	local baserootdeps=
-	local rootdeps=
-	local roots=	
+desktop_entry() {
+	local instance=${ARGS[0]}
+	local application=${ARGS[1]}
+	local applications_dir="$HOME/.local/share/applications"
+
+	[[ ! -d "$applications_dir" ]] && log_error "Application directory '~/${applications_dir##$HOME/}' not found." 1
+
+	case $SWITCH in
+		*ls*)	if [[ ! $instance ]]; then 
+				local entries=($(ls "$applications_dir"/pacwrap.* 2>/dev/null))
+
+				printf "$BOLD%s$RESET:\n" "Desktop Entries"
+				[[ ${#entries[@]} -le 0 ]] && echo "No entries found." && return
+
+				for file in ${entries[@]}; do
+					echo ${file##*/}; done
+			else	check_root $instance
+				local entries=($(ls "$INSTANCE_ROOT_DIR/$instance/usr/share/applications/" 2>/dev/null))
+
+				printf "$BOLD%s$RESET in $BOLD%s$RESET:\n" "Desktop Entries" "$instance"
+				[[ ${#entries[@]} -le 0 ]] && echo "No entries found." && return
+
+				for file in ${entries[@]}; do
+					echo ${file##*/}; done
+			fi;;
+		*e)	edit_file;;
+		*rm*)	local desktop_entry="$applications_dir/pacwrap.$instance.desktop"
+			
+			test_argument "Desktop entry" $instance
+			check_file "Desktop entry" "$desktop_entry"
+
+			rm "$desktop_entry"
+			
+			log "$ARROW_GREEN Deleted '$desktop_entry'.";;
+		*)	local desktop_entry_local="$applications_dir/pacwrap.$application.desktop"
+			local desktop_entry="$INSTANCE_ROOT_DIR/$instance/usr/share/applications/$application.desktop"
+		
+			test_argument "Application" $application
+			check_root $instance
+			check_file "Desktop entry" "$desktop_entry_local" 1
+			check_file "Container desktop entry" "$desktop_entry"
+
+			sed -z "s/Exec=/Exec=pacwrap $instance \-E /g" < "$desktop_entry" > "$desktop_entry_local"
+
+			log "$ARROW_GREEN Created desktop entry for $BOLD$application$RESET derived from container $BOLD$instance$RESET."
+	esac
+}
+
+link_root() {
+	local instance=${ARGS[0]}
+	local link=${ARGS[1]}
+
+	test_argument "Targets" $instance
+	check_root 0 $link
+	check_root 1 $instance
+	
+	[[ ! $SWITCH_NOCONFIRM ]] && printf "$BAR %s\n\n$BOLD%s\n\n" "Create virtual instance" "$instance $ARROW $BOLD$link"
+	[[ ! "$(query_confirm_Yn "Proceed with creation?")" ]] && return
+
+	log "$BAR_GREEN Creating virtual instance $instance $ARROW $BOLD$link"
+
+	ln -s "$INSTANCE_ROOT_DIR/$link" "$INSTANCE_ROOT_DIR/$instance"
+	mkdir -p "$INSTANCE_HOME_DIR/$instance"
+	echo 'PS1="'$instance'> "' > "$INSTANCE_HOME_DIR/$instance/.bashrc"
+
+	log "$ARROW_GREEN Process complete!" \
+	    "Created $instance -> $link" 
+}
+
+replicate() { 
+	BASEROOTDEPS=
+	ROOTDEPS=
+	ROOTS=	
+
+	local instances=
 
 	if [[ $SWITCH == *t* ]]; then	
 		local default=$([[ ${#ARGS[@]} -le 1 ]] && echo 1)
 		local tar_archive=${ARGS[0]}
 
-		[[ ! $tar_archive ]] && log_error $LOG_ERR_HELP "tar not specified." 1
-		[[ ! -f $tar_archive ]] && log_error "tar archive $tar_archive not found." 1
+		test_argument "tar" "$tar_archive"
+		check_file "tar archive" "$tar_archive"	
 
-
-		local tar_list=($(tar tf ${ARGS[0]}))
+		local tar_list=($(tar tf "${ARGS[0]}"))
 	
 		for file in ${tar_list[@]}; do
 			local instance=${file##*/}
@@ -142,7 +261,7 @@ replicate() {
 			[[ ! $this ]] && for instance_list in ${ARGS[@]}; do
 			[[ "$instance" == "$instance_list" ]] && this=1 && break; done
 			[[ ! $instance ]] || [[ ! $this ]] && continue
-			eval $(tar axfO $tar_archive $file | grep -v "#")
+			eval $(tar axfO "$tar_archive" $file | grep -v "#")
 			populate_configuration
 			populate_container_array
 			instances+=($instance)
@@ -150,10 +269,10 @@ replicate() {
 	else
 		instances=(${ARGS[@]}) 
 		[[ ${#ARGS[@]} -le 0 ]] && instances=$@
-		[[ ! $instances ]] && log_error $LOG_ERR_HELP "Instance not specified." 1
+		test_argument "Targets" $instances
 
 		for instance in ${instances[@]}; do 
-			[[ ! -f $INSTANCE_CONFIG_DIR/$instance ]] && continue
+			[[ ! -f "$INSTANCE_CONFIG_DIR/$instance" ]] && continue
 			source_configuration
 			populate_configuration
 			populate_container_array
@@ -165,15 +284,15 @@ replicate() {
 
 	check_active_instances
 
-	invoke_replication ${baserootdeps[@]} ${rootdeps[@]} ${roots[@]}
+	invoke_replication ${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]}
 }
 
 invoke_replication() {
 	if [[ $SWITCH = *d* ]]; then
 		printf "$BAR_GREEN %s$RESET\n" "Deleting root instances..."
 		for instance in $@; do
-			[[ ! -d $INSTANCE_ROOT_DIR/$instance ]] && continue
-			rm -rf $INSTANCE_ROOT_DIR/$instance
+			[[ ! -d "$INSTANCE_ROOT_DIR/$instance" ]] && continue
+			rm -rf "$INSTANCE_ROOT_DIR/$instance"
 			printf "$ARROW_GREEN %s$RESET\n" "Deletion of $instance's root complete!"	
 			log_to_file "Deleted root $instance."
 		done
@@ -187,20 +306,18 @@ invoke_replication() {
 		local deps_return=$(return_dependencies)
 		local deps=()
 
-		for dep in ${baserootdeps[@]}; do
+		for dep in ${BASEROOTDEPS[@]}; do
 			for depr in $deps_return; do [[ $dep == $depr ]] && deps+=($dep); done	
 		done
 	
-		for dep in ${rootdeps[@]}; do
+		for dep in ${ROOTDEPS[@]}; do
 			for depr in $deps_return; do [[ $dep == $depr ]] && deps+=($dep); done
 		done
 
-		for dep in ${deps[@]}; do	
-			replicate_instance $dep
-		done
+		for dep in ${deps[@]}; do replicate_instance $dep; done
 		
 		for depr in $deps_return; do
-			[[ ! -d $INSTANCE_ROOT_DIR/$depr ]] &&
+			[[ ! -d "$INSTANCE_ROOT_DIR/$depr" ]] &&
 				log_error "Dependency $depr not fulfilled for $instance." 1
 		done
 	
@@ -222,15 +339,9 @@ replicate_instance() {
 	[[ $SWITCH == *v* ]] && params+="v"
 
 	case $type in
-		BASE)	
-			params+="b"
-			;;	
-		DEP)
-			params+="d --dep=$(return_dependency)"
-			;;
-		ROOT)
-			params+=" --dep=$(return_dependency)"
-			;;
+		BASE)	params+="b";;	
+		DEP)	params+="d --dep=$(return_dependency)";;
+		ROOT)	params+=" --dep=$(return_dependency)";;
 	esac
 	
 	$CREATE_SCRIPT $params $instance $(return_packages)
@@ -243,95 +354,48 @@ replicate_instance() {
 	completed[$instance]=1
 }
 
+remove() {
+	SWITCH=${SWITCH##*rm}
+	
+	check_active_instances
 
-delete() {
+	[[ $SWITCH == *r* ]] && invoke_removal "root" "$INSTANCE_ROOT_DIR" 
+	[[ $SWITCH == *h* ]] && invoke_removal "home" "$INSTANCE_HOME_DIR"
+}
+
+invoke_removal() {
 	local instances=${ARGS[@]};
 
-	[[ ! $instances ]] && log_error $LOG_ERR_HELP "Instance not specified."
+	test_argument "Targets" $instances
+
 	[[ ! $SWITCH_NOCONFIRM ]]  && printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete $1" "$instances"
 	[[ ! "$(query_confirm_yN "Proceed with $1?")" ]] && return
 
-	check_active_instances
-
 	for instance in $instances; do
-		if [[ ! -d $2/$instance ]]; then
+		if [[ ! -d "$2/$instance" ]]; then
 			log_error $LOG_ERR_WARN "$instance does not exist."
 			continue
 		fi
 		
-		rm -rf $2/$instance
+		rm -rf "$2/$instance"
 		
 		printf "$ARROW_GREEN %s$RESET\n" "Deletion of $instance's $1 complete!"					
 		log_to_file "Deleted $instance's $1."	
 	done
 }
 
-
-link_root() {
+open() {
+	local directory=
 	local instance=${ARGS[0]};
-	local link=${ARGS[1]};
+	check_root $instance
 
-	[[ ! $instance ]] && log_error $LOG_ERR_HELP "Instance not specified."
-	[[ ! $link ]] && log_error $LOG_ERR_HELP "Link not specified."
-	[[ -d $INSTANCE_ROOT_DIR/$instance ]] && log_error "$instance already exists." 1
-	[[ ! -d $INSTANCE_ROOT_DIR/$link ]] && log_error "Instance $link doesn't exist." 1
+	case $SWITCH in
+		*r*) directory=$INSTANCE_ROOT_DIR/$instance ;;
+		*h*) directory=$INSTANCE_HOME_DIR/$instance ;;
+	esac
 
-	[[ ! $SWITCH_NOCONFIRM ]] && printf "$BAR%s\n\n$BOLD%s\n\n" "Create virtual instance" "$instance $ARROW $BOLD$link"
-	[[ ! "$(query_confirm_Yn "Proceed with creation?")" ]] && return
-
-	log "$BAR_GREEN Creating virtual instance $instance $ARROW $BOLD$link"
-
-	ln -s $INSTANCE_ROOT_DIR/$link $INSTANCE_ROOT_DIR/$instance
-	mkdir -p $INSTANCE_HOME_DIR/$instance
-	echo 'PS1="'$instance'> "' > $INSTANCE_HOME_DIR/$instance/.bashrc
-
-	log "$ARROW_GREEN Process complete!" \
-	    "Created $instance -> $link" 
-}
-
-parse_du() {
-	for string in $(du -d 1 $INSTANCE_ROOT_DIR | tr "$(echo -e '\t')" '-'); do
-		local bytes=${string%%-*}
-		local instance=${string##*/}
-
-		size["$instance"]=$bytes
-
-		if [[ $SWITCH == *dd* ]] && [[ $SWITCH != *dddd* ]]; then 
-			[[ $instance == "root" ]] && continue
-			local dh=$(du -d 1 $INSTANCE_ROOT_DIR/$instance | tail -n-1)
-		 	bytes=${dh%	*}
-			size["$instance"]=$bytes
-		fi	
-
-		[[ $instance == "root" ]] && continue
-		((total+=bytes))
-		
-	done
-}
-
-list_root() {
-	printf "$BOLD%s\t%s\t%s\t%s$RESET\n" "Name" "Dependency" "Size" "Type"
-
-	for instance in $@; do
-		local dep=
-		local type=	
-		local bytes=0
-
-		if [[ ! ${size["$instance"]} ]]; then
-			dep="$(ls -l $INSTANCE_ROOT_DIR/$instance | sed -z "s,$INSTANCE_ROOT_DIR/,,g")"
-			type="LINK"
-		else
-			bytes=${size["$instance"]}
-			type=$(return_type)
-			if [[ $type != BASE ]]; then	
-				dep=$(return_dependency)
-			else
-				dep="-"
-			fi
-		fi
-
-		printf "%s\t%s\t%s\t%s\n" "$instance" "${dep##*> }" "$($NUMFMT $bytes)" "$type"
-	done
+	test_argument "Directory Type" $directory
+	gio open $directory
 }
 
 edit_file() {
@@ -351,19 +415,23 @@ edit_file() {
 		tmpfile=$(mktemp)
 		
 		case $SWITCH in
+			*ml*)	file="$INSTANCE_PACMAN_MIRRORLIST"
+				error="Pacman Mirrorlist $file";;
+			*idb*)	file=$(return_pacman_syncdb $instance)
+				error="instanced pacman $file"
+				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
+				dissolve=1;;
+			*ips*)	file=$(return_pacman_sync $instance)
+				error="instanced template $file"
+				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
+				dissolve=1;;
 			*c*)	file="$INSTANCE_CONFIG_DIR/$instance"
 				error="config file";;
 			*b*)	file="$PACWRAP_CONFIG_DIR/bwrap/$instance.sh"
 				error="bubblewrap script $file"
-				create=1;;	
-			*ips*)	file=$(return_pacman_syncdb $instance)
-				error="instanced pacman $file"
-				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
-				dissolve=1;;
-			*ip*)	file=$(return_pacman_sync $instance)
-				error="instanced template $file"
-				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
-				dissolve=1;;
+				create=1;;
+			*d*)	file="$HOME/.local/share/applications/pacwrap.$instance.desktop"
+				error="pacwrap.$instance.desktop";;
 			*l*)	file="$PACWRAP_DATA_DIR/pacwrap.log"
 				error="$file"
 				dissolve=1;;
@@ -375,15 +443,15 @@ edit_file() {
 		esac
 
 
-		if ([[ ! -f $file ]] && [[ $dissolve ]]) ||
-		   ([[ ! -f $file ]] && [[ ! $create ]]); then
-			printf "%s%s\n" "$RED$BOLD" "error:$RESET $error not found."		
+		if ([[ ! -f "$file" ]] && [[ $dissolve ]]) ||
+		   ([[ ! -f "$file" ]] && [[ ! $create ]]); then
+			log_error "$error not found."
 			rm $tmpfile
 			return
 		fi
 			
-		[[ -f $file ]] && 
-			cat $file >> $tmpfile
+		[[ -f "$file" ]] && 
+			cat "$file" >> $tmpfile
 		
 		$EDITOR $tmpfile
 
@@ -395,7 +463,7 @@ edit_file() {
 			[[ -f $file ]] && config_sum=$(sha256sum $file)
 
 			if [[ "${tmp_sum% *}" != "${config_sum% *}" ]]; then
-				cp $tmpfile $file
+				cp $tmpfile "$file"
 				log "$ARROW_GREEN Changes written." \
 				    "Changes written to $file."
 			else
@@ -408,8 +476,17 @@ edit_file() {
 		rm $tmpfile
 }
 
+check_active_instances() {
+	[[ $FORCE_ACTION ]] && return
+	[[ ! ${ARGS[@]} ]] && log_invalid_arguments 1
+	local running_instances=($($PS_SCRIPT -Pid ${ARGS[@]} 2>/dev/null))
+	[[ ${#running_instances[@]} > 0 ]] && 
+		log_error $ARROW_RED "There are running instances of the containers specified." \
+				     "Please close or terminate them to perform this operation." 1
+}
+
 on_exit () {
-	[[ -f $LOCK_FILE ]] && rm $LOCK_FILE
+	[[ -f "$LOCK_FILE" ]] && rm "$LOCK_FILE"
 }
 
 main $@

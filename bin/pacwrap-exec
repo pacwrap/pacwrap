@@ -34,38 +34,34 @@ main () {
 }
 
 script_init () {
-	[[ ! $INSTANCE ]] &&
-		log_error $LOG_ERR_HELP "Target not specified." 1
-	
+	check_root $INSTANCE
+
 	INSTANCE_ROOT=$INSTANCE_ROOT_DIR/$INSTANCE
 	INSTANCE_HOME=$INSTANCE_HOME_DIR/$INSTANCE
 	INSTANCE_USER=user
 	INSTANCE_HOME_MOUNT=/home/$INSTANCE_USER
 	INSTANCE_SCRIPT="$PACWRAP_CONFIG_DIR/bwrap/$INSTANCE.sh"
-	
-	[[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]] &&
-		log_error $LOG_ERR_HELP "Container $INSTANCE not found." 1
 
-	[[ ! -d $INSTANCE_RUNTIME_DIR ]] && mkdir $INSTANCE_RUNTIME_DIR
+	[[ ! -d "$INSTANCE_HOME" ]] && 
+		log_error $LOG_ERR_HELP "$INSTANCE' home directory is missing!" 1
+	[[ ! -d "$INSTANCE_RUNTIME_DIR" ]] && mkdir "$INSTANCE_RUNTIME_DIR"
 	
-	touch $INSTANCE_RUNTIME_DIR/$$
+	touch "$INSTANCE_RUNTIME_DIR/$$"
 	trap on_exit_invocation EXIT	
 }
 
 parse_args () {
 	local sbdefined=; for var in "$@"; do case $var in 
-		-v|--verbose)	SWITCH+="v";;
-		--explicit)	continue;;
-		--pacman)	SWITCH+="p";;
-		-V|--version)	SWITCH="V";;
-		--root)		SWITCH+="r";;
-		--shell)	SWITCH+="s";;
-		--exec)		SWITCH+="rc";;	
-		-E*)		SWITCH+="${var:2}";;
-		-*|-Q*|-R*)	if [[ $SWITCH == Ep* ]]; then SWITCH+="${var:1}"; else ARGS+=("$var"); fi;;
-		*)		[[ $sbdefined ]] && ARGS+=("$var") && continue		
-				INSTANCE=$var
-				sbdefined=1;;
+		--pacman|--explicit|--execute)	continue;;
+		--no-confirm)			SWITCH_NO_CONFIRM=1;;	
+		--root)				SWITCH+="r";;
+		--shell)			SWITCH+="s";;
+		--exec)				SWITCH+="rc";;	
+		-E*)				SWITCH+="${var:2}";;
+		-*|-Q*|-R*)			if [[ $SWITCH == Ep* ]]; then SWITCH+="${var:1}"; else ARGS+=("$var"); fi;;
+		*)				[[ $sbdefined ]] && ARGS+=("$var") && continue		
+						INSTANCE=$var
+						sbdefined=1;;
 	esac; done
 }
 
@@ -77,6 +73,7 @@ execute_pacman() {
 	 [[ ! $(query_confirm_yN "Execute $RESET'$YELLOW$runtime_args$RESET'$BOLD on $INSTANCE") ]] && return
 	
 	execute_fakeroot $runtime_args --noconfirm --log=/tmp/pacman.log 2>$VERBOSE
+	
 	[[ $? == 0 ]] && 
 	([[ $SWITCH == *S ]] || [[ $SWITCH == *R* ]]) && 
 	$SYNC_SCRIPT -Sgp $INSTANCE
@@ -92,34 +89,32 @@ check_concurrent() {
 }
 
 execute_sandbox () {
-	[[ ! -f $INSTANCE_SCRIPT ]] && 
-		log_error $LOG_ERR_HELP	"Script $INSTANCE_SCRIPT not found." 1
-
+	check_file "Script" "$INSTANCE_SCRIPT"
 	check_concurrent $(return_concurrent_limit $INSTANCE)
 	
-	source $INSTANCE_SCRIPT
+	source "$INSTANCE_SCRIPT"
 }
 
 execute_fakeroot() {
 	(exec bwrap \
-	--bind $INSTANCE_ROOT / \
+	--bind "$INSTANCE_ROOT" / \
 	--ro-bind /usr/lib/libfakeroot /usr/lib/libfakeroot/ \
 	--ro-bind /usr/bin/fakeroot /usr/bin/fakeroot \
 	--ro-bind /usr/bin/fakechroot /usr/bin/fakechroot \
 	--ro-bind /usr/bin/faked /usr/bin/faked \
 	--ro-bind /etc/resolv.conf /etc/resolv.conf \
 	--ro-bind /etc/localtime /etc/localtime \
-	--bind $INSTANCE_PACMAN_SYNC /var/lib/pacman/sync \
-	--bind $INSTANCE_PACMAN_GNUPG /etc/pacman.d/gnupg \
-	--bind $INSTANCE_PACMAN_CACHE /var/cache/pacman/pkg \
+	--bind "$INSTANCE_PACMAN_SYNC" /var/lib/pacman/sync \
+	--bind "$INSTANCE_PACMAN_GNUPG" /etc/pacman.d/gnupg \
+	--bind "$INSTANCE_PACMAN_CACHE" /var/cache/pacman/pkg \
 	--dev /dev \
 	--proc /proc \
 	--tmpfs /tmp \
-	--ro-bind $(return_pacman_syncdb) /tmp/pacman.conf \
-	--ro-bind $(return_pacman_sync) /etc/pacman.conf \
-	--ro-bind $INSTANCE_PACMAN_MIRRORLIST /etc/pacman.d/mirrorlist \
-	--bind $LOG_FILE /tmp/pacman.log \
-	--bind $INSTANCE_HOME $INSTANCE_HOME_MOUNT \
+	--ro-bind "$(return_pacman_syncdb)" /tmp/pacman.conf \
+	--ro-bind "$(return_pacman_sync)" /etc/pacman.conf \
+	--ro-bind "$INSTANCE_PACMAN_MIRRORLIST" /etc/pacman.d/mirrorlist \
+	--bind "$LOG_FILE" /tmp/pacman.log \
+	--bind "$INSTANCE_HOME" $INSTANCE_HOME_MOUNT \
 	--unshare-all \
 	--share-net \
 	--clearenv \
@@ -136,7 +131,7 @@ execute_fakeroot() {
 }
 
 on_exit_invocation() {
-	[[ -f $XDG_RUNTIME_DIR/.pacwrap/$$ ]] && rm $XDG_RUNTIME_DIR/.pacwrap/$$
+	[[ -f "$XDG_RUNTIME_DIR/.pacwrap/$$" ]] && rm "$XDG_RUNTIME_DIR/.pacwrap/$$"
 	on_exit
 }
 

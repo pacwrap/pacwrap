@@ -31,31 +31,25 @@ declare -A FLAG_INSTANCE
 
 KILL_PARAM="-1"
 COL_FMT_ARG="T"
-DELIMITER="$(echo -e '\t')"
 EXEC_SUBSTRING=${0%%-*}
 
 main () {
 	trap exit INT
 
-	local roots=()
-	local rootdeps=()
-	local baserootdeps=()
-	local syncroots=()
-	local links=
+	local roots=
 
 	parse_args $@
 	init 1
 
-	[[ $SWITCH == *k* ]] && log_to_file "Running '$RUNTIME_ARGS'"
-
 	case $SWITCH in
-		*k*)	kill_instance ${roots[@]};;
+		*k*)	kill_instance ${ROOTS[@]};;
 		*)	process_status; local sum=$?
 			[[ $sum == 1 ]] && log_invalid_arguments $1
 	esac
 }
 
 script_init () { 
+	[[ $SWITCH == *k* ]] && log_to_file "Running '$RUNTIME_EXEC $RUNTIME_ARGS'"
 	[[ $SWITCH == *s* ]] && DISPLAY_COLUMNS=1 
 	[[ $SWITCH == *n* ]] || [[ $DISPLAY_COLUMNS ]] && SHOW_CONTAINER=1
 	[[ $SWITCH == *id* ]] || [[ $DISPLAY_COLUMNS ]] && SHOW_PID=1
@@ -68,12 +62,8 @@ script_init () {
 
 	ENUM_SKIP=$([[ ${ARGS[@]} ]] && echo 1)
 
-	if [[ ${ARGS[@]} ]]; then 
-		roots=(); for instance in $ARGS; do
-			roots+=("$instance")
-		done; FILTER_ARGS=1
-	fi
-
+	[[ ${ARGS[@]} ]] && for instance in $ARGS; do roots+=("$instance"); done
+	
 	enumerate_process_array
 
 	[[ ! ${#PROCESS[@]} > 0 ]] && if [[ ${ARGS[@]} ]]; then	
@@ -106,9 +96,9 @@ parse_args () {
 process_status() {
 	if [[ $DISPLAY_COLUMNS ]]; then
 		local col_fmt=$([[ $SHOW_ARGS ]] && echo -${COL_FMT_ARG}ARGS)	
-		enumerate_ps_list ${roots[@]} | column -t --table-columns $(column_params) $col_fmt -d -s "$DELIMITER"
+		enumerate_ps_list | column -t --table-columns $(column_params) $col_fmt -d -s "$DELIMITER"
 	else
-		DELIMITER=" "; enumerate_ps_list ${roots[@]}
+		DELIMITER=" "; enumerate_ps_list
 	fi
 }
 
@@ -159,7 +149,7 @@ enumerate_process_array() {
 			instance="${INSTANCE[${CHILD_PROCESS[$parent_id]}]}"
 		fi
 		
-		if [[ $FILTER_ARGS ]]; then local skip=$ENUM_SKIP; for ins in ${roots[@]}; do
+		if [[ ${roots[@]} ]]; then local skip=$ENUM_SKIP; for ins in ${roots[@]}; do
 			[[ $instance == $ins ]] || [[ $ins == $pid ]] && skip= && break; done 
 			[[ $skip ]] && continue
 		fi
@@ -291,8 +281,7 @@ enumerate_ps_list() {
 }
 
 print_process() {
-	local IFS_OLD=$IFS; IFS=
-	[[ $DISPLAY_COLUMNS ]] && [[ ${FLAG_INSTANCE[$pid]} ]] && printf "$YELLOW"	
+	IFS=; [[ $DISPLAY_COLUMNS ]] && [[ ${FLAG_INSTANCE[$pid]} ]] && printf "$YELLOW"	
 	[[ $SHOW_PID ]] && vars+=($pid)
 	[[ $SHOW_CONTAINER ]] && vars+=(${INSTANCE[$pid]})
 	[[ $SHOW_UPTIME ]] && vars+=($(format_time $(($(date +%s)-$(stat -c '%Y' /proc/$pid)))))
@@ -308,17 +297,16 @@ print_process() {
 		return 1
 	fi
 
-	[[ $DISPLAY_COLUMNS ]] && printf "$RESET\n"; IFS=$IFS_OLD
+	[[ $DISPLAY_COLUMNS ]] && printf "$RESET\n"; IFS=$' \t\n'
 }
 
 column_headers() {
-	local IFS_OLD=$IFS; IFS= 
-	printf "$BOLD%s\t%s\t%s\t%s\t%s$RESET\n" \
-		$([[ $SHOW_PID ]] && echo PID) \
-		$([[ $SHOW_CONTAINER ]] && echo Container) \
-		$([[ $SHOW_UPTIME ]] && echo Uptime) \
-		$([[ $SHOW_EXEC ]] && echo Executable) \
-		$([[ $SHOW_ARGS ]] && echo Arguments); IFS=$IFS_OLD
+	IFS=; printf "$BOLD%s\t%s\t%s\t%s\t%s$RESET\n" \
+		      $([[ $SHOW_PID ]] && echo PID) \
+		      $([[ $SHOW_CONTAINER ]] && echo Container) \
+		      $([[ $SHOW_UPTIME ]] && echo Uptime) \
+		      $([[ $SHOW_EXEC ]] && echo Executable) \
+		      $([[ $SHOW_ARGS ]] && echo Arguments); IFS=$' \t\n'
 }
 
 column_params() {

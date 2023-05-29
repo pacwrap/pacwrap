@@ -20,9 +20,10 @@
 
 ARGS=()
 
-[[ $RUNTIME_ARGS ]] && return 
+[[ $RUNTIME_EXEC ]] && return 
 
-RUNTIME_ARGS="$0 $@"
+RUNTIME_EXEC="$0"
+RUNTIME_ARGS="$@"
 EXEC_NAME="${0##*/}"
 
 BOLD=$(tput bold)
@@ -33,13 +34,15 @@ YELLOW=$(tput setaf 11)
 RESET=$(tput sgr0)
 UNDERLINE=$(tput smul)
 
+DELIMITER=$'\t'
+
 BAR="$RED$BOLD::$RESET$BOLD"
 BAR_GREEN="$GREEN$BOLD::$RESET$BOLD"
 ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.16 BETA"
+VER="v0.9.17 BETA"
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap-exec"
@@ -65,11 +68,12 @@ LOG_FILE="$PACWRAP_DATA_DIR/pacwrap.log"
 OUTPUT_DEST=$LOG_FILE
 
 declare -A INSTANCE_CONFIG
+declare -A PKGLIST_EXPLICIT
 
 INSTANCE_ROOT_DIR=$PACWRAP_DATA_DIR/root
 INSTANCE_HOME_DIR=$PACWRAP_DATA_DIR/home
 INSTANCE_CONFIG_DIR=$PACWRAP_CONFIG_DIR/root
-INSTANCE_DB_DIR=$PACWRAP_DATA_DIR/database	
+INSTANCE_LC_DIR=$PACWRAP_DATA_DIR/hlds
 INSTANCE_RUNTIME_DIR="$XDG_RUNTIME_DIR/.pacwrap"
 
 INSTANCE_PACMAN_DIR="$PACWRAP_DATA_DIR/pacman"
@@ -84,7 +88,7 @@ init() {
 	[[ $EXEC_NAME != "pacwrap" ]] && 
 		runtime_check
 	
-	[[ $SWITCH == *n* ]] && SWITCH_NOCONFIRM=1
+	[[ $SWITCH == *n* ]] && SWITCH_NO_CONFIRM=1
 	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
 	[[ $SWITCH == *V* ]] ||
 	[[ $SWITCH == h* ]] && manual_script
@@ -92,9 +96,8 @@ init() {
 	[[ ! -f $LOG_FILE ]] && touch $LOG_FILE
 	[[ ! $1 ]] && [[ -f $LOCK_FILE ]] && 
 		log_error "pacwrap is locked: $LOCK_FILE$RESET" 2
-	
-	local list="ls -U -1F $INSTANCE_ROOT_DIR"
-	local rootlist=$($list 2>/dev/null | grep -i "/" | tr -d "/")
+
+	local rootlist=$(ls -U -1F "$INSTANCE_ROOT_DIR" 2>/dev/null | grep -i "/" | tr -d "/")
 
 	for instance in $rootlist; do
 		source_configuration
@@ -113,17 +116,11 @@ manual_script() {
 }
 
 populate_container_array() {
-	case $TYPE in
-		BASE)	
-			baserootdeps+=($instance)
-			;;	
-		DEP)
-			rootdeps+=($instance)
-			;;
-		*)	
-			roots+=($instance)
-			;;
-		esac
+	case ${INSTANCE_CONFIG[$instance,0]} in
+		BASE)	BASEROOTDEPS+=($instance);;	
+		DEP)	ROOTDEPS+=($instance);;
+		*)	ROOTS+=($instance);;
+	esac
 }
 
 source_configuration() {
@@ -207,7 +204,7 @@ log_error() {
 }
 
 log_to_file() {
-	printf "[%s] [%s] %s\n" $(date '+%FT%H:%M:%S%z') $EXEC_NAME "$1" >>$LOG_FILE 
+	printf "[%s] [%s] %s\n" $(date '+%FT%H:%M:%S%z') $EXEC_NAME "$1" >>"$LOG_FILE"
 }
 
 print_progress_bar() {	
@@ -252,17 +249,25 @@ progress_bar() {
 
 	local bar_percent=$(($((PROGRESS_LENGTH*2))*$amt_done/$amt % 2 + $PROGRESS_LENGTH*$amt_done/$amt))
 	local percent=$((200*$amt_done/$amt % 2 + 100*$amt_done/$amt))
-
+	
 	print_progress_bar $((PROGRESS_LENGTH+1)) $bar_percent $percent
+}
+
+obtain_explicit_packages() {
+	[[ ${PKGLIST_EXPLICIT[$1]} ]] && return
+	PKGLIST_EXPLICIT[$1]=$($EXEC_SCRIPT --root --exec $1 pacman -Qqe)
+	[[ $? != 0 ]] && 
+		log_error $ARROW_RED "Query of pacman database failed." \
+				     "Use pacwrap -Sv and examine stdout for details." 1
 }
 
 get_foreign_packages() {
 	local dbsyncpkgs=()
 	local deps=$(return_dependencies)	
 		
-	for dep in ${deps[@]}; do
-		dbsyncpkgs+=("$($EXEC_SCRIPT $dep --root --exec pacman -Qqe | sed -z -E "s/\<base\>//g")")
-	done
+	for dep in ${deps[@]}; do obtain_explicit_packages $dep
+		dbsyncpkgs+=("${PKGLIST_EXPLICIT[$dep]}"); done
+
 	echo ${dbsyncpkgs[@]}
 }
 
@@ -271,7 +276,7 @@ localized_text() {
 }
 
 query_confirm_yN () {
-	if [[ $SWITCH == *n* ]]; then		
+	if [[ $SWITCH_NO_CONFIRM ]]; then		
 		echo 1	
 		return
 	fi
@@ -286,7 +291,7 @@ query_confirm_yN () {
 }
 
 query_confirm_Yn () {
-	if [[ $SWITCH == *n* ]]; then		
+	if [[ $SWITCH_NO_CONFIRM ]]; then		
 		echo 1	
 		return
 	fi
@@ -300,49 +305,48 @@ query_confirm_Yn () {
 }
 
 perform_datadir_check() {
-	([[ ! -d $PACWRAP_DATA_DIR ]] ||
-	[[ ! -d $PACWRAP_CACHE_DIR ]] ||
-	[[ ! -d $PACWRAP_CONFIG_DIR ]]) && 
+	([[ ! -d "$PACWRAP_DATA_DIR" ]] ||
+	[[ ! -d "$PACWRAP_CACHE_DIR" ]] ||
+	[[ ! -d "$PACWRAP_CONFIG_DIR" ]]) && 
 		initialize_data_directory
 
-	([[ ! -d $PACWRAP_DATA_DIR ]] ||
-	[[ ! -d $PACWRAP_CACHE_DIR ]] ||
-	[[ ! -d $PACWRAP_CONFIG_DIR ]]) &&
-		printf "$BOLD$RED%s$RESET %s\n%s" "error:" "Data directories not found." && exit 2
+	([[ ! -d "$PACWRAP_DATA_DIR" ]] ||
+	[[ ! -d "$PACWRAP_CACHE_DIR" ]] ||
+	[[ ! -d "$PACWRAP_CONFIG_DIR" ]]) &&
+		log_error "Data directories not found." 2
 }
 
 initialize_data_directory() {
-	mkdir -p $PACWRAP_DATA_DIR/root \
-		$PACWRAP_DATA_DIR/home \
-		$PACWRAP_DATA_DIR/database \
-		$PACWRAP_DATA_DIR/pacman/sync \
-		$PACWRAP_DATA_DIR/pacman/gnupg \
-		$PACWRAP_CACHE_DIR/pkg \
-		$PACWRAP_CONFIG_DIR/root \
-		$PACWRAP_CONFIG_DIR/pacman.d \
-		$PACWRAP_CONFIG_DIR/pacman/sync \
-		$PACWRAP_CONFIG_DIR/pacman/syncdb \
-		$PACWRAP_CONFIG_DIR/pacman/template \
-		$PACWRAP_CONFIG_DIR/bwrap
+	mkdir -p "$PACWRAP_DATA_DIR/root" \
+		 "$PACWRAP_DATA_DIR/home" \
+		 "$PACWRAP_DATA_DIR/hlds" \
+		 "$PACWRAP_DATA_DIR/pacman/sync" \
+		 "$PACWRAP_DATA_DIR/pacman/gnupg" \
+		 "$PACWRAP_CACHE_DIR/pkg" \
+		 "$PACWRAP_CONFIG_DIR/root" \
+		 "$PACWRAP_CONFIG_DIR/pacman.d" \
+		 "$PACWRAP_CONFIG_DIR/pacman/sync" \
+		 "$PACWRAP_CONFIG_DIR/pacman/syncdb" \
+		 "$PACWRAP_CONFIG_DIR/pacman/template" \
+		 "$PACWRAP_CONFIG_DIR/bwrap"
 
 	local ins_string="\[options\]"
 	local template="\n\n###IGNOREPKG###\n"
 	
-	([[ ! -f $INSTANCE_PACMAN_MIRRORLIST ]] || [[ $SWITCH == *m* ]]) && cp /etc/pacman.d/mirrorlist $INSTANCE_PACMAN_MIRRORLIST
-	[[ ! -f $INSTANCE_PACMAN_CFG_DIR/pacman.conf ]] && echo -e $(pacman_conf) >  $INSTANCE_PACMAN_CFG_DIR/pacman.conf		
+	([[ ! -f "$INSTANCE_PACMAN_MIRRORLIST" ]] || [[ $SWITCH == *in* ]]) && cp /etc/pacman.d/mirrorlist "$INSTANCE_PACMAN_MIRRORLIST"
+	[[ ! -f "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" ]] && echo -e $(pacman_conf) > "$INSTANCE_PACMAN_CFG_DIR/pacman.conf"
 
-	sed -z "s,$ins_string,$ins_string$template,g" < $INSTANCE_PACMAN_CFG_DIR/pacman.conf > $INSTANCE_PACMAN_CFG_DIR/pacman.template.conf
+	sed -z "s,$ins_string,$ins_string$template,g" < "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" > "$INSTANCE_PACMAN_CFG_DIR/pacman.template.conf"
 }
 
 pacman_conf() {
 echo $(cat << _CONFIG
-[options]\nHoldPkg     = pacman glibc\nArchitecture = auto\nNoExtract   = pacman-mirrorlist\n\nColor\nCheckSpace
-\n#ParallelDownloads = 5\n\nSigLevel    = Required DatabaseOptional\nLocalFileSigLevel = Optional
-\n\n#[core-testing]\n#Include = /etc/pacman.d/mirrorlist
+[options]\nHoldPkg     = pacman glibc\nArchitecture = auto
+\nNoExtract = etc/pacman.conf etc/pacman.d/mirrorlist
+\n\nColor\n#ParallelDownloads = 5
+\n\nSigLevel    = Required DatabaseOptional\nLocalFileSigLevel = Optional
 \n\n[core]\nInclude = /etc/pacman.d/mirrorlist
-\n\n#[extra-testing]\n#Include = /etc/pacman.d/mirrorlist
 \n\n[extra]\nInclude = /etc/pacman.d/mirrorlist
-\n\n#[multilib-testing]\n#Include = /etc/pacman.d/mirrorlist
 \n\n#[multilib]\n#Include = /etc/pacman.d/mirrorlist
 _CONFIG
 )
@@ -357,7 +361,7 @@ generate_config() {
 \nCONCURRENT_LIMIT=$(return_concurrent_limit $instance)
 _CONFIG
 )
-	echo -e $config > $INSTANCE_CONFIG_DIR/$instance
+	echo -e $config > "$INSTANCE_CONFIG_DIR/$instance"
 }
 
 runtime_check() {
@@ -388,9 +392,28 @@ _WARN
 }
 
 log_invalid_arguments() {
-	if [[ $1 ]]; then
-		log_error $LOG_ERR_HELP "invalid arguments -- '$(echo $SWITCH ${ARGS[@]})'"	
-	else
-		log_error "operation not specified." 2
-	fi
+	if [[ $1 ]]; then log_error $LOG_ERR_HELP "invalid arguments -- '$RUNTIME_ARGS'"	
+		     else log_error "operation not specified." 2; fi
+}
+
+test_argument() {
+	[[ ! $2 ]] && log_error $LOG_ERR_HELP "$1 not specified." 1
+}
+
+check_root() {
+	case $1 in
+		1)	[[ ! $2 ]] && log_error $LOG_ERR_HELP "Target not specified." 1
+			[[ -d "$INSTANCE_ROOT_DIR/$2" ]] &&
+				log_error "Target container $BOLD$2$RESET: already exists!" 1;;
+		*)	[[ ! $1 ]] && log_error $LOG_ERR_HELP "Target not specified." 1
+			[[ ! -d "$INSTANCE_ROOT_DIR/$1" ]] &&
+				log_error "Target container $BOLD$1$RESET: not found." 1; esac
+}
+
+check_file() {
+	case $3 in
+		1) 	[[ -f "$2" ]] &&
+				log_error "$1 '${2##*/}': already exists!" 1;;
+		*)	[[ ! -f "$2" ]] &&
+				log_error "$1 '${2##*/}': not found." 1; esac
 }

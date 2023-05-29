@@ -40,10 +40,10 @@ main () {
 parse_args () {
 	for var in "$@"; do case $var in
 		-v|--verbose)		SWITCH+=v;;
-		--explicit)		SWITCH=Ep;;
 		--process|-P)		SWITCH=P;;
 		--create|-C)		SWITCH=C;;
 		--execute|-E)		SWITCH=E;;
+		--pacman|--explicit)	SWITCH=Ep;;
 		--sync|-S)		SWITCH=S;;
 		--utils|-U)		SWITCH=U;;
 		--help=*)		HELP="${var:7}"

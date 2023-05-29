@@ -22,9 +22,11 @@ source pacwrap-common
 
 HEADER=$BOLD
 HEADER_RESET=$RESET
-TAB=$(echo -e '\t')
+TAB=$'\t'
 SUB_HEADER=$TAB$BOLD
-SUB_TEXT=$TAB$TAB
+SUB_TEXT=$'\t\t'
+CHILD_HEADER=$SUB_TEXT$BOLD
+CHILD_SUBTEXT=$'\t\t\t'
 
 main () {
 	parse_args "$@"
@@ -124,7 +126,7 @@ _USAGE
 }
 
 man_process() {
-	cat << _USAGE
+cat << _USAGE
 ${HEADER}PROCESS OPTIONS$HEADER_RESET
 
 ${SUB_HEADER}-s, --status$RESET
@@ -133,8 +135,8 @@ ${SUB_TEXT}Display process status of running containers.
 ${SUB_HEADER}-k, --kill$RESET
 ${SUB_TEXT}Kill enumerated processes.
 
-$TAB${SUB_HEADER}-##$RESET
-$TAB${SUB_TEXT}Signal flag. Default is 1 (${BOLD}SIGHUP$RESET) if otherwise unspecified.
+${CHILD_HEADER}-##$RESET
+${CHILD_SUBTEXT}Signal flag. Default is 1 (${BOLD}SIGHUP$RESET) if otherwise unspecified.
 
 ${SUB_HEADER}-id, --identifier$RESET
 ${SUB_TEXT}List process identifiers. Shown by default with --status.
@@ -164,7 +166,7 @@ _USAGE
 }
 
 man_sync() {
-	cat << _USAGE
+cat << _USAGE
 ${HEADER}SYNCHRONIZAtION OPTIONS$HEADER_RESET
 
 ${SUB_HEADER}-y, --sync$RESET
@@ -185,56 +187,81 @@ _USAGE
 man_utils() {
 cat << _USAGE
 ${HEADER}UTILITY OPTIONS$HEADER_RESET
-${SUB_HEADER}-d, --delete$RESET
-${SUB_TEXT}Deletes the root and home directories of specified targets.
 
-$TAB${SUB_HEADER}-r$RESET
-$TAB${SUB_TEXT}Delete root directory of container
+${SUB_HEADER}-ls, --list$RESET
+${SUB_TEXT}Enumerate container filesystems and their associated dependencies.
 
-$TAB${SUB_HEADER}-h$RESET
-$TAB${SUB_TEXT}Delete home directory of container
+${CHILD_HEADER}-b, --show-bytes$RESET
+${CHILD_SUBTEXT}Show sizes in bytes.
 
-${SUB_HEADER}-ls, --summarylist$RESET
-${SUB_TEXT}Summarize information on container filesystems and their associated dependencies.
+${CHILD_HEADER}-du --disk-util$RESET
+${CHILD_SUBTEXT}Calculate space utilization on disk, and then display size column.
 
-$TAB${SUB_HEADER}-d$RESET
-$TAB${SUB_TEXT}Specify up to 4 times to display different sets of space consumption statistics.
+${CHILD_HEADER}-dd, --disk-depth$RESET
+${CHILD_SUBTEXT}Increase filesystem traversal depth by one.
+
+${CHILD_HEADER}-uu, --disk-sum$RESET
+${CHILD_SUBTEXT}Display disk consumption summary
+
+${SUB_HEADER}-d, --desktop-entry$RESET
+${SUB_TEXT}Create pacwrap application desktop entries in \$XDG_DATA_HOME/applications.
+
+${CHILD_HEADER}-remove, -rm$RESET
+${CHILD_SUBTEXT}Remove desktop application entry.
+
+${CHILD_HEADER}-list, -ls$RESET
+${CHILD_SUBTEXT}List desktop application entries
+
+${SUB_HEADER}-o, --open$RESET
+${SUB_TEXT}Open container filesystem in your preferred file manager.
+
+${SUB_HEADER}-rm, --remove$RESET
+${SUB_TEXT}Enacts specified removal actions.
+
+${SUB_HEADER}-r, --root$RESET
+${SUB_TEXT}Root directory of specified targets.
+
+${SUB_HEADER}-h, --home$RESET
+${SUB_TEXT}Home directory of specified targets.
 
 ${SUB_HEADER}-e, --edit$RESET
-${SUB_TEXT}Edit configuration files associated with pacwrap and containers in specified $EDITOR.
+${SUB_TEXT}Edit configuration files associated with pacwrap and containers in specified \$EDITOR.
 
-$TAB${SUB_HEADER}-c$RESET
-$TAB${SUB_TEXT}Edit container configuration for target.
+${CHILD_HEADER}-c, --config$RESET
+${CHILD_SUBTEXT}Edit container configuration for target.
 
-$TAB${SUB_HEADER}-p$RESET
-$TAB${SUB_TEXT}Edit global pacman.conf template.
+${CHILD_HEADER}-ml, --mirror-list$RESET
+${CHILD_SUBTEXT}Edit container configuration for target.
 
-$TAB${SUB_HEADER}-pt$RESET
-$TAB${SUB_TEXT}Edit pacman.conf template for target.
+${CHILD_HEADER}-p, --pacman$RESET
+${CHILD_SUBTEXT}Edit global pacman.conf template.
+
+${CHILD_HEADER}-pt, --pacman-template$RESET
+${CHILD_SUBTEXT}Edit pacman.conf template for target.
 
 ${SUB_HEADER}-v, --view$RESET
-${SUB_TEXT}View configuration files associated with pacwrap and containers in specified $EDITOR.
+${SUB_TEXT}View configuration files associated with pacwrap and containers in specified \$EDITOR.
 
-$TAB${SUB_HEADER}-ip$RESET
-$TAB${SUB_TEXT}View sync pacman.conf for target.
+${CHILD_HEADER}-ips, --inspect-pacman-sync$RESET
+${CHILD_SUBTEXT}Inspect sync pacman.conf for target.
 
-$TAB${SUB_HEADER}-ips$RESET
-$TAB${SUB_TEXT}View syncdb pacman.conf for target.
+${CHILD_HEADER}-idb, --inspect-pacman-syncdb$RESET
+${CHILD_SUBTEXT}Inspect syncdb pacman.conf for target.
 
-$TAB${SUB_HEADER}-l$RESET
-$TAB${SUB_TEXT}View pacwrap.log
+${CHILD_HEADER}-l, --log$RESET
+${CHILD_SUBTEXT}View pacwrap.log
 
 ${SUB_HEADER}-r, --replicate$RESET
 ${SUB_TEXT}Replicate target container from configuration.
 	
-${SUB_HEADER}-t, --tar$RESET
-${SUB_TEXT}Grab configuration files from specified tar archive.
+${CHILD_HEADER}-t, --tar$RESET
+${CHILD_SUBTEXT}Grab configuration files from specified tar archive.
 
 ${SUB_HEADER}-l, --link$RESET
 ${SUB_TEXT}Create a symbolic link of a target container's filesystem directory and initialize a home directory.
 
-${SUB_HEADER}-i, --initialize$RESET
-${SUB_TEXT}Initialize configuration files. This can be used to synchronize pacwrap's mirrorlist with your system.
+${SUB_HEADER}-f, --force$RESET
+${SUB_TEXT}Force action.
 
 _USAGE
 }
@@ -244,7 +271,7 @@ cat << _USAGE
 ${HEADER}COPYRIGHT$HEADER_RESET
 ${SUB_TEXT}Copyright (c) 2023 - Xavier R.M.
 
-${SUB_TEXT}This program may be freely redistributed under
+$TAB${TAB}This program may be freely redistributed under
 $TAB${TAB}the terms of the GNU General Public License v3.
 
 _USAGE
@@ -260,13 +287,12 @@ _USAGE
 
 man_summary() {
 cat << _USAGE
-
 ${HEADER}NAME$HEADER_RESET
 ${TAB}pacwrap - Command-line application which facilitates the creation, management, and execution of unprivileged, 
-${TAB}sandboxed containers with bubblewrap, pacman, and coreutils.
+${TAB}Sandboxed containers with bubblewrap, pacman, and coreutils.
 
 ${HEADER}SYNOPSIS$HEADER_RESET
-${SUB_HEADER}pacwrap$RESET [${BOLD}ARGS$RESET] [${BOLD}TARGETS$RESET] [${BOLD}EXEC_ARGS$RESET]	
+$TAB${BOLD}pacwrap$RESET [${BOLD}ARGS$RESET] [${BOLD}TARGETS$RESET] [${BOLD}EXEC_ARGS$RESET]	
 
 ${HEADER}OPERATIONS$HEADER_RESET
 ${SUB_HEADER}-C, --create$RESET
@@ -300,12 +326,12 @@ print_manual() {
 	if [[ $HELP == *md ]]; then
 		BOLD="**"; RESET=$BOLD
 		HEADER="# "; HEADER_RESET=
-		SUB_HEADER="**"; SUB_TEXT=; TAB=
-		[[ $HELP == man.* ]] && SUB_TEXT=": "	
+		SUB_HEADER="**"; SUB_TEXT=
+		CHILD_HEADER=$SUB_HEADER; CHILD_SUBTEXT=; TAB=
+		[[ $HELP == man.* ]] && SUB_TEXT=": " && 
+					CHILD_SUBTEXT=$SUB_TEXT
 	fi
 	
-	man_summary
-
 	case $HELP in
 		COPYRIGHT|copyright|cr)	man_copyright;;
 		VERSION|version|V|v)	man_version;;
@@ -314,15 +340,20 @@ print_manual() {
 		CREATE|create|c|C)	man_create;;
 		EXECUTE|execute|e|E) 	man_execute;;
 		PROCESS|process|p|P) 	man_process;;
-		*md|ALL|all)		man_create
+		*md|ALL|all)		man_summary
+					man_create
 					man_sync
 					man_utils
 					man_process
 					man_execute
 					man_version
 					man_copyright;;
-		*) 
-			[[ $HELP ]] && log_error "Operation '$HELP' not documented" 1
+		*) 			if [[ $HELP ]]; then 
+						log_invalid_arguments 1
+					else
+						man_summary
+					fi
+	
 	esac
 
 	if [[ ! $HELP ]]; then distro_warn; fi
