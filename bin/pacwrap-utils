@@ -32,6 +32,7 @@ main () {
 	init
 
 	case $SWITCH in
+		Urc)		refresh_configuration;;
 		Uc*)		[[ $(type -p paccache) ]] && paccache --cachedir $INSTANCE_PACMAN_CACHE ${ARGS[@]};;
 		Uml)		initialize_data_directory;;
 		Ud*|Ulsd|Urmd)	desktop_entry;;
@@ -101,6 +102,8 @@ parse_args () {
 summary() {	
 	declare -A size
 	local total=0
+
+	load_configuration_all
 
 	[[ $SHOW_SIZE ]] && parse_du 
 	
@@ -223,10 +226,10 @@ link_root() {
 	local link=${ARGS[1]}
 
 	test_argument "Targets" $instance
-	check_root 0 $link
+	check_root $link
 	check_root 1 $instance
 	
-	[[ ! $SWITCH_NOCONFIRM ]] && printf "$BAR %s\n\n$BOLD%s\n\n" "Create virtual instance" "$instance $ARROW $BOLD$link"
+	[[ ! $SWITCH_NO_CONFIRM ]] && printf "$BAR %s\n\n$BOLD%s\n\n" "Create virtual instance" "$instance $ARROW $BOLD$link"
 	[[ ! "$(query_confirm_Yn "Proceed with creation?")" ]] && return
 
 	log "$BAR_GREEN Creating virtual instance $instance $ARROW $BOLD$link"
@@ -234,6 +237,18 @@ link_root() {
 	ln -s "$INSTANCE_ROOT_DIR/$link" "$INSTANCE_ROOT_DIR/$instance"
 	mkdir -p "$INSTANCE_HOME_DIR/$instance"
 	echo 'PS1="'$instance'> "' > "$INSTANCE_HOME_DIR/$instance/.bashrc"
+	
+	load_configuration $link; instance=${ARGS[0]}
+
+	TYPE=LINK
+	DEPS=(${INSTANCE_CONFIG[$link,$CONF_DEPS]} $link)
+	MOUNT="${INSTANCE_CONFIG[$link,$CONF_MOUNT]}"
+	PERMISSIONS="${INSTANCE_CONFIG[$link,$CONF_PERMS]}"
+	PERMISSIONS_DBUS="${INSTANCE_CONFIG[$link,$CONF_DBUS]}"
+	ENV_VARS="${INSTANCE_CONFIG[$link,$CONF_ENV]}"
+
+	populate_configuration
+	generate_config
 
 	log "$ARROW_GREEN Process complete!" \
 	    "Created $instance -> $link" 
@@ -264,6 +279,7 @@ replicate() {
 			eval $(tar axfO "$tar_archive" $file | grep -v "#")
 			populate_configuration
 			populate_container_array
+			reset_configuration_params
 			instances+=($instance)
 		done
 	else
@@ -276,15 +292,17 @@ replicate() {
 			source_configuration
 			populate_configuration
 			populate_container_array
+			reset_configuration_params
 		done
 	fi
 
-	[[ ! $SWITCH_NOCONFIRM ]] && echo -e "$BAR Replicate \n\n${instances[@]}\n"	
+	[[ ! $SWITCH_NO_CONFIRM ]] && echo -e "$BAR Replicate \n\n${instances[@]}\n"	
 	[[ ! "$(query_confirm_yN "Proceed with replication?")" ]] && return
 
 	check_active_instances
 
-	invoke_replication ${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]}
+	invoke_replication ${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]} ${LINKS[@]}
+
 }
 
 invoke_replication() {
@@ -332,26 +350,52 @@ replicate_instance() {
 	[[ ${completed[$instance]} ]] && return
 	
 	log_to_file "Beginning replication of $instance."
-
+	
+	local depend=
 	local type=$(return_type)
 	local params="-Cn"
 
 	[[ $SWITCH == *v* ]] && params+="v"
+	[[ $type != BASE ]] && depend=$(return_dependency)
 
 	case $type in
 		BASE)	params+="b";;	
-		DEP)	params+="d --dep=$(return_dependency)";;
-		ROOT)	params+=" --dep=$(return_dependency)";;
+		DEP)	params+="d";;	
+		LINK)	ln -s "$INSTANCE_ROOT_DIR/$depend" "$INSTANCE_ROOT_DIR/$instance"
+			mkdir -p "$INSTANCE_HOME_DIR/$instance"
+			echo 'PS1="'$instance'> "' > "$INSTANCE_HOME_DIR/$instance/.bashrc"
+			generate_config
+			printf "$ARROW_GREEN %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					
+			log_to_file "Replication of $instance complete!"
+			completed[$instance]=1
+			return;;
 	esac
-	
-	$CREATE_SCRIPT $params $instance $(return_packages)
-	
+
+	export CONCURRENCY_LIMIT=${INSTANCE_CONFIG[$instance,$CONF_CONCURRENT_LIMIT]} \
+	       ENV_VARS="${INSTANCE_CONFIG[$instance,$CONF_ENV]}" \
+	       MOUNT="${INSTANCE_CONFIG[$instance,$CONF_MOUNT]}" \
+	       PERMISSIONS="${INSTANCE_CONFIG[$instance,$CONF_PERMS]}" \
+	       PERMISSIONS_DBUS="${INSTANCE_CONFIG[$instance,$CONF_DBUS]}" \
+	       DEPEND=$depend; $CREATE_SCRIPT $params $instance $(return_packages)
+
 	if [[ $? == 0 ]]; then 
 		printf " %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					
 		log_to_file "Replication of $instance complete!"
 	fi
 
 	completed[$instance]=1
+}
+
+refresh_configuration() {
+	load_configuration_all
+
+	local roots=(${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]} ${LINKS[@]})
+	
+	for instance in ${roots[@]}; do
+		generate_config $(return_packages)
+	done
+
+	log "$ARROW_GREEN Refreshed configurations."
 }
 
 remove() {
@@ -368,7 +412,7 @@ invoke_removal() {
 
 	test_argument "Targets" $instances
 
-	[[ ! $SWITCH_NOCONFIRM ]]  && printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete $1" "$instances"
+	[[ ! $SWITCH_NO_CONFIRM ]]  && printf "%s\n\n$BOLD%s\n\n$RESET" "$BAR Delete $1" "$instances"
 	[[ ! "$(query_confirm_yN "Proceed with $1?")" ]] && return
 
 	for instance in $instances; do

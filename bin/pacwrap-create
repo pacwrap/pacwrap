@@ -20,8 +20,8 @@
 
 source pacwrap-common
 export PACWRAP_CREATE=1
-	
-main () {	
+
+main () {
 	trap exit INT
 	
 	parse_args "$@"
@@ -51,7 +51,12 @@ parse_args () {
 	for var in "$@"; do case $var in 
 		-v|--verbose)	SWITCH+="v";;
 		-V|--version)	SWITCH="V";;
-		--dep=*) 	DEPEND="${var:6}";;	
+		--env=*) 	ENV_VARS="${var:6}";;
+		--dep=*) 	DEPEND="${var:6}";;
+		--dbus=*) 	PERMISSIONS_DBUS="${var:7}";;
+		--concur=*)	CONCURRENCY_LIMIT="${var:9}";;
+		--perms=*)	PERMISSIONS="${var:14}";;
+		--mount=*) 	MOUNT="${var:8}";;
 		--is-dep) 	SWITCH+="d";;
 		--is-base) 	SWITCH+="b";;
 		-C*) 		SWITCH+="${var:2}";;
@@ -86,9 +91,15 @@ script_init () {
 	[[ ! $DEPEND ]] && [[ $C_TYPE != "BASE" ]] &&
 		log_error $LOG_ERR_HELP "Dependency not specified." 1
 
-	INSTANCE_CONFIG[$INSTANCE,0]=$C_TYPE
-	INSTANCE_CONFIG[$INSTANCE,1]="deps=()"
-	INSTANCE_CONFIG[$INSTANCE,3]="pkgs=()"
+
+	INSTANCE_CONFIG[$INSTANCE,$CONF_TYPE]=$C_TYPE
+	INSTANCE_CONFIG[$INSTANCE,$CONF_DEPS]=""
+	INSTANCE_CONFIG[$INSTANCE,$CONF_PKGS]=""
+	INSTANCE_CONFIG[$INSTANCE,$CONF_CONCURRENT_LIMIT]=$CONCURRENCY_LIMIT
+	INSTANCE_CONFIG[$INSTANCE,$CONF_MOUNT]=$MOUNT
+	INSTANCE_CONFIG[$INSTANCE,$CONF_PERMS]=$PERMISSIONS
+	INSTANCE_CONFIG[$INSTANCE,$CONF_ENV]=$ENV_VARS
+	INSTANCE_CONFIG[$INSTANCE,$CONF_DBUS]=$PERMISSIONS_DBUS
 
 	[[ ${#ARGS[@]} -gt 1 ]] && ARGS[0]=""
 
@@ -177,7 +188,6 @@ init_struct () {
 		 "$INSTANCE_ROOT/etc" \
 		 "$INSTANCE_ROOT/var/lib/pacman" \
 		 "$INSTANCE_ROOT/etc/pacman.d/hooks" \
-		 "$INSTANCE_ROOT/etc/fonts/conf.d" \
 		 "$INSTANCE_ROOT/usr/lib32"
 
 	([[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]) && 
@@ -203,7 +213,7 @@ init_struct () {
 	echo "$LANG ${LANG#*.}" > "$INSTANCE_ROOT/etc/locale.gen"
 	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
 	echo "user:x:1000:1000::/home/user:/bin/bash" >> "$INSTANCE_ROOT/etc/passwd"
-	echo "$MACHINE_ID" > "$INSTANCE_ROOT/etc/machine-id"
+	echo $(dbus-uuidgen) > "$INSTANCE_ROOT/etc/machine-id"
 	echo 'PS1="'$INSTANCE'> "' > "$INSTANCE_HOME/.bashrc"
 
 	if [[ $C_TYPE == "DEP" ]] || [[ $C_TYPE == "BASE" ]]; then
@@ -220,16 +230,15 @@ populate_deps() {
 		if [[ -f $DEPEND_CONFIG_FILE ]]; then
 			source $DEPEND_CONFIG_FILE
 			DEPS+=("$DEPEND")	
-			INSTANCE_CONFIG[$INSTANCE,1]="deps=(${DEPS[@]})"
+			INSTANCE_CONFIG[$INSTANCE,$CONF_DEPS]="${DEPS[@]}"
 		else
-			INSTANCE_CONFIG[$INSTANCE,1]="deps=($DEPEND)"
+			INSTANCE_CONFIG[$INSTANCE,$CONF_DEPS]="$DEPEND"
 		fi
 	fi
 }
 
 init_chroot () {	
 	local exclude_params="
-	--exclude=etc/ca-certificates/extracted/cadir 
 	--exclude=etc/credstore*
 	--exclude=version 
 	--exclude=pkglist.x86_64.txt 
@@ -244,10 +253,12 @@ init_chroot () {
 	log_to_file "Extracting bootstrap tarball"
 	echo -n $ARROW "Extracting bootstrap tarball"
 	tar xkf "$PACWRAP_CACHE_DIR/archlinux-bootstrap-x86_64.tar.gz" --strip-components=1 \
-		-C "$INSTANCE_ROOT" --checkpoint=.15000 $exclude_params 2>>"$OUTPUT_DEST"
+		-C "$INSTANCE_ROOT" --checkpoint=.15000 $exclude_params 2>>/dev/null
 	echo
 
-	[[ $C_TYPE != "BASE" ]] && $SYNC_SCRIPT -Syyyy $INSTANCE
+	if [[ $C_TYPE != "BASE" ]]; then
+		$SYNC_SCRIPT -Syyyy $INSTANCE
+	fi
 
 	local gnupg=$(get_directory_pop "$INSTANCE_PACMAN_GNUPG") 
 	local sync=$(get_directory_pop "$INSTANCE_PACMAN_SYNC") 
@@ -271,11 +282,10 @@ init_trust () {
 }
 
 finalise () {
+	## TODO: Make configurable or merge into sync_foreign_elements
 	log "$ARROW Generating locale..."
 	$EXEC_SCRIPT $PARAMS locale-gen 1>>"$OUTPUT_DEST" 2>>"$OUTPUT_DEST"
-	log "$ARROW Updating certificate trust..."
-	$EXEC_SCRIPT $PARAMS update-ca-trust 1>>"$OUTPUT_DEST" 2>>"$OUTPUT_DEST"
-	[[ $C_TYPE != "BASE" ]] && sync_foreign_database
+	[[ $C_TYPE != "BASE" ]] && sync_foreign_elements
 	$SYNC_SCRIPT -Sg $INSTANCE
 	[[ $C_TYPE == "BASE" ]] && sync_base_packages
 	[[ ${#ARGS[@]} -gt 1 ]] && install_packages
@@ -290,7 +300,7 @@ install_packages () {
 	fi
 
 	log_to_file "Installing specified packages"
-	$EXEC_SCRIPT $PARAMS pacman -Sy ${ARGS[@]} --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT $PARAMS pacman -Sy ${ARGS[@]} --noconfirm 2>>$VERBOSE
 	if [[ $? != 0 ]]; then
 		log_error $ARROW_RED "Installation failed." \
 				     "Use pacwrap -Cv and examine stdout for details."
@@ -303,25 +313,18 @@ install_packages () {
 
 sync_base_packages () {
 	log "$ARROW Some housekeeping..." "Removing arch-install-scripts"	
-	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm --logfile /tmp/pacman.log 2>/dev/null 1>>$VERBOSE
+	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm 2>/dev/null 1>>$VERBOSE
 	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
-	$EXEC_SCRIPT $PARAMS pacman -Syu --logfile /tmp/pacman.log --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT $PARAMS pacman -Syu --noconfirm 2>>$VERBOSE
 }
 
-sync_foreign_database () {
-	log "$ARROW Synchronizing pacman database against foreign packages..." \
-	    "Synchronising pacman database against foreign packages"
-	
-	rm -r "$INSTANCE_ROOT/var/lib/pacman/local"
-	cp -rn "$INSTANCE_DEPEND_ROOT/var/lib/pacman/local" "$INSTANCE_ROOT/var/lib/pacman/"
+sync_foreign_elements() {
+	log "$ARROW Synchronizing mutable filesystem elements..." \
+	    "Synchronizing mutable filesystem elements"
 
-	local dbsyncpkgs=$(get_foreign_packages)
-	
-	[[ ${dbsyncpkgs[@]} ]] &&
-		$EXEC_SCRIPT $PARAMS pacman -Su \
-		--dbonly \
-		--logfile /tmp/pacman.log \
-		--noconfirm ${dbsyncpkgs[@]} 2>$VERBOSE 1>>$VERBOSE	
+	rm -r "$INSTANCE_ROOT/var/lib/pacman/local"
+	cp -rn "$INSTANCE_DEPEND_ROOT/etc" "$INSTANCE_ROOT/" 2>/dev/null
+	cp -rn "$INSTANCE_DEPEND_ROOT/var" "$INSTANCE_ROOT/" 2>/dev/null
 }
 
 on_exit() {

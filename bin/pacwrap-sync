@@ -58,7 +58,7 @@ main () {
 
 	if [[ $SYNC_UPGRADE ]] || ([[ $SYNC_UPDATE ]] && [[ ! $SYNC_FORCE ]]); then
 		log "$BAR_GREEN Starting container upgrade..."
-		if [[ ! $SWITCH_NOCONFIRM ]] && [[ ${ARGS[@]} ]]; then
+		if [[ ! $SWITCH_NO_CONFIRM ]] && [[ ${ARGS[@]} ]]; then
 			echo -e $BAR "Update container\n\n${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]}\n"
 			[[ ! "$(query_confirm_Yn "Proceed with update?")" ]] && return
 		fi
@@ -127,6 +127,7 @@ script_init () {
 	[[ $SWITCH == *v* ]] && LINK_OUTPUT_DEST=$LOG_FILE
 	[[ $SWITCH == *vo* ]] && LINK_OUTPUT_DEST=$VERBOSE
 
+	load_configuration_all
 
 	syncroots=(${ROOTS[@]})
 	cleanroots=(${ROOTDEPS[@]} ${BASEROOTDEPS[@]})
@@ -407,7 +408,7 @@ invoke_update() {
 
 	if [[ $SYNC_UPDATE ]] && [[ $type != "ROOT" ]]; then
 		if [[ ! $PMSYNCED ]] || [[ $syncdb == 1 ]]; then
-			$EXEC_SCRIPT $instance pacman --logfile /tmp/pacman.log -Sy
+			$EXEC_SCRIPT $instance pacman -Sy
 			[[ $? != 0 ]] && 
 				log_error $ARROW_RED "Remote database synchronization failed." \
 						     "Use pacwrap -Sv and examine stdout for details." 1
@@ -431,7 +432,6 @@ invoke_update() {
 		[[ $SYNC_EXPLICIT_FOREIGN ]] && dbsyncpkgs=($(get_foreign_packages))
 		
 		$EXEC_SCRIPT $instance pacman -Su \
-			--logfile /tmp/pacman.log \
 			--dbonly --noconfirm \
 			--config=/tmp/pacman.conf ${dbsyncpkgs[@]} 2>$VERBOSE 1>$VERBOSE
 		[[ $? != 0 ]] && 
@@ -453,9 +453,7 @@ invoke_update() {
 	[[ ! $(query_confirm_Yn "Proceed with installation on $instance") ]] && return
 
 	log_to_file "Upgrading $instance container.."
-	$EXEC_SCRIPT $instance pacman -Su \
-		--logfile /tmp/pacman.log \
-		--noconfirm 2>$VERBOSE
+	$EXEC_SCRIPT $instance pacman -Su --noconfirm 2>$VERBOSE
 
 	[[ $? != 0 ]] && 
 		log_error $ARROW_RED "Upgrade for $instance failed." \

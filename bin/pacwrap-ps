@@ -153,8 +153,9 @@ enumerate_process_array() {
 			[[ $instance == $ins ]] || [[ $ins == $pid ]] && skip= && break; done 
 			[[ $skip ]] && continue
 		fi
-	
-		if [[ ${cmdlist[0]} == bwrap ]] && [[ ! ${CHILD_PROCESS[$pid]} ]]; then
+
+
+		if [[ ${cmdlist[0]} == bwrap ]] && [[ ! ${PROCESS[$parent_id]} ]] && [[ $parent_id == 1 ]]; then
 			log_error $LOG_ERR_WARN "Process fork detected within PID $BOLD$pid$RESET from an instance of $BOLD$instance$RESET."
 			FLAG_INSTANCE[$pid]=1
 		fi
@@ -192,6 +193,8 @@ enumerate_process() {
 	for p in ${PROCESS_CHILDREN[$pid]}; do	
 		CHILD_PROCESS[$p]="$pid"
 	done
+
+	[[ ${roots[@]} ]] && roots+=(${PROCESS_CHILDREN[$pid]})
 }
 
 
@@ -222,7 +225,7 @@ get_arrow() {
 }
 
 kill_instance() {
-	if [[ ! $SWITCH_NOCONFIRM ]]; then
+	if [[ ! $SWITCH_NO_CONFIRM ]]; then
 		printf "$BAR %s $RESET\n\n" "Instances"
 		for pid in ${PROCESS[@]}; do 
 			echo -n "$BOLD${INSTANCE[$pid]}$RESET ($pid) "
@@ -233,7 +236,9 @@ kill_instance() {
 
 	for parent_pid in ${PROCESS[@]}; do	
 		[[ ! -d /proc/$parent_pid/ ]] && continue
-		
+		kill $KILL_PARAM $parent_pid
+		log "$(get_arrow $?) Killed ${INSTANCE[$parent_pid]} ($parent_pid)"
+	
 		for pid in ${PROCESS_CHILDREN[$parent_pid]}; do
 			[[ ! -d /proc/$pid/ ]] && continue
 			kill $KILL_PARAM $pid
@@ -277,7 +282,7 @@ enumerate_ps_list() {
 				vars=(); print_process; [[ $? == 1 ]] && return 1
 			done
 		fi
-	done; [[ ! $DISPLAY_COLUMNS ]] && printf "\n"; return 0	
+	done; [[ ! $DISPLAY_COLUMNS ]] && echo; return 0	
 }
 
 print_process() {

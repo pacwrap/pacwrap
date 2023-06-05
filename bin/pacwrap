@@ -22,7 +22,7 @@ source pacwrap-common
 
 main () {
 	parse_args "$@"
-	runtime_check
+	test_runtime
 
 	[[ $SWITCH != V ]] && [[ $SWITCH != h ]] && distro_warn
 
