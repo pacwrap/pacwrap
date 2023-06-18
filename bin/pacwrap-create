@@ -79,7 +79,7 @@ script_init () {
 	ARCHLINUX_TARBALL="archlinux-bootstrap-x86_64.tar.gz" 
 	ARCHLINUX_TARBALL_CACHE="$PACWRAP_CACHE_DIR/$ARCHLINUX_TARBALL" 
 
-	PARAMS="$INSTANCE --root --exec"	
+	PARAMS="$INSTANCE --exec --root --command"	
 	MACHINE_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 32 | head -n 1)
 	
 	case $SWITCH in

@@ -288,7 +288,8 @@ replicate() {
 		test_argument "Targets" $instances
 
 		for instance in ${instances[@]}; do 
-			[[ ! -f "$INSTANCE_CONFIG_DIR/$instance" ]] && continue
+			echo "test"
+			[[ ! -f "$INSTANCE_CONFIG_DIR/$instance.yml" ]] && continue
 			source_configuration
 			populate_configuration
 			populate_container_array
@@ -469,11 +470,8 @@ edit_file() {
 				error="instanced template $file"
 				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
 				dissolve=1;;
-			*c*)	file="$INSTANCE_CONFIG_DIR/$instance"
+			*c*)	file="$INSTANCE_CONFIG_DIR/$instance.yml"
 				error="config file";;
-			*b*)	file="$PACWRAP_CONFIG_DIR/bwrap/$instance.sh"
-				error="bubblewrap script $file"
-				create=1;;
 			*d*)	file="$HOME/.local/share/applications/pacwrap.$instance.desktop"
 				error="pacwrap.$instance.desktop";;
 			*l*)	file="$PACWRAP_DATA_DIR/pacwrap.log"

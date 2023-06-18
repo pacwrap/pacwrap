@@ -42,10 +42,10 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.18 BETA"
+VER="v0.9.19 "
 
 MAN_SCRIPT="pacwrap-man"
-EXEC_SCRIPT="pacwrap-exec"
+EXEC_SCRIPT="pacwrap"
 CREATE_SCRIPT="pacwrap-create"
 UTILS_SCRIPT="pacwrap-utils"
 SYNC_SCRIPT="pacwrap-sync"
@@ -140,29 +140,17 @@ populate_container_array() {
 }
 
 source_configuration() {
-	source $INSTANCE_CONFIG_DIR/$instance
+	eval $(pacwrap -Axcl $instance)
 }
 
 
 reset_configuration_params() {
 	TYPE=; DEPS=; 	
 	PKGS=; SYNC_PACMANDB=
-	CONCURRENT_LIMIT=; MOUNT=
-	PERMISSIONS=; ENV_VARS=
-	PERMISSIONS_DBUS=; SCRIPT=
 }
 
 populate_configuration() {
-	INSTANCE_CONFIG[$instance,0]=$TYPE
-	INSTANCE_CONFIG[$instance,1]="${DEPS[@]}"
 	INSTANCE_CONFIG[$instance,2]=$SYNC_PACMANDB
-	INSTANCE_CONFIG[$instance,3]="${PKGS[@]}"
-	INSTANCE_CONFIG[$instance,4]=$CONCURRENT_LIMIT	
-	INSTANCE_CONFIG[$instance,5]=$MOUNT
-	INSTANCE_CONFIG[$instance,6]=$PERMISSIONS
-	INSTANCE_CONFIG[$instance,7]=$ENV_VARS
-	INSTANCE_CONFIG[$instance,8]=$PERMISSIONS_DBUS
-	INSTANCE_CONFIG[$instance,9]=$SCRIPT	
 }
 
 return_mount() {
@@ -285,7 +273,7 @@ progress_bar() {
 
 obtain_explicit_packages() {
 	[[ ${PKGLIST_EXPLICIT[$1]} ]] && return
-	PKGLIST_EXPLICIT[$1]=$($EXEC_SCRIPT --root --exec $1 pacman -Qqe)
+	PKGLIST_EXPLICIT[$1]=$($EXEC_SCRIPT --exec --root --command $1 pacman -Qqe)
 	[[ $? != 0 ]] && 
 		log_error $ARROW_RED "Query of pacman database failed." \
 				     "Use pacwrap -Sv and examine stdout for details." 1
@@ -353,7 +341,7 @@ initialize_data_directory() {
 		 "$PACWRAP_DATA_DIR/pacman/sync" \
 		 "$PACWRAP_DATA_DIR/pacman/gnupg" \
 		 "$PACWRAP_CACHE_DIR/pkg" \
-		 "$PACWRAP_CONFIG_DIR/root" \
+		 "$PACWRAP_CONFIG_DIR/instance" \
 		 "$PACWRAP_CONFIG_DIR/pacman.d" \
 		 "$PACWRAP_CONFIG_DIR/pacman/sync" \
 		 "$PACWRAP_CONFIG_DIR/pacman/syncdb" \
@@ -384,18 +372,7 @@ _CONFIG
 }
 
 generate_config() {
-	local config=$(cat << _CONFIG
-##\n## Configuration for $instance container\n## generated on $(date "+%F %T") by $EXEC_NAME.
-\n##\n\n# Container type (DO NOT EDIT)\nTYPE=$(return_type)\n\n# Container dependency array (DO NOT EDIT)
-\nDEPS=($(return_dependencies))\n\n# Container explicit install array\nPKGS=($@)\n\n# Forcibly apply pacman -Sy to container
-\n# Not applicable to ROOT containers\nSYNC_PACMANDB=$(return_sync_pacmandb)\n\n# Limit concurrent containers running
-\nCONCURRENT_LIMIT=${INSTANCE_CONFIG[$instance,$CONF_CONCURRENT_LIMIT]}\n\n# Container filesystem bindings \nMOUNT="$(return_mount $instance)"
-\n\n# Container permissions for bubblewrap\nPERMISSIONS="${INSTANCE_CONFIG[$instance,$CONF_PERMS]}"
-\n\n# DBUS permissions for xdg-dbus-proxy.\nPERMISSIONS_DBUS="${INSTANCE_CONFIG[$instance,$CONF_DBUS]}"
-\n\n# Environment Variables\nENV_VARS="${INSTANCE_CONFIG[$instance,$CONF_ENV]}"
-_CONFIG
-)
-	echo -e $config > "$INSTANCE_CONFIG_DIR/$instance"
+	PACWRAP_PKGS="$@" PACWRAP_DEPS="$(return_dependencies)" PACWRAP_TYPE="$(return_type)" pacwrap -Axcs $instance
 }
 
 test_runtime() {

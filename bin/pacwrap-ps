@@ -128,7 +128,7 @@ enumerate_process_array() {
 		if [[ $exec_name != bwrap ]]; then
  			[[ $exec_name == pacwrap* ]] && 
 			      for cmd in ${cmdlist[@]}; do case $cmd in
-					-*|/*) continue;;
+					-*|*/*|pacwrap*) continue;;
 					*) instance=$cmd; break;;
 			      esac; done
 		elif [[ ${CHILD_PROCESS[$parent_id]} ]] || [[ ${CHILD_PROCESS[$pid]} ]]; then

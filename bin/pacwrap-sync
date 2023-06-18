@@ -28,7 +28,7 @@ declare -A SYNCREQ
 declare -A IS_DIFF
 declare -A DIFF
 
-EXEC_SCRIPT="$EXEC_SCRIPT  --root --exec"
+EXEC_SCRIPT="$EXEC_SCRIPT --exec --root --command"
 LINKFILES=("bin" "lib" "lib32" "share")
 LINK_OUTPUT_DEST="/dev/null"
 LINK_DIFF=0
@@ -116,8 +116,8 @@ parse_args () {
 script_init () {
 	log_to_file "Running '$RUNTIME_EXEC $RUNTIME_ARGS'"
 
-	[[ $SWITCH == *g ]] && SYNC_CONFIG=1
-	[[ $SWITCH == *gp ]] && UPDATE_CONFIG=1
+	[[ $SWITCH == *g* ]] && SYNC_CONFIG=1
+	[[ $SWITCH == *p* ]] && UPDATE_CONFIG=1
 	[[ $SWITCH == *y* ]] && SYNC_UPDATE=1
 	[[ $SWITCH == *u* ]] && SYNC_UPGRADE=1
 	[[ $SWITCH == *yy* ]] && SYNC_FOREIGN=1
