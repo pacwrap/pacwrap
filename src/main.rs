@@ -42,7 +42,7 @@ fn main() {
 }
 
 fn print_version() {
-    println!("{} {}{} ", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_VERSION_MINOR"));
+    println!("{} {} ", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     let info=concat!("Copyright (C) 2023 Xavier R.M.\n\n",
                      "Website: https://git.sapphirus.org/pacwrap\n",
                      "Github: https://github.com/sapphirusberyl/pacwrap\n\n",

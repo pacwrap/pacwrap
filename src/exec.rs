@@ -10,6 +10,7 @@ use std::io::{Read};
 use std::path::Path;
 use std::vec::Vec;
 use std::collections::HashMap;
+use std::os::unix::net::UnixStream;
 
 use signal_hook::{consts::SIGINT, iterator::Signals};
 use os_pipe::{PipeReader, PipeWriter};
@@ -77,6 +78,7 @@ fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, swit
     .arg("--info-fd").arg(fd.to_string())
     .args(exec_args.get_env()).args(arguments)
     .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
+
 
     match proc.spawn() {
             Ok(c) => wait_on_process(c, &read_info_json(reader, writer), *cfg.allow_forking(), jobs),
@@ -183,21 +185,51 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, vars: &InsVars, args: &mut ExecutionA
 
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
     let dbus_socket = create_dbus_socket();
-    let dbus_session = env!("DBUS_SESSION_BUS_ADDRESS", "Failure");
+    let dbus_session = env::var("DBUS_SESSION_BUS_ADDRESS").unwrap();
 
     match Command::new("xdg-dbus-proxy")
     .arg(dbus_session).arg(&dbus_socket)
     .args(args.get_dbus()).spawn() {
          Ok(child) => {
-            args.robind(dbus_socket, &dbus_socket_path);
+            args.robind(&dbus_socket, &dbus_socket_path);
             args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
             args.env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={}", &dbus_socket_path));
+           
+            /* 
+             * This blocking code is required to prevent a downstream race condition with 
+             * bubblewrap. Unless xdg-dbus-proxy is passed improper parameters, this while loop 
+             * should never increment more than once or twice.
+             *
+             * With a sleep duration of 5 milliseconds, we check the socket 20 times before failure.
+             */
+
+            let mut increment = 0;
+            
+            while ! check_socket(&dbus_socket) { 
+                thread::sleep(Duration::from_millis(5));
+
+                if increment == 20 { 
+                    print_error("xdg-dbux-proxy socket timed out.".into());
+                    exit(2); 
+                }
+
+                increment+=1;
+            }
+
             child
-        },
+         },
         Err(_) => {
             print_error("Activation of xdg-dbus-proxy failed.".into());
             exit(2); 
         },
+    }
+
+}
+
+fn check_socket(socket: &String) -> bool {
+    match UnixStream::connect(&Path::new(socket)) {
+       Ok(_) => true,
+       Err(_) => false,
     }
 }
 
