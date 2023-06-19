@@ -9,10 +9,9 @@ pub struct ExecutionArgs {
 
 impl ExecutionArgs {
 
-    pub fn new(b: &[String], d: &[String], e: &[String]) -> Self {
-        Self { bind: b.to_vec(), dev: d.to_vec(), envir: e.to_vec(), dbus: Vec::new() }
+    pub fn new() -> Self {
+        Self { bind: Vec::new(), dev: Vec::new(), envir: Vec::new(), dbus: Vec::new() }
     }
-
 
     pub fn get_bind(&self) -> &Vec<String> { &self.bind }
     pub fn get_dev(&self) -> &Vec<String> { &self.dev }

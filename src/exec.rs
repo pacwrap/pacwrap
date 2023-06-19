@@ -49,15 +49,20 @@ pub fn execute() {
 }
 
 fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, switch: &String)  {
-    let mut exec_args = ExecutionArgs::new(&["--tmpfs".into(), "/tmp".into()], 
-                                           &["--dev".into(), "/dev".into(), "--proc".into(), "/proc".into()], &[]);
+    let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<RefCell<Child>> = Vec::new();
 
+    if switch.contains("s") { exec_args.env("TERM", "xterm"); }    
+    if ! cfg.enable_userns() { exec_args.push_env("--disable-userns"); }
     if ! cfg.allow_forking() { exec_args.push_env("--die-with-parent"); }
-    if ! cfg.retain_session() { exec_args.push_env("--new-session"); }
-    if switch.contains("s") { exec_args.env("TERM", "xterm"); }
-    if cfg.dbus().len() > 0 { 
-        jobs.push(register_dbus(cfg.dbus(), &vars, &mut exec_args).into()); } 
+    
+    if ! cfg.retain_session() { 
+        exec_args.push_env("--new-session"); 
+    } else {
+        print_warning(format!("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details.")); 
+    }
+
+    if cfg.dbus().len() > 0 { jobs.push(register_dbus(cfg.dbus(), &vars, &mut exec_args).into()); } 
 
     register_filesystems(cfg.filesystem(), &vars, &mut exec_args);
     register_permissions(cfg.permissions(), &vars, &mut exec_args);
@@ -73,12 +78,16 @@ fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, swit
     let fd = writer.as_raw_fd();
     let mut proc = Command::new(BWRAP_EXECUTABLE);
     
-    proc.args(exec_args.get_bind()).args(exec_args.get_dev())
-    .arg("--proc").arg("/proc").arg("--unshare-all").arg("--clearenv")
-    .arg("--info-fd").arg(fd.to_string())
-    .args(exec_args.get_env()).args(arguments)
-    .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
-
+    proc.arg("--dir").arg("/tmp")
+        .args(exec_args.get_bind())
+        .arg("--dev").arg("/dev").args(exec_args.get_dev())
+        .arg("--proc").arg("/proc")
+        .arg("--unshare-all")
+        .arg("--unshare-user")
+        .arg("--clearenv")
+        .args(exec_args.get_env()).arg("--info-fd")
+        .arg(fd.to_string()).args(arguments)
+        .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
             Ok(c) => wait_on_process(c, &read_info_json(reader, writer), *cfg.allow_forking(), jobs),
@@ -293,6 +302,8 @@ fn execute_fakeroot(instance: InsVars, arguments: &Vec<String>) {
     .arg("--setenv").arg("HOME").arg(&instance.home_mount())
     .arg("--setenv").arg("USER").arg(&instance.user())
     .arg("--die-with-parent")
+    .arg("--unshare-user")
+    .arg("--disable-userns")
     .arg("fakechroot")
     .arg("fakeroot")
     .args(arguments)

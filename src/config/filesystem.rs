@@ -6,6 +6,7 @@ pub mod root;
 mod to_home;
 mod to_root;
 mod dir;
+mod sys;
 
 pub struct Error {
     error: String,
@@ -31,4 +32,8 @@ pub trait Filesystem {
 
 fn default_permission() -> String {
     "ro".into()
+}
+
+fn is_default_permission(var: &String) -> bool {
+    if var == "ro" { return true; } false
 }

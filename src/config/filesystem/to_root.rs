@@ -5,45 +5,83 @@ use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
 use crate::config::InsVars;
-use crate::config::filesystem::{Filesystem, Error, default_permission};
+use crate::config::filesystem::{Filesystem, Error, default_permission, is_default_permission};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TO_ROOT {
-    #[serde(default = "default_permission")]  
+    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
     permission: String,
-    #[serde(default)] 
+    #[serde(default)]
+    path: Vec<String>,
+    #[serde(default)]
+    filesystem: Vec<Mount>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Mount {
+    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]  
+    permission: String,
+    #[serde(default)]
     path: Vec<String>
 }
+
 #[typetag::serde]
 impl Filesystem for TO_ROOT {
-
     fn check(&self, vars: &InsVars) -> Result<(), Error> {
-        let per = self.permission.to_lowercase();
-
-        if per != "ro" && per != "rw" {
-            Err(Error::new("TO_ROOT", format!("{} is an invalid permission.", self.permission), true))? 
+        if self.path.len() > 0 {
+            if let Err(e) = check_mount(&self.permission, &self.path[0]) {
+                return Err(e);
+            }
+        } else {
+            if self.filesystem.len() == 0 {
+                Err(Error::new("TO_ROOT", format!("Filessytem paths are undeclared."), false))?
+            }
         }
 
-        if self.path.len() == 0 {
-            Err(Error::new("TO_ROOT", format!("Path not specified."), false))?
+        for m in self.filesystem.iter() { 
+            if m.path.len() == 0 {
+                Err(Error::new("TO_ROOT", format!("Filesystem paths are undeclared."), false))?
+            } 
+            if let Err(e) = check_mount(&m.permission, &m.path[0]) {
+                return Err(e);
+            }
         }
-
-        if ! Path::new(&self.path[0]).exists() {
-            Err(Error::new("TO_ROOT", format!("Source path not found."), true))?
-        }
-       
         Ok(())
     }
 
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
-        let src = &self.path[0];
-        let mut dest: &String = src; 
+        if self.path.len() > 0 { 
+            bind_filesystem(args,vars, &self.permission, &self.path);
+        }
 
-        if self.path.len() > 1 { dest = &self.path[1]; }
- 
-        match self.permission.to_lowercase().as_str() {
-            p if p == "rw" => args.bind(src, dest), 
-            &_ =>  args.robind(src, dest)
+        for m in self.filesystem.iter() { 
+            bind_filesystem(args,vars, &m.permission, &m.path);
         }
     }
+}
+
+fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, path: &Vec<String>) {
+    let src = &path[0];
+    let mut dest: &String = src; 
+
+    if path.len() > 1 { dest = &path[1]; }
+  
+    match permission {
+        p if p == "rw" => args.bind(src, dest), 
+        &_ =>  args.robind(src, dest)
+    }
+}
+
+fn check_mount(permission: &String, path: &String) -> Result<(), Error> {
+    let per = permission.to_lowercase(); 
+        
+    if per != "ro" && per != "rw" {
+        Err(Error::new("TO_ROOT", format!("{} is an invalid permission.", permission), true))? 
+    }
+
+    if ! Path::new(path).exists() {
+        Err(Error::new("TO_ROOT", format!("Source path not found."), true))?
+    }
+       
+    Ok(())
 }
