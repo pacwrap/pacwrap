@@ -2,8 +2,11 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::constants::XDG_RUNTIME_DIR;
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::Error};
+use crate::config::{InsVars, Permission, permission::*};
+use crate::utils::check_socket;
+use crate::config::permission::{Condition::Success, PermError::Warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PIPEWIRE {
@@ -13,15 +16,24 @@ struct PIPEWIRE {
 
 #[typetag::serde]
 impl Permission for PIPEWIRE {
-    fn check(&self) -> Result<(),Error> {  
+    fn check(&self) -> Result<Option<Condition>, PermError> {  
         if ! Path::new(&self.socket).exists() {
-            Err(Error::new("PIPEWIRE", format!("Pipewire socket not present.")))?
+            Err(Warn(format!("Pipewire socket not found.")))?
         }
-        Ok(())
+
+        if ! check_socket(&self.socket) {          
+            Err(Warn(format!("'{}' is not a valid UNIX socket.", &self.socket)))?
+        }
+
+        Ok(Some(Success))
     }
     
     fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) {
         args.robind(&self.socket, default_socket());
+    }
+
+    fn module(&self) -> &str {
+        "PIPEWIRE"
     }
 }
 
@@ -31,5 +43,5 @@ fn is_default_socket(var: &String) -> bool {
 }
 
 fn default_socket() -> String {
-    format!("/run/user/{}/pipewire-0", nix::unistd::geteuid())
+    format!("{}/pipewire-0", *XDG_RUNTIME_DIR)
 }

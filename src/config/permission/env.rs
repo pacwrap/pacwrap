@@ -4,32 +4,30 @@ use std::env;
 
 use crate::exec::args::ExecutionArgs;
 use crate::utils::print_warning;
-use crate::config::{InsVars, Permission, permission::Error};
-
-
+use crate::config::{InsVars, Permission, permission::*, permission::Condition::*};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ENV { 
-    #[serde(default)] 
+    #[serde(skip_serializing_if = "String::is_empty", default)] 
     var: String,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty", default)] 
     set: String,
-    #[serde(default)]    
+    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     variables: Vec<Var>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Var {
     var: String,
-    #[serde(default = "default_set")]  
+    #[serde(skip_serializing_if = "String::is_empty", default)]   
     set: String
 }
 
 #[typetag::serde]
 impl Permission for ENV {
 
-    fn check(&self) -> Result<(),Error> {
-        Ok(())
+    fn check(&self) -> Result<Option<Condition>, PermError> {
+        Ok(Some(Success))
     }
 
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {        
@@ -43,6 +41,10 @@ impl Permission for ENV {
             args.env(&v.var, set);
         }
     }
+
+    fn module(&self) -> &str {
+        "ENV"
+    }
 }
 
 fn set_env(var: &String, set: &String) -> String {
@@ -51,13 +53,8 @@ fn set_env(var: &String, set: &String) -> String {
      match env::var(&var) { 
         Ok(env) => env, 
         Err(_) => {
-            print_warning(format!("Environment variable {} is empty.", var));
+            print_warning(format!("Environment variable {} is unset.", var));
             String::new()
         }
     } 
 }
-
-fn default_set() -> String {
-    "".into()
-}
-

@@ -1,26 +1,24 @@
-#![allow(unused_assignments)]
-
-use std::env;
-use std::process;
-use std::process::{Command, Child, ExitStatus, exit};
 use std::{thread, time::Duration};
-use std::os::unix::io::AsRawFd;
+use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
 use std::io::{Read};
 use std::path::Path;
 use std::vec::Vec;
 use std::collections::HashMap;
-use std::os::unix::net::UnixStream;
+use std::os::unix::io::AsRawFd;
 
-use signal_hook::{consts::SIGINT, iterator::Signals};
+use nix::unistd::Pid;
+use nix::sys::signal::kill;
+use nix::sys::signal::Signal;
+
+use signal_hook::{consts::*, iterator::Signals};
 use os_pipe::{PipeReader, PipeWriter};
-use std::cell::RefCell;
 use command_fds::{CommandFdExt, FdMapping};
-use serde_json::Value;
+use serde_json::{Value, json};
 
-use crate::config::{self, Instance, vars::InsVars, filesystem::Filesystem, permission::Permission, dbus::Dbus};
-use crate::utils::{print_error, print_warning, test_root, arguments::Arguments};
-use crate::constants::BWRAP_EXECUTABLE;
+use crate::config::{self, Instance, InsVars, Filesystem, Permission, Dbus, permission::*};
+use crate::utils::{self, TermControl, Arguments, env_var, print_error, print_warning};
+use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET};
 use crate::exec::args::ExecutionArgs;
 
 pub mod args;
@@ -50,16 +48,17 @@ pub fn execute() {
 
 fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, switch: &String)  {
     let mut exec_args = ExecutionArgs::new();
-    let mut jobs: Vec<RefCell<Child>> = Vec::new();
+    let mut jobs: Vec<Child> = Vec::new();
 
     if switch.contains("s") { exec_args.env("TERM", "xterm"); }    
-    if ! cfg.enable_userns() { exec_args.push_env("--disable-userns"); }
     if ! cfg.allow_forking() { exec_args.push_env("--die-with-parent"); }
-    
-    if ! cfg.retain_session() { 
-        exec_args.push_env("--new-session"); 
-    } else {
+    if ! cfg.retain_session() { exec_args.push_env("--new-session"); } else {
         print_warning(format!("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details.")); 
+    }
+
+    if ! cfg.enable_userns() { 
+        exec_args.push_env("--unshare-user"); 
+        exec_args.push_env("--disable-userns"); 
     }
 
     if cfg.dbus().len() > 0 { jobs.push(register_dbus(cfg.dbus(), &vars, &mut exec_args).into()); } 
@@ -67,30 +66,31 @@ fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, swit
     register_filesystems(cfg.filesystem(), &vars, &mut exec_args);
     register_permissions(cfg.permissions(), &vars, &mut exec_args);
    
-    //TODO: Implement separate abstraction for path vars.
+    //TODO: Implement separate abstraction for path vars.               
 
     exec_args.env("PATH", "/usr/bin/:/bin");
-    exec_args.env("XDG_RUNTIME_DIR", format!("/run/user/{}/", nix::unistd::geteuid()));
+    exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
     
     if switch.contains("v") { println!("{:?} ",exec_args); }
 
     let (reader, writer) = os_pipe::pipe().unwrap();
     let fd = writer.as_raw_fd();
+    let tc = TermControl::new(0);
     let mut proc = Command::new(BWRAP_EXECUTABLE);
-    
+      
     proc.arg("--dir").arg("/tmp")
         .args(exec_args.get_bind())
-        .arg("--dev").arg("/dev").args(exec_args.get_dev())
+        .arg("--dev").arg("/dev")
         .arg("--proc").arg("/proc")
+        .args(exec_args.get_dev())
         .arg("--unshare-all")
-        .arg("--unshare-user")
         .arg("--clearenv")
         .args(exec_args.get_env()).arg("--info-fd")
         .arg(fd.to_string()).args(arguments)
         .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
-            Ok(c) => wait_on_process(c, &read_info_json(reader, writer), *cfg.allow_forking(), jobs),
+            Ok(c) => wait_on_process(c, read_info_json(reader, writer), *cfg.allow_forking(), jobs, tc),
             Err(_) => print_error(format!("Failed to initialise bwrap."))
     }
 }
@@ -101,47 +101,53 @@ fn read_info_json(mut reader: PipeReader, writer: PipeWriter) -> Value {
     reader.read_to_string(&mut output).unwrap();           
     match serde_json::from_str(&output) {
         Ok(value) => value,
-        Err(_) => Value::Null
+        Err(_) => json!(null)
     }
 }
 
-fn signal_init(child_id: String) {
-    let mut signals = Signals::new(&[SIGINT]).unwrap();
+
+fn signal_trap(pids: Vec<i32>, block: bool) {
+    let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
+
     thread::spawn(move || {
-        for _sig in signals.forever() {
-            if Path::new(&format!("/proc/{}/", &child_id)).exists() { 
-                Command::new("/usr/bin/kill").arg("-9").arg(&child_id).output().expect("Failed.");
+        for _sig in signals.forever() { 
+            if block { 
+                for pid in pids.iter() {
+                    if Path::new(&format!("/proc/{}/", pid)).exists() { 
+                        kill(Pid::from_raw(*pid), Signal::SIGKILL).unwrap(); 
+                    }
+                }
             }
-            clean_up_socket();
-            Command::new("/usr/bin/reset").arg("-w").output().expect("Failed.");
-            println!();
         }
     });
 }
 
-fn wait_on_process(mut process: Child, value: &Value, block: bool, jobs: Vec<RefCell<Child>>) {  
-    if block {
-        signal_init(value["child-pid"].to_string()); 
+fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<Child>, tc: TermControl) {  
+    let bwrap_pid = utils::derive_bwrap_child(&value["child-pid"]);
+    let mut j: Vec<i32> = [bwrap_pid].to_vec();
+    
+    for job in jobs.iter_mut() { 
+        j.push(utils::job_i32(job)); 
     }
+
+    signal_trap(j, block.clone()); 
 
     match process.wait() {
         Ok(status) => { 
             if block {
-                let proc = format!("/proc/{}/", value["child-pid"]);
+                let proc = format!("/proc/{}/", bwrap_pid);
 
                 while Path::new(&proc).exists() { 
                     thread::sleep(Duration::from_millis(250)); 
                 }
             }
 
-            if jobs.len() > 0 {
-                for job in jobs.iter() {
-                    let mut child = job.borrow_mut();
-                    let _ = child.kill();
-                }
-            }
-
+            for job in jobs.iter_mut() {
+                job.kill().unwrap();
+            } 
+            
             clean_up_socket();
+            tc.reset_terminal().unwrap();
             process_exit(status);
         },
         Err(_) => {
@@ -154,11 +160,7 @@ fn wait_on_process(mut process: Child, value: &Value, block: bool, jobs: Vec<Ref
 fn process_exit(status: ExitStatus) {
     match status.code() {
         Some(o) => exit(o),
-        None => {
-            println!();
-            eprintln!("bwrap process {}", status);
-            exit(2);
-        }
+        None => { eprint!("\nbwrap process {}\n", status); exit(2); }
     }
 }
 
@@ -181,9 +183,28 @@ fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &InsVars, args: &m
 fn register_permissions(per: &Vec<Box<dyn Permission>>, vars: &InsVars, args: &mut ExecutionArgs) {
     for p in per.iter() {
         match p.check() {
-            Ok(_) => p.register(args, vars),
-            Err(e) => print_warning(format!("Failed to register permission {}: {} ", e.module(), e.error()))
-        }
+        Ok(condition) => {
+            match condition {
+                Some(b) => {
+                    p.register(args, vars);
+                    if let Condition::SuccessWarn(warning) = b {
+                        print_warning(format!("{}: {} ", p.module(), warning));
+                    }
+                },
+                None => continue
+            }
+        },
+        Err(condition) => 
+            match condition {
+               PermError::Warn(error) => {
+                    print_warning(format!("Failed to register permission {}: {} ", p.module(), error));
+                },
+                PermError::Fail(error) => {
+                    print_error(format!("Failed to register permission {}: {} ", p.module(), error));
+                    exit(1);
+                }
+            }
+        }      
     }
 }
 
@@ -192,88 +213,86 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, vars: &InsVars, args: &mut ExecutionA
         p.register(args, vars);
     }
 
+    create_dbus_socket();
+
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
-    let dbus_socket = create_dbus_socket();
-    let dbus_session = env::var("DBUS_SESSION_BUS_ADDRESS").unwrap();
+    let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS");
 
     match Command::new("xdg-dbus-proxy")
-    .arg(dbus_session).arg(&dbus_socket)
+    .arg(dbus_session).arg(&*DBUS_SOCKET)
     .args(args.get_dbus()).spawn() {
-         Ok(child) => {
-            args.robind(&dbus_socket, &dbus_socket_path);
+         Ok(mut child) => {
+            let mut increment: u8 = 0;
+            
+            args.robind(&*DBUS_SOCKET, &dbus_socket_path);
             args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
             args.env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={}", &dbus_socket_path));
-           
+            
             /* 
              * This blocking code is required to prevent a downstream race condition with 
              * bubblewrap. Unless xdg-dbus-proxy is passed improper parameters, this while loop 
-             * should never increment more than once or twice.
+             * shouldn't almost ever increment more than once or twice.
              *
-             * With a sleep duration of 5 milliseconds, we check the socket 20 times before failure.
+             * With a sleep duration of 500 microseconds, we check the socket 200 times before failure.
+             *
+             * ADDENDUM: Upon further examination of bubblewrap's code, it is not possible to ask bubblewrap
+             * to wait on a FD prior to instantiating the filesystem bindings.
              */
 
-            let mut increment = 0;
-            
-            while ! check_socket(&dbus_socket) { 
-                thread::sleep(Duration::from_millis(5));
-
-                if increment == 20 { 
-                    print_error("xdg-dbux-proxy socket timed out.".into());
-                    exit(2); 
-                }
-
-                increment+=1;
+            while ! check_socket(&*DBUS_SOCKET, &increment, &mut child) {
+                increment += 1;
             }
 
             child
          },
         Err(_) => {
-            print_error("Activation of xdg-dbus-proxy failed.".into());
+            print_error("Activation of xdg-dbus-proxy failed.");
             exit(2); 
         },
     }
-
 }
 
-fn check_socket(socket: &String) -> bool {
-    match UnixStream::connect(&Path::new(socket)) {
-       Ok(_) => true,
-       Err(_) => false,
+fn check_socket(socket: &String, increment: &u8, child: &mut Child) -> bool {
+    if increment == &200 { 
+        let _ = child.kill();
+
+        print_error("xdg-dbux-proxy socket timed out.");
+        clean_up_socket();
+        exit(2); 
     }
+
+    thread::sleep(Duration::from_micros(500));
+    utils::check_socket(socket)
 }
 
-
-fn create_dbus_socket() -> String {
-    let socket_address = format!("/run/user/1000/pacwrap_dbus_{}", &process::id());
-
-    match File::create(&socket_address) {
+fn create_dbus_socket() {
+    match File::create(&*DBUS_SOCKET) {
         Ok(file) =>  {
             drop(file);
-            socket_address 
         },
         Err(_) => {
-            print_error(format!("Failed to create dbus socket."));
+            print_error("Failed to create dbus socket.");
             eprintln!("Ensure you have write permissions to /run/user/.");
-            String::new()
+            exit(2);
         }
     }
 }
 
-fn clean_up_socket() {
-    let socket_address = format!("/run/user/1000/pacwrap_dbus_{}", &process::id());
-
-    if ! Path::new(&socket_address).exists() {
-        return;
+fn clean_up_socket() { 
+    if ! Path::new(&*DBUS_SOCKET).exists() {
+       return;
     }
 
-    if let Err(_) = remove_file(socket_address) {
+    if let Err(_) = remove_file(&*DBUS_SOCKET) {
         print_error(format!("Failed to remove FD."));
     }
 }
 
 fn execute_fakeroot(instance: InsVars, arguments: &Vec<String>) { 
-    test_root(&instance);
+    let tc = TermControl::new(0);
     
+    utils::test_root(&instance);
+ 
     match Command::new(BWRAP_EXECUTABLE)
     .arg("--tmpfs").arg("/tmp")
     .arg("--bind").arg(&instance.root()).arg("/")
@@ -308,8 +327,8 @@ fn execute_fakeroot(instance: InsVars, arguments: &Vec<String>) {
     .arg("fakeroot")
     .args(arguments)
     .spawn() {
-        Ok(process) => wait_on_process(process, &Value::Null, false, Vec::new()),
-        Err(_) => print_error(format!("Failed to initialise bwrap.")), 
+        Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), tc),
+        Err(_) => print_error("Failed to initialise bwrap."), 
     }
 }
 

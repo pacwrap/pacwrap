@@ -288,7 +288,6 @@ replicate() {
 		test_argument "Targets" $instances
 
 		for instance in ${instances[@]}; do 
-			echo "test"
 			[[ ! -f "$INSTANCE_CONFIG_DIR/$instance.yml" ]] && continue
 			source_configuration
 			populate_configuration

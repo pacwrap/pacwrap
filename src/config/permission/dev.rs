@@ -3,7 +3,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::Error};
+use crate::config::{InsVars, Permission, permission::*};
+use crate::config::permission::{Condition::Success, PermError::Fail};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DEV {
@@ -12,15 +13,19 @@ struct DEV {
 
 #[typetag::serde]
 impl Permission for DEV {
-    fn check(&self) -> Result<(),Error> {  
-         if ! Path::new(&format!("/dev/{}",self.device)).exists() {
-            Err(Error::new("dev", format!("/dev/{} is inaccessible.", self.device)))?
+    fn check(&self) -> Result<Option<Condition>, PermError> {  
+        if ! Path::new(&format!("/dev/{}",self.device)).exists() {
+            Err(Fail(format!("/dev/{} is inaccessible.", self.device)))?
         }
 
-        Ok(())
+        Ok(Some(Success))
     }
     
     fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) { 
         args.dev(&format!("/dev/{}", self.device));
+    }
+
+    fn module(&self) -> &str {
+        "DEV"
     }
 }

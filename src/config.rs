@@ -8,14 +8,15 @@ use std::fs::File;
 use std::process::exit;
 use std::collections::HashMap;
 
-use crate::config::filesystem::Filesystem;
-use crate::config::permission::Permission;
+use crate::utils::print_error;
+use crate::Arguments;
 use crate::config::permission::none::NONE;
 use crate::config::filesystem::root::ROOT;
 use crate::config::filesystem::home::HOME;
-use crate::utils::print_error;
-use crate::config::dbus::Dbus;
-use crate::Arguments;
+
+pub use crate::config::filesystem::Filesystem;
+pub use crate::config::permission::Permission;
+pub use crate::config::dbus::Dbus;
 
 pub use vars::InsVars;
 pub mod vars;

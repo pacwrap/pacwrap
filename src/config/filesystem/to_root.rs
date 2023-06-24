@@ -11,17 +11,17 @@ use crate::config::filesystem::{Filesystem, Error, default_permission, is_defaul
 pub struct TO_ROOT {
     #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
     permission: String,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     path: Vec<String>,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]  
     filesystem: Vec<Mount>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Mount {
-    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]  
+    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")] 
     permission: String,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     path: Vec<String>
 }
 

@@ -1,4 +1,7 @@
+use std::marker::Copy;
+
 #[derive(Debug)]
+
 pub struct ExecutionArgs {
     bind: Vec<String>,
     dev: Vec<String>,
@@ -48,15 +51,14 @@ impl ExecutionArgs {
         self.envir.push(dest.into());
     }
 
-    pub fn dev(&mut self, src: impl Into<String>) {
-        let dev = src.into();
+    pub fn dev(&mut self, src: impl Into<String> + Copy) {
         self.dev.push("--dev-bind-try".into());
-        self.dev.push(dev.clone());
-        self.dev.push(dev.clone());
+        self.dev.push(src.into());
+        self.dev.push(src.into());
     }
 
     pub fn dbus(&mut self, per: impl Into<String>, socket: impl Into<String>) {
-        self.dbus.push("--".to_owned()+&per.into()+"="+&socket.into());
+        self.dbus.push(format!("--{}={}", per.into(), socket.into()));
     }
 
 }

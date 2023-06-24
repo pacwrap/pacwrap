@@ -2,30 +2,28 @@ use crate::exec::args::ExecutionArgs;
 use crate::config::vars::InsVars;
 
 pub mod none;
-mod x11;
-mod env;
+mod display;
 mod pulseaudio;
 mod pipewire;
+mod env;
 mod gpu;
 mod net;
 mod dev;
 
-pub struct Error {
-    error: String,
-    mod_name: String
+pub enum Condition {
+    Success,
+    SuccessWarn(String),
+    Nothing
 }
 
-impl Error {
-    pub fn new(name: impl Into<String>, err: impl Into<String>) -> Self {
-        Self { error: err.into(), mod_name: name.into() }
-    }
-
-    pub fn error(&self) -> &String { &self.error }
-    pub fn module(&self) -> &String { &self.mod_name }
+pub enum PermError {
+    Fail(String),
+    Warn(String),
 }
 
 #[typetag::serde(tag = "permission")]
 pub trait Permission {
-    fn check(&self) -> Result<(),Error>;
+    fn check(&self) -> Result<Option<Condition>, PermError>;
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars);
+    fn module(&self) -> &str;
 }

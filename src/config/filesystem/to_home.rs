@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::constants::return_home;
+use crate::constants::HOME;
 use crate::exec::args::ExecutionArgs;
 use crate::config::InsVars;
 use crate::config::filesystem::{Filesystem, Error, default_permission, is_default_permission};
@@ -13,9 +13,9 @@ use crate::config::filesystem::{Filesystem, Error, default_permission, is_defaul
 pub struct TO_HOME {
     #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
     permission: String,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     path: Vec<String>,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]  
     filesystem: Vec<Mount>
 }
 
@@ -23,7 +23,7 @@ pub struct TO_HOME {
 struct Mount {
     #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")] 
     permission: String,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     path: Vec<String>
 }
 
@@ -68,7 +68,7 @@ fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, p
 
         if path.len() > 1 { dest = &path[1]; }
   
-        let path_src = format!("{}/{}", return_home(), path[0]);
+        let path_src = format!("{}/{}", *HOME, path[0]);
         let path_dest = format!("{}/{}", vars.home_mount(), dest);
 
         match permission {
@@ -85,7 +85,7 @@ fn check_mount(permission: &String, path: &String) -> Result<(), Error> {
         Err(Error::new("TO_HOME", format!("{} is an invalid permission.", permission), true))? 
     }
 
-    if ! Path::new(&format!("{}/{}", return_home(), &path)).exists() {
+    if ! Path::new(&format!("{}/{}", *HOME, &path)).exists() {
         Err(Error::new("TO_HOME", format!("~/{} not found.", path), true))?
     } 
     Ok(())
