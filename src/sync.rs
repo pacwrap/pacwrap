@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use alpm::{Alpm,  SigLevel, Usage, PackageReason};
 use console::style;
 use lazy_static::lazy_static;
 use pacmanconf;
 
-use crate::constants;
+use crate::{constants, utils};
 use crate::sync::dl_event::DownloadCallback;
 use crate::sync::linker::Linker;
 use crate::sync::progress_event::ProgressCallback;
@@ -28,33 +27,43 @@ mod linker;
 mod update;
 
 pub fn execute() { 
-    let args = Arguments::new(1, "-NS", HashMap::from([("--sync".into(), "y".into()), 
-                                                       ("--update".into(), "u".into()), 
-                                                       ("--query".into(),"q".into()),]));
-        
+    let mut sync = false;
+    let mut update = false;
+    let mut query = false;
+    let mut explicit = false;
+    let mut sync_count = 0;
+
+    let mut args = Arguments::new().prefix("-S")
+        .switch("-y", "--sync", &mut sync).count(&mut sync_count)
+        .switch("-u", "--upgrade", &mut update)
+        .switch("-q", "--query", &mut query)
+        .switch("-e", "--explicit", &mut explicit);
+    
+    args = args.parse_arguments();
+    let targets = args.get_runtime().clone();
     let cache: InstanceCache = InstanceCache::new();
-    let switch = args.get_switch();
 
-    if switch.starts_with("q") { 
-        query_database(&args) 
+    if sync && sync_count == 4 {
+        link(&cache, cache.registered());        
+    } else if query {
+        if targets.len() < 1 {
+            utils::print_help_msg("Target not specified.");
+        }
+        query_database(targets.get(0).unwrap(), explicit) 
     } else {
-
         let mut u: Update = Update::new();
 
-        if switch.contains("y") {
-            synchronize_database(&cache);
+        if sync {
+            synchronize_database(&cache, sync_count > 1);
         } 
-        if switch.contains("u") {
-
+        if update {
             u.update(&cache, &cache.containers_base());
             u.update(&cache, &cache.containers_dep());
        
             if u.updated().len() > 0 {
-                let mut l: Linker = Linker::new(cache.registered().len());
-                linker::wait_on(l.link(&cache, &cache.registered(), Vec::new()));
-                l.finish();
+                link(&cache, cache.registered());
             }
-            
+
             u.update(&cache, &cache.containers_root());
         }
 
@@ -62,9 +71,14 @@ pub fn execute() {
     }
 }
 
-fn query_database(args: &Arguments) {    
-    let instance = args.get_targets()[0].clone();
-    let instance_vars = InsVars::new(&instance);
+fn link(cache: &InstanceCache, containers: &Vec<String>) {
+    let mut l: Linker = Linker::new(containers.len());
+    linker::wait_on(l.link(&cache, containers, Vec::new()));
+    l.finish();
+}
+
+fn query_database(instance: &String, explicit: bool) {    
+    let instance_vars = InsVars::new(instance);
 
     test_root(&instance_vars);
 
@@ -72,7 +86,7 @@ fn query_database(args: &Arguments) {
     let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", instance_vars.root())).unwrap();
 
     for pkg in handle.localdb().pkgs() {
-        if pkg.reason() != PackageReason::Explicit && args.get_switch().contains("e") {
+        if pkg.reason() != PackageReason::Explicit && explicit {
             continue;
         }
         println!("{} ", pkg.name());
@@ -117,14 +131,14 @@ fn register_remote(mut handle: Alpm) -> Alpm {
 
 
 
-fn synchronize_database(cache: &InstanceCache) {
+fn synchronize_database(cache: &InstanceCache, force: bool) {
     for i in cache.registered().iter() {
         let ins: &InstanceHandle = cache.instances().get(i).unwrap();
         if ins.instance().container_type() == "BASE" {
             let mut handle = instantiate_alpm_syncdb(&ins);
     
              println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
-            handle.syncdbs_mut().update(false).unwrap();
+            handle.syncdbs_mut().update(force).unwrap();
             Alpm::release(handle).unwrap();  
             break;
         }

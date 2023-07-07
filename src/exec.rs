@@ -4,7 +4,6 @@ use std::fs::{File, remove_file};
 use std::io::Read;
 use std::path::Path;
 use std::vec::Vec;
-use std::collections::HashMap;
 use std::os::unix::io::AsRawFd;
 
 use nix::unistd::Pid;
@@ -24,33 +23,42 @@ use crate::exec::args::ExecutionArgs;
 pub mod args;
 
 pub fn execute() {
-    let args = Arguments::new(1, "-E", HashMap::from([("--exec".into(), "E".into()),
-                                                      ("--root".into(), "r".into()),
-                                                      ("--shell".into(), "s".into()),
-                                                      ("--command".into(),"c".into()),]));
+    let mut root = false;
+    let mut cmd = false;
+    let mut shell = false;
+    let mut verbose = false;
 
-    let switch = args.get_switch();
-    let instance = args.get_targets()[0].clone();
-    let runtime = args.get_runtime();
+    let args = Arguments::new()
+        .prefix("-E")
+        .switch("-r", "--root", &mut root)
+        .switch("-v", "--verbose", &mut verbose)
+        .switch("-c", "--cmd", &mut cmd) 
+        .switch("-s", "-shell", &mut shell)
+        .parse_arguments();
 
+    let mut runtime = args.get_runtime().clone();
+
+    args.require_target(1);
+
+    let instance = runtime.remove(0);
     let instance_vars = InsVars::new(&instance);
+
+
     let cfg = config::load_configuration(&instance_vars.config_path()); 
 
-    if switch.contains("v") { instance_vars.debug(&cfg, &switch, &runtime); }
+    if verbose { instance_vars.debug(&cfg, &String::new(), &runtime); }
 
-    match switch.as_str() {
-        s if s.contains("rc") || s.contains("cr") => execute_fakeroot(instance_vars, runtime), 
-        s if s.contains("rs") || s.contains("sr") => execute_fakeroot(instance_vars, &["bash".into()].to_vec()),
-        s if s.contains("s") => execute_container(instance_vars,&["bash".into()].to_vec(), cfg, switch),
-        &_ => execute_container(instance_vars, runtime, cfg, switch), 
-    }
+        if root && cmd { execute_fakeroot(instance_vars, &runtime) }
+        else if root && shell { execute_fakeroot(instance_vars, &["bash".into()].to_vec()); }
+        else if shell { execute_container(instance_vars,&["bash".into()].to_vec(), cfg, shell, verbose); }
+        else { execute_container(instance_vars, &runtime, cfg, false, verbose); } 
 }
 
-fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, switch: &String) {
+fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, shell: bool, verbose: bool) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
 
-    if switch.contains("s") { exec_args.env("TERM", "xterm"); }    
+    if shell { exec_args.env("TERM", "xterm"); }    
     if ! cfg.allow_forking() { exec_args.push_env("--die-with-parent"); }
     if ! cfg.retain_session() { exec_args.push_env("--new-session"); } else {
         print_warning(format!("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details.")); 
@@ -71,7 +79,7 @@ fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, swit
     exec_args.env("PATH", "/usr/bin/:/bin");
     exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
     
-    if switch.contains("v") { println!("{:?} ",exec_args); }
+    if verbose { println!("{:?} ",exec_args); }
 
     let (reader, writer) = os_pipe::pipe().unwrap();
     let fd = writer.as_raw_fd();

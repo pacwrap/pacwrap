@@ -53,10 +53,11 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
                 } 
             }
 
+            let pos = current + 1;
             let progress_name: String = progress_name(progress,pkgname);
             let pb = this.progress.add(ProgressBar::new(progress_u64(percent)));
             pb.set_style(this.style.clone());
-            pb.set_message(format!("({}{}/{}) {}", whitespace, current, howmany, style(progress_name).bold())); 
+            pb.set_message(format!("({}{}/{}) {}", whitespace, pos, howmany, style(progress_name).bold())); 
             this.prbar.insert(progress_ident, pb);   
         }
     }

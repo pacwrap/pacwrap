@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 
 use crate::utils::print_error;
@@ -48,14 +47,21 @@ fn bash_configuration(instance: &String) {
 }
 
 pub fn compat() {
-    let args = Arguments::new(1, "-", HashMap::from([("--save".into(), "s".into()),
-                                                     ("--load".into(),"l".into())]));
-    let instance = &args.get_targets()[0];
+    let mut save = false;
+    let mut bash = false;
 
-    match args.get_switch().as_str() {
-        s if s.contains("s") => save_bash_configuration(instance),
-        s if s.contains("l") => bash_configuration(&instance),
-        &_ => print_error(format!("Invalid switch sequence.")), 
-    }       
+    let args = Arguments::new()
+        .prefix("-Axc")
+        .switch("-s", "--save", &mut save)
+        .switch("-l", "--link", &mut bash)
+        .parse_arguments();
+    let mut runtime = args.get_runtime().clone();
+    args.require_target(1);
+
+    let instance = runtime.remove(0);    
+
+    if save { save_bash_configuration(&instance); }
+    else if bash { bash_configuration(&instance); }
+    else { print_error(format!("Invalid switch sequence.")) }  
 }
 
