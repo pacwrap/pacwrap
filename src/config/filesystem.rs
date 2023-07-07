@@ -15,8 +15,8 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(name: impl Into<String>, err: impl Into<String>, critical: bool) -> Self {
-        Self { error: err.into(), mod_name: name.into(), critical: critical }
+    pub fn new(name: impl Into<String>, err: impl Into<String>, crit: bool) -> Self {
+        Self { error: err.into(), mod_name: name.into(), critical: crit }
     }
 
     pub fn error(&self) -> &String { &self.error }

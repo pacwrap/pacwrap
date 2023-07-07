@@ -1,7 +1,7 @@
 use std::env::var;
 
 use crate::constants::{LOCATION, HOME, USER};
-use crate::config::Instance;
+use crate::config::instance::Instance;
 
 #[derive(Clone)]
 pub struct InsVars {

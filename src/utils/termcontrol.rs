@@ -25,10 +25,10 @@ impl TermControl {
      * then return a zeroed struct.
      */
 
-    pub fn new(fd: i32) -> Self {
-        match tcgetattr(fd) {
-            Ok(output) => Self { tm: output, init: true, fd: fd},
-            Err(_) => Self { tm: unsafe { zeroed() }, init: false, fd: fd}
+    pub fn new(f: i32) -> Self {
+        match tcgetattr(f) {
+            Ok(output) => Self { tm: output, init: true, fd: f},
+            Err(_) => Self { tm: unsafe { zeroed() }, init: false, fd: f}
         }
     }
 

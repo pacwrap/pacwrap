@@ -4,9 +4,8 @@ use std::env::var;
 use std::os::unix::net::UnixStream;
 use std::fmt::Display;
 
-use lazy_static::lazy_static;
+use console::style;
 use serde_json::Value;
-use nix::unistd::isatty;
 
 use crate::config::vars::InsVars;
 
@@ -15,10 +14,7 @@ pub use termcontrol::TermControl;
 
 pub mod termcontrol;
 pub mod arguments;
-
-lazy_static! {
-    static ref ISATTY: bool = isatty_ansi(2);
-}
+pub mod prompt;
 
 pub fn test_root(instance: &InsVars) {
     if ! Path::new(&instance.root()).exists() || ! Path::new(&instance.home()).exists() {  
@@ -27,33 +23,12 @@ pub fn test_root(instance: &InsVars) {
     }
 }
 
-fn isatty_ansi(fd: i32) -> bool {
-    match isatty(fd) {
-        Ok(b) => {
-            if b && var("TERM").unwrap() != "dumb" {
-                true
-            } else {
-                false
-            }
-        },
-        Err(_) => false
-    }
-}
-
 pub fn print_warning(message: impl Into<String> + Display) {
-    if *ISATTY {
-        eprintln!("[1m[93mwarning:[0m {}", &message);
-    } else {
-        eprintln!("WARNING: {}", &message);
-    }
+    eprintln!("{} {}", style("warning:").bold().yellow(), &message);
 } 
 
 pub fn print_error(message: impl Into<String> + Display) {
-    if *ISATTY { 
-        eprintln!("[1m[31merror:[0m {}", &message);
-    } else {
-        eprintln!("ERROR: {}", &message);
-    }
+    eprintln!("{} {}", style("error:").bold().red(), &message);
 } 
 
 pub fn env_var(env: &str) -> String {

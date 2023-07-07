@@ -1,7 +1,7 @@
 use std::{thread, time::Duration};
 use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
-use std::io::{Read};
+use std::io::Read;
 use std::path::Path;
 use std::vec::Vec;
 use std::collections::HashMap;
@@ -46,7 +46,7 @@ pub fn execute() {
     }
 }
 
-fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, switch: &String)  {
+fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, switch: &String) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
 
@@ -66,7 +66,7 @@ fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, swit
     register_filesystems(cfg.filesystem(), &vars, &mut exec_args);
     register_permissions(cfg.permissions(), &vars, &mut exec_args);
    
-    //TODO: Implement separate abstraction for path vars.               
+    //TODO: Implement separate abstraction for path vars.
 
     exec_args.env("PATH", "/usr/bin/:/bin");
     exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
@@ -196,7 +196,7 @@ fn register_permissions(per: &Vec<Box<dyn Permission>>, vars: &InsVars, args: &m
         },
         Err(condition) => 
             match condition {
-               PermError::Warn(error) => {
+                PermError::Warn(error) => {
                     print_warning(format!("Failed to register permission {}: {} ", p.module(), error));
                 },
                 PermError::Fail(error) => {

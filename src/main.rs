@@ -8,15 +8,18 @@ mod config;
 mod exec;
 mod constants;
 mod utils;
+mod compat;
+mod sync;
 
 fn main() {
     let args = Arguments::new(0, "-", HashMap::from([("--exec".into(), "E".into()),
                                                      ("--explicit".into(), "E".into()),
                                                      ("--pacman".into(),"E".into()),
-                                                     ("--gen-cfg".into(),"Axc".into()), 
+                                                     ("--compat".into(),"Axc".into()), 
                                                      ("--version".into(),"V".into()),  
                                                      ("--create".into(),"C".into()), 
-                                                     ("--sync".into(),"S".into()),
+                                                     ("--new-sync".into(),"NS".into()),
+                                                     ("--sync".into(),"S".into()),  
                                                      ("--help".into(),"h".into()),
                                                      ("--utils".into(),"U".into()),
                                                      ("--process".into(),"P".into()),]));
@@ -24,19 +27,21 @@ fn main() {
     match args.get_switch().as_str() {
         s if s.starts_with("E") => exec::execute(),
         s if s.starts_with("V") => print_version(), 
+        s if s.starts_with("NS") => sync::execute(), 
         s if s.starts_with("S") => execute_pacwrap_bash("pacwrap-sync".to_string()),
         s if s.starts_with("U") => execute_pacwrap_bash("pacwrap-utils".to_string()),
         s if s.starts_with("C") => execute_pacwrap_bash("pacwrap-create".to_string()),
         s if s.starts_with("P") => execute_pacwrap_bash("pacwrap-ps".to_string()),
         s if s.starts_with("v") => execute_pacwrap_bash("pacwrap-man".to_string()), 
         s if s.starts_with("h") => execute_pacwrap_bash("pacwrap-man".to_string()),
-        s if s.starts_with("Axc") => config::aux_config(), 
+        s if s.starts_with("Axc") => compat::compat(), 
         &_ => {
             let mut ar = String::new();
             for arg in env::args().skip(1).collect::<Vec<_>>().iter() {
                 ar.push_str(&format!("{} ", &arg));
-            }
-            print_help_msg(&format!("Invalid arguments -- {}", ar));
+            } 
+            ar.truncate(ar.len()-1);
+            print_help_msg(&format!("Invalid arguments -- '{}'", ar));
         } 
    }
 }
