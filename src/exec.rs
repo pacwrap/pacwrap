@@ -32,8 +32,8 @@ pub fn execute() {
         .prefix("-E")
         .switch("-r", "--root", &mut root)
         .switch("-v", "--verbose", &mut verbose)
-        .switch("-c", "--cmd", &mut cmd) 
-        .switch("-s", "-shell", &mut shell)
+        .switch("-c", "--command", &mut cmd) 
+        .switch("-s", "--shell", &mut shell)
         .parse_arguments();
 
     let mut runtime = args.get_runtime().clone();

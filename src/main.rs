@@ -1,7 +1,6 @@
 use std::env;
 use std::process::Command;
-use utils::arguments::Arguments;
-use utils::print_help_msg;
+use utils::arguments::{self, Arguments};
 
 mod config;
 mod exec;
@@ -40,14 +39,7 @@ fn main() {
     else if bash_create { execute_pacwrap_bash("pacwrap-create"); }
     else if bash_proc { execute_pacwrap_bash("pacwrap-ps"); }
     else if bash_help { execute_pacwrap_bash("pacwrap-man"); }
-    else {
-        let mut ar = String::new();
-        for arg in env::args().skip(1).collect::<Vec<_>>().iter() {
-            ar.push_str(&format!("{} ", &arg));
-        } 
-        ar.truncate(ar.len()-1);
-        print_help_msg(&format!("Invalid arguments -- '{}'", ar));
-    } 
+    else { arguments::invalid(); } 
 }
 
 fn print_version() {

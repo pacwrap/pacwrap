@@ -15,17 +15,27 @@ pub struct InstanceCache {
 
 impl InstanceCache {
     pub fn new() -> Self {
-        let s = Self {
+        Self {
             instances: HashMap::new(),
             registered: Vec::new(),
             containers_base: Vec::new(),
             containers_dep: Vec::new(),
             containers_root: Vec::new(),
-        };
-        s.populate()
+        }
     }
+
  
-    fn populate(mut self) -> Self {
+    pub fn populate_from(&mut self, containers: &Vec<String>) {
+        for name in containers {
+            if self.map_instance(&name) {      
+                self.registered.push(name.clone());
+                let deps = self.instances.get(name).unwrap().instance().dependencies().clone();
+                self.populate_from(&deps); 
+            }
+        }
+    } 
+
+    pub fn populate(&mut self) {
         if let Ok(dir) = read_dir(format!("{}/root", LOCATION.get_data())) {
             for f in dir {
                 if let Ok(file) = f {
@@ -36,7 +46,6 @@ impl InstanceCache {
                 }
             }
         }
-        self
     }
 
     fn map_instance(&mut self, ins: &String) -> bool {

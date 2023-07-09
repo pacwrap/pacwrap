@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 use crate::utils;
 
+use super::print_help_msg;
+
 pub struct Arguments<'a> {
     prefix: String,
     runtime: Vec<String>,
@@ -108,4 +110,13 @@ impl<'a> Arguments<'a> {
 
     pub fn get_runtime(&self) -> &Vec<String> { &self.runtime }
     pub fn get_prefix(&self) -> &String { &self.prefix }
+}
+
+pub fn invalid() {
+    let mut ar = String::new();
+    for arg in env::args().skip(1).collect::<Vec<_>>().iter() {
+        ar.push_str(&format!("{} ", &arg));
+    } 
+    ar.truncate(ar.len()-1);
+    print_help_msg(&format!("Invalid arguments -- '{}'", ar));
 }

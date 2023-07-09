@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use alpm::{AnyDownloadEvent, DownloadEvent};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use console::{Term, style};
+use console::Term;
 
 #[derive(Clone)]
 pub struct DownloadCallback {
@@ -44,7 +44,7 @@ pub fn download_event(filename: &str, download: AnyDownloadEvent, this: &mut Dow
                     let name: Vec<&str> = filename.split(".").collect(); 
                     let pb = this.progress.add(ProgressBar::new(progress.total.unsigned_abs()));
                     pb.set_style(this.style.clone());
-                    pb.set_message(style(name[0].to_string()).bold().to_string()); 
+                    pb.set_message(name[0].to_string()); 
                     this.prbar.insert(filename.to_string(), pb);   
                 }
             }    
@@ -58,7 +58,7 @@ pub fn download_event(filename: &str, download: AnyDownloadEvent, this: &mut Dow
                     let name: Vec<&str> = filename.split(".").collect(); 
                     let pb = this.progress.add(ProgressBar::new(0));
                     pb.set_style(this.finished.clone());
-                    pb.set_message(format!("{} is up-to-date!", style(name[0].to_string()).bold().to_string())); 
+                    pb.set_message(format!("{} is up-to-date!", name[0].to_string())); 
                     pb.finish();
                     this.prbar.insert(filename.to_string(), pb); 
                 }

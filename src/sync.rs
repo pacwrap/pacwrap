@@ -5,16 +5,15 @@ use console::style;
 use lazy_static::lazy_static;
 use pacmanconf;
 
-use crate::{constants, utils};
+use crate::constants;
 use crate::sync::dl_event::DownloadCallback;
 use crate::sync::linker::Linker;
 use crate::sync::progress_event::ProgressCallback;
 use crate::sync::update::Update;
-use crate::utils::{Arguments, test_root};
+use crate::utils::{Arguments, test_root, print_help_msg};
 use crate::config::InsVars;
 use crate::config::cache::InstanceCache;
 use crate::config::InstanceHandle;
-
 
 lazy_static! {
     static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman/pacman.conf", constants::LOCATION.get_config())).unwrap(); 
@@ -32,7 +31,6 @@ pub fn execute() {
     let mut query = false;
     let mut explicit = false;
     let mut sync_count = 0;
-
     let mut args = Arguments::new().prefix("-S")
         .switch("-y", "--sync", &mut sync).count(&mut sync_count)
         .switch("-u", "--upgrade", &mut update)
@@ -41,40 +39,33 @@ pub fn execute() {
     
     args = args.parse_arguments();
     let targets = args.get_runtime().clone();
-    let cache: InstanceCache = InstanceCache::new();
+    let mut cache: InstanceCache = InstanceCache::new();
 
-    if sync && sync_count == 4 {
-        link(&cache, cache.registered());        
+    if targets.len() > 0 {
+        cache.populate_from(&targets);
+    } else {
+        cache.populate();
+    }
+ 
+    if sync && sync_count == 4 {      
+        let mut l: Linker = Linker::new(); 
+        l.start(cache.registered().len());
+        linker::wait_on(l.link(&cache, cache.registered(), Vec::new()));
+        l.finish();
     } else if query {
         if targets.len() < 1 {
-            utils::print_help_msg("Target not specified.");
+            print_help_msg("Target not specified.");
         }
         query_database(targets.get(0).unwrap(), explicit) 
     } else {
-        let mut u: Update = Update::new();
-
         if sync {
             synchronize_database(&cache, sync_count > 1);
-        } 
-        if update {
-            u.update(&cache, &cache.containers_base());
-            u.update(&cache, &cache.containers_dep());
-       
-            if u.updated().len() > 0 {
-                link(&cache, cache.registered());
-            }
-
-            u.update(&cache, &cache.containers_root());
         }
 
-        println!("{} Transaction complete.",style("->").bold().green());
+        if update {
+            update::update(Update::new(), &cache);
+        }
     }
-}
-
-fn link(cache: &InstanceCache, containers: &Vec<String>) {
-    let mut l: Linker = Linker::new(containers.len());
-    linker::wait_on(l.link(&cache, containers, Vec::new()));
-    l.finish();
 }
 
 fn query_database(instance: &String, explicit: bool) {    
@@ -129,15 +120,13 @@ fn register_remote(mut handle: Alpm) -> Alpm {
     handle
 }
 
-
-
 fn synchronize_database(cache: &InstanceCache, force: bool) {
     for i in cache.registered().iter() {
         let ins: &InstanceHandle = cache.instances().get(i).unwrap();
         if ins.instance().container_type() == "BASE" {
             let mut handle = instantiate_alpm_syncdb(&ins);
     
-             println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
+            println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
             handle.syncdbs_mut().update(force).unwrap();
             Alpm::release(handle).unwrap();  
             break;

@@ -5,7 +5,7 @@ use std::sync::mpsc::{Sender, self, Receiver};
 use std::thread::JoinHandle;
 
 use indexmap::IndexMap;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle, ProgressDrawTarget};
 use serde::{Serialize, Deserialize};
 use walkdir::WalkDir;
 use std::collections::HashMap;
@@ -41,13 +41,15 @@ pub struct Linker {
 }
 
 impl Linker {
-    pub fn new(length: usize) -> Self {
+    pub fn new() -> Self {
         let size = Term::size(&Term::stdout());
         let width = (size.1 / 2).to_string();
         let width_str = " {spinner:.green} {msg:<".to_owned()+width.as_str();
         let style = ProgressStyle::with_template(&(width_str+"} [{wide_bar}] {percent:<3}%"))
             .unwrap().progress_chars("#-").tick_strings(&[">", "✓"]); 
-        let pr = ProgressBar::new(progress_u64(length)).with_style(style); 
+        let pr = ProgressBar::new(0).with_style(style);
+        
+        pr.set_draw_target(ProgressDrawTarget::hidden());
 
         Self {
             progress: pr,
@@ -56,6 +58,13 @@ impl Linker {
             linked: Vec::new(),
             writer_tr: Vec::new()
        }
+    }
+
+    pub fn start(&mut self, length: usize) {
+        self.progress.set_draw_target(ProgressDrawTarget::stdout());
+        self.progress.set_message("Synhcronizing containers..");
+        self.progress.set_position(0);
+        self.progress.set_length(progress_u64(length));
     }
 
     pub fn finish(&mut self) {
@@ -77,7 +86,6 @@ impl Linker {
 
     pub fn link(&mut self, cache: &InstanceCache, containers: &Vec<String>, mut cached_threads: Vec<JoinHandle<()>>) -> Vec<JoinHandle<()>> { 
         let mut threads: Vec<_> = Vec::new(); 
-
         let (tx, rx): (Sender<(String, HardLinkDS)>, Receiver<(String, HardLinkDS)>) = mpsc::channel();
 
         for ins in containers.iter() { 
@@ -132,22 +140,17 @@ impl Linker {
         if dep_depth == 0 { 
             return None;
         }
- 
-
+        
+        let mut map = IndexMap::new();
         let dephandle = cache.instances().get(&deps[dep_depth-1]).unwrap();
         let dep = dephandle.vars().instance().clone();  
-
-
-
-        let mut map = IndexMap::new();
-
+   
         for dep in deps {
-        let dephandle = cache.instances().get(dep).unwrap();
+            let dephandle = cache.instances().get(dep).unwrap();
             let ds = match self.hlds.get(dep) { 
                 Some(ds) => ds.clone(),
                 None => { HardLinkDS::new() }
             };
-            //p.push(dephandle.vars().root().clone());
             map.insert(dephandle.vars().root().clone(), ds);
         }
 
@@ -171,10 +174,10 @@ impl Linker {
         let thread = std::thread::Builder::new().name(format!("PR-LINKER")).spawn(move ||{ 
             //println!("{} Linking {} against {}", style("->").cyan(), style(instance).bold(), style(&dep).bold()); 
             tx.send((dep, link_instance(ds, ds_res, root, map))).unwrap(); 
-       }).unwrap();
+        }).unwrap();
 
         Some(thread)
-   }    
+    }    
 }
 
 fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: IndexMap<String,HardLinkDS>) -> HardLinkDS {
@@ -205,17 +208,7 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
                     ds.files.insert(src_tr, (src,metadata.is_dir()));
                 }
              } else {
-                 for file in hpds.1.files.iter() { 
-                    if let Some(_) = ds.files.get(file.0) {
-                        continue
-                    }
-
-                    let src_tr = file.0.clone();
-                    let src = file.1.0.clone();
-                    let is_dir = file.1.1;
-                    
-                    ds.files.insert(src_tr, (src,is_dir));
-                 }
+                ds.files.extend(hpds.1.files);
              }
         }
     }

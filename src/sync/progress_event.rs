@@ -53,11 +53,12 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
                 } 
             }
 
-            let pos = current + 1;
+            let pos = style(current + 1).bold().white();
+            let total = style(howmany + 1).bold().white();
             let progress_name: String = progress_name(progress,pkgname);
             let pb = this.progress.add(ProgressBar::new(progress_u64(percent)));
             pb.set_style(this.style.clone());
-            pb.set_message(format!("({}{}/{}) {}", whitespace, pos, howmany, style(progress_name).bold())); 
+            pb.set_message(format!("({}{}/{}) {}", whitespace, pos, total, progress_name)); 
             this.prbar.insert(progress_ident, pb);   
         }
     }
@@ -69,7 +70,12 @@ fn progress_name(progress: Progress, pkgname: &str) -> String {
         Progress::IntegrityStart => "Checking integrity".into(),
         Progress::LoadStart => "Loading packages".into(),
         Progress::ConflictsStart => "Checking conflicts".into(),
-        _ => pkgname.into()
+        Progress::DiskspaceStart => "Checking available diskspace".into(),
+        Progress::UpgradeStart => format!("Upgrading {}", pkgname), 
+        Progress::AddStart => format!("Installing {}", pkgname),
+        Progress::RemoveStart => format!("Removing {}", pkgname),
+        Progress::DowngradeStart => format!("Downgrading {}", pkgname),
+        Progress::ReinstallStart => format!("Reinstalling {}", pkgname)
     }
 }
 
