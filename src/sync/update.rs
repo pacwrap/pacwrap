@@ -8,9 +8,9 @@ use alpm::{Alpm,
 use crate::{sync, utils::print_error};
 use crate::sync::{dl_event, linker};
 use crate::sync::dl_event::DownloadCallback;
-use crate::sync::progress_event;
-use crate::sync::progress_event::ProgressCallback;
+use crate::sync::progress_event::{self, ProgressCallback};
 use crate::sync::linker::Linker;
+use crate::sync::query_event::{self, QueryCallback};
 use crate::utils::prompt::prompt;
 use crate::config::cache::InstanceCache;
 use crate::config::InstanceHandle;
@@ -103,9 +103,10 @@ impl Update {
                 handle.trans_release().unwrap();
                 return handle;
             }
+            
+            handle.set_question_cb(QueryCallback, query_event::questioncb);
             handle.set_progress_cb(ProgressCallback::new(true), progress_event::progress_event);
-            handle.set_dl_cb(DownloadCallback::new(true), dl_event::download_event);
-        } 
+       } 
 
         if let Err(e) = handle.trans_prepare() {
             handle_erroneous_preparation(e.0, e.1); 
@@ -147,14 +148,25 @@ fn confirm_transaction(handle: &Alpm) -> Result<(),()> {
     let mut installed_size_old: i64 = 0;
     let mut installed_size: i64 = 0;
     let mut download: i64 = 0;
+    let mut files_to_download: usize = 0;
 
     for val in handle.trans_add() { 
         let pkg_sync = val;
-        let pkg = handle.localdb().pkg(pkg_sync.name()).unwrap();
+        let pkg;
+
+        if let Ok(p) = handle.localdb().pkg(pkg_sync.name()) {
+            pkg = p;
+        } else {
+            pkg = pkg_sync;
+        }
 
         installed_size_old += pkg.isize();             
         installed_size += pkg_sync.isize();
         download += pkg_sync.download_size();
+
+        if download > 0 {
+            files_to_download += 1;
+        }
 
         println!("{} {} -> {}", pkg.name(), style(pkg.version()).bold().yellow(), style(pkg_sync.version()).bold().green());
     }
@@ -166,6 +178,8 @@ fn confirm_transaction(handle: &Alpm) -> Result<(),()> {
                
     if download > 0 {
         println!("{}: {}", style("Total Download Size").bold(), format_unit(download));
+        handle.set_dl_cb(DownloadCallback::new(download.try_into().unwrap(), files_to_download), dl_event::download_event);
+ 
     }
 
     println!();

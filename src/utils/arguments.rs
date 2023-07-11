@@ -33,7 +33,6 @@ impl<'a> Arguments<'a> {
     }
 
     pub fn parse_arguments(mut self) -> Arguments<'a> {
-
         for string in env::args().skip(1) {
             match string {
                 string if self.prefixes.contains_key(&string) => {
@@ -67,15 +66,17 @@ impl<'a> Arguments<'a> {
 
         for idx in 0..self.index {
             if let Some(result) = self.count.remove(&idx) {
-                let count = self.count_map.remove(&idx).unwrap(); 
-                *count = result;
+                if let Some(count) = self.count_map.remove(&idx) {
+                    *count = result;
+                }
             }
         }
 
         for idx in 0..self.index {
             if let Some(result) = self.bools.remove(&idx) {
-                let bool = self.bool_map.remove(&idx).unwrap(); 
-                *bool = result;
+                if let Some(bool) = self.bool_map.remove(&idx) {
+                    *bool = result;
+                }
             }
         }
 
@@ -89,6 +90,13 @@ impl<'a> Arguments<'a> {
 
     pub fn require_target(self, runtime: usize) -> Self { 
         if self.runtime.len() < runtime { utils::print_help_msg("Targets not specified. "); } 
+        self
+    }
+
+    pub fn ignore(mut self, switch: &str) -> Self {
+        self.prefixes.insert(switch.into(), self.index);
+        self.amalgamation.insert(switch.split_at(1).1.to_string(), self.index);
+        self.index+=1; 
         self
     }
 

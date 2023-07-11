@@ -4,12 +4,13 @@ use alpm::Progress;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use console::{Term, style};
 
+use crate::utils::whitespace;
+
 #[derive(Clone)]
 pub struct ProgressCallback {
     progress: MultiProgress,
     prbar: HashMap<String, ProgressBar>,
     style: ProgressStyle,
-    finished: ProgressStyle,
     total: bool
 }
 
@@ -24,8 +25,6 @@ impl ProgressCallback {
             progress: MultiProgress::new(),
             style:  ProgressStyle::with_template(&(width_str+"} [{wide_bar}] {percent:<3}%"))
             .unwrap().progress_chars("#-").tick_strings(&[" ", "✓"]),
-            finished:  ProgressStyle::with_template(" {spinner:.green} {msg}")
-                .unwrap().progress_chars("#-").tick_strings(&[" ","✓"]),
             prbar: HashMap::new(),
         }
     }
@@ -45,14 +44,7 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
             }
         },
         None => {
-            let len = howmany.to_string().len()-current.to_string().len();  
-            let mut whitespace = String::new();
-            if len > 0 {
-                for _ in 0..len {
-                    whitespace.push_str(" ");
-                } 
-            }
-
+            let whitespace = whitespace(howmany.to_string().len(), current.to_string().len());
             let pos = style(current + 1).bold().white();
             let total = style(howmany + 1).bold().white();
             let progress_name: String = progress_name(progress,pkgname);

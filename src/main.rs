@@ -14,6 +14,7 @@ fn main() {
     let mut exec = false;
     let mut version = false;
     let mut compat = false;
+    let mut query = false;
 
     let mut bash_create = false;
     let mut bash_help = false;
@@ -21,6 +22,7 @@ fn main() {
     let mut bash_proc = false;
     
     Arguments::new() 
+        .switch("-Q", "--query", &mut query) 
         .switch("-S", "--sync", &mut sync)
         .switch("-E", "--exec", &mut exec)
         .switch("-V", "--version", &mut version) 
@@ -32,6 +34,7 @@ fn main() {
         .parse_arguments();
 
     if exec { exec::execute() }
+    else if query { sync::query(); } 
     else if sync { sync::execute(); }
     else if compat { compat::compat(); }
     else if version { print_version(); }

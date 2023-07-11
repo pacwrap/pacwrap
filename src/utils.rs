@@ -55,3 +55,14 @@ pub fn print_help_msg(args: &str) {
     println!("Try 'pacwrap -h' for more information on valid operational parameters.");
     exit(1);
 }
+
+pub fn whitespace(total: usize, current: usize) -> String {
+    let difference = total-current;
+    let mut whitespace = String::new();
+    if difference > 0 {
+        for _ in 0..difference {
+            whitespace.push_str(" ");
+        } 
+    }
+    whitespace
+}
