@@ -8,6 +8,7 @@ use super::print_help_msg;
 pub struct Arguments<'a> {
     prefix: String,
     runtime: Vec<String>,
+    targets: Vec<String>,
     prefixes: HashMap<String, i8>,
     amalgamation: HashMap<String, i8>,
     bool_map: HashMap<i8, &'a mut bool>,
@@ -19,7 +20,8 @@ pub struct Arguments<'a> {
 
 impl<'a> Arguments<'a> {
     pub fn new() -> Self {
-        Self { 
+        Self {
+            targets: Vec::new(),
             prefix: String::new(), 
             runtime: Vec::new(),
             prefixes: HashMap::new(),
@@ -33,7 +35,15 @@ impl<'a> Arguments<'a> {
     }
 
     pub fn parse_arguments(mut self) -> Arguments<'a> {
+        let mut target = false;
+
         for string in env::args().skip(1) {
+            if target {
+                self.targets.push(string);
+                target = false;
+                continue;
+            }
+
             match string {
                 string if self.prefixes.contains_key(&string) => {
                     let key = self.prefixes.get(&string).unwrap(); 
@@ -60,6 +70,9 @@ impl<'a> Arguments<'a> {
                         }
                     }
                 },
+                string if string.starts_with("-t") || string.starts_with("--target") => {
+                    target = true;
+                }, 
                 _ => self.runtime.push(string),
             }
         }
@@ -116,6 +129,7 @@ impl<'a> Arguments<'a> {
         self
     }
 
+    pub fn targets(&self) -> &Vec<String> { &self.targets }
     pub fn get_runtime(&self) -> &Vec<String> { &self.runtime }
     pub fn get_prefix(&self) -> &String { &self.prefix }
 }

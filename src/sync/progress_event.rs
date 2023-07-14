@@ -44,13 +44,13 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
             }
         },
         None => {
-            let whitespace = whitespace(howmany.to_string().len(), current.to_string().len());
-            let pos = style(current + 1).bold().white();
-            let total = style(howmany + 1).bold().white();
+            let pos = current + 1;
+            let total = howmany + 1;
             let progress_name: String = progress_name(progress,pkgname);
-            let pb = this.progress.add(ProgressBar::new(progress_u64(percent)));
+            let pb = this.progress.add(ProgressBar::new(100));
+            let whitespace = whitespace(total.to_string().len(), pos.to_string().len()); 
             pb.set_style(this.style.clone());
-            pb.set_message(format!("({}{}/{}) {}", whitespace, pos, total, progress_name)); 
+            pb.set_message(format!("({}{}/{}) {}", whitespace, style(pos).bold().white(), style(total).bold().white(), progress_name)); 
             this.prbar.insert(progress_ident, pb);   
         }
     }
@@ -83,5 +83,5 @@ fn progress_ident(progress: Progress, pkgname: &str) -> String {
 }
 
 fn progress_u64(u: i32) -> u64 {
-    match u.try_into() { Ok(i) => i, Err(_) => 0 }
+    match u.try_into() { Ok(i) => i, Err(_) => { 0 }}
 }

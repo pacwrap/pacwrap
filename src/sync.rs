@@ -9,8 +9,9 @@ use crate::constants::{self, LOCATION};
 use crate::sync::dl_event::DownloadCallback;
 use crate::sync::linker::Linker;
 use crate::sync::progress_event::ProgressCallback;
-use crate::sync::update::Update;
-use crate::utils::{Arguments, test_root, print_help_msg};
+use crate::sync::update::TransactionAggregator;
+use crate::sync::update::TransactionType;
+use crate::utils::{Arguments, arguments::invalid, test_root, print_help_msg};
 use crate::config::InsVars;
 use crate::config::cache::InstanceCache;
 use crate::config::InstanceHandle;
@@ -27,17 +28,21 @@ mod linker;
 mod update;
 
 pub fn execute() { 
-    let mut sync = false;
-    let mut update = false;
-    let mut explicit = false;
-    let mut sync_count = 0;
-    let mut args = Arguments::new().prefix("-S")
-        .switch("-y", "--sync", &mut sync).count(&mut sync_count)
-        .switch("-u", "--upgrade", &mut update)
-        .switch("-e", "--explicit", &mut explicit);
+    let mut search = false;
+    let mut refresh = false;
+    let mut upgrade = false;
+    let mut preview = false;
+    let mut y_count = 0;
+
+    let mut args = Arguments::new().prefix("-S").ignore("--sync")
+        .switch("-y", "--refresh", &mut refresh).count(&mut y_count)
+        .switch("-u", "--upgrade", &mut upgrade)
+        .switch("-s", "--search", &mut search)
+        .switch("-p", "--preview", &mut preview);
     
     args = args.parse_arguments();
-    let targets = args.get_runtime().clone();
+    let mut targets = args.targets().clone();
+    let runtime = args.get_runtime().clone();
     let mut cache: InstanceCache = InstanceCache::new();
 
     if targets.len() > 0 {
@@ -46,14 +51,31 @@ pub fn execute() {
         cache.populate();
     }
  
-    if sync && sync_count == 4 {      
+    if refresh && y_count == 4 {      
         let mut l: Linker = Linker::new(); 
         l.start(cache.registered().len());
         linker::wait_on(l.link(&cache, cache.registered(), Vec::new()));
         l.finish();
+    } else if search {
+        print_help_msg("Functionality is currently unimplemented.");
+    } else if refresh || preview || upgrade {
+        if refresh { 
+            synchronize_database(&cache, y_count == 2); 
+        }
+
+        if preview && upgrade || upgrade {
+            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::UpgradeSync, &cache, preview, y_count > 2);
+           
+            if targets.len() > 0 { 
+                update.queue(targets.remove(0), runtime);
+            }
+
+            update::update(update, &cache);
+        } else if ! refresh {
+            invalid();
+        }
     } else {
-        if sync { synchronize_database(&cache, sync_count > 1); }
-        if update { update::update(Update::new(), &cache); }
+        invalid();
     }
 }
 
