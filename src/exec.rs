@@ -29,7 +29,7 @@ pub fn execute() {
     let mut verbose = false;
 
     let args = Arguments::new()
-        .prefix("-E")
+        .prefix("-E").ignore("--exec")
         .switch("-r", "--root", &mut root)
         .switch("-v", "--verbose", &mut verbose)
         .switch("-c", "--command", &mut cmd) 
