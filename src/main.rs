@@ -1,6 +1,7 @@
-use std::env;
-use std::process::Command;
+use std::{process::{Command, Child}, env, io::Error};
 use utils::arguments::{self, Arguments};
+
+use crate::utils::print_error;
 
 mod config;
 mod exec;
@@ -11,10 +12,12 @@ mod sync;
 
 fn main() {
     let mut sync = false;
+    let mut sync_chroot = false; 
     let mut exec = false;
     let mut version = false;
     let mut compat = false;
     let mut query = false;
+    let mut remove = false;
 
     let mut bash_create = false;
     let mut bash_help = false;
@@ -23,7 +26,9 @@ fn main() {
     
     Arguments::new() 
         .switch("-Q", "--query", &mut query) 
+        .switch_big("--fake-chroot", &mut sync_chroot)
         .switch("-S", "--sync", &mut sync)
+        .switch("-R", "--remove", &mut remove)
         .switch("-E", "--exec", &mut exec)
         .switch("-V", "--version", &mut version) 
         .switch("-Axc", "--aux-compat", &mut compat)
@@ -34,8 +39,10 @@ fn main() {
         .parse_arguments();
 
     if exec { exec::execute() }
+    else if sync_chroot { sync::execute(); } 
+    else if sync { interpose() }  
     else if query { sync::query(); } 
-    else if sync { sync::execute(); }
+    else if remove { sync::remove(); }
     else if compat { compat::compat(); }
     else if version { print_version(); }
     else if bash_utils { execute_pacwrap_bash("pacwrap-utils"); }
@@ -55,9 +62,30 @@ fn print_version() {
     print!("{}", info);
 }
 
-fn execute_pacwrap_bash(executable: &str) { 
-        let mut process = Command::new(&executable)
-        .args(env::args().skip(1).collect::<Vec<_>>())
-        .spawn().expect("Command failed.");
-        process.wait().expect("failed to wait on child");    
+fn interpose() {
+    let arguments = env::args().skip(1).collect::<Vec<_>>(); 
+    let all_args = env::args().collect::<Vec<_>>();
+    let this_executable = all_args.first().unwrap();
+
+    handle_process(Command::new(this_executable)
+        .env("LD_PRELOAD", "/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
+        .arg("--fake-chroot")
+        .args(arguments)
+        .spawn());
 }
+
+fn execute_pacwrap_bash(executable: &str) { 
+    handle_process(Command::new(&executable)
+        .arg("")
+        .args(env::args().skip(1).collect::<Vec<_>>())
+        .spawn());
+}
+
+fn handle_process(result: Result<Child, Error>) {
+    match result {
+        Ok(child) => wait_on_process(child),
+        Err(_) => print_error("Failed to spawn child process."),
+    }
+}
+
+fn wait_on_process(mut child: Child) { child.wait().ok(); }

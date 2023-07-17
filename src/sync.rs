@@ -11,6 +11,7 @@ use crate::sync::linker::Linker;
 use crate::sync::progress_event::ProgressCallback;
 use crate::sync::update::TransactionAggregator;
 use crate::sync::update::TransactionType;
+use crate::utils::{print_warning, print_error};
 use crate::utils::{Arguments, arguments::invalid, test_root, print_help_msg};
 use crate::config::InsVars;
 use crate::config::cache::InstanceCache;
@@ -28,25 +29,32 @@ mod linker;
 mod update;
 
 pub fn execute() { 
+    validate_environment();
+
     let mut search = false;
     let mut refresh = false;
     let mut upgrade = false;
     let mut preview = false;
+    let mut no_confirm = false;
+    let mut no_deps = false;
     let mut y_count = 0;
 
-    let mut args = Arguments::new().prefix("-S").ignore("--sync")
+    let mut args = Arguments::new().prefix("-S")
+        .ignore("--sync").ignore("--fake-chroot")
         .switch("-y", "--refresh", &mut refresh).count(&mut y_count)
         .switch("-u", "--upgrade", &mut upgrade)
         .switch("-s", "--search", &mut search)
-        .switch("-p", "--preview", &mut preview);
-    
+        .switch("-p", "--preview", &mut preview)
+        .switch("-n", "--noconfirm", &mut no_confirm)
+        .switch("-o", "--target-only", &mut no_deps);
+
     args = args.parse_arguments();
     let mut targets = args.targets().clone();
     let runtime = args.get_runtime().clone();
     let mut cache: InstanceCache = InstanceCache::new();
 
     if targets.len() > 0 {
-        cache.populate_from(&targets);
+        cache.populate_from(&targets, true);
     } else {
         cache.populate();
     }
@@ -63,14 +71,24 @@ pub fn execute() {
             synchronize_database(&cache, y_count == 2); 
         }
 
-        if preview && upgrade || upgrade {
-            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::UpgradeSync, &cache, preview, y_count > 2);
+        if preview && upgrade || upgrade || refresh {
+            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Upgrade(refresh), &cache)
+                .preview(preview)
+                .database_only(y_count > 2)
+                .no_confirm(no_confirm);
            
             if targets.len() > 0 { 
-                update.queue(targets.remove(0), runtime);
+                let target = targets.remove(0);
+                let inshandle = cache.instances().get(&target).unwrap();
+                update.queue(target, runtime);
+                if no_deps {
+                    update.transact(inshandle);
+                } else {
+                    update::update(update, &cache); 
+                }
+            } else {
+                update::update(update, &cache);
             }
-
-            update::update(update, &cache);
         } else if ! refresh {
             invalid();
         }
@@ -78,6 +96,43 @@ pub fn execute() {
         invalid();
     }
 }
+
+pub fn remove() { 
+    let mut preview = false;
+    let mut recursive = false;
+    let mut no_confirm = false;
+
+    let mut args = Arguments::new().prefix("-R").ignore("--remove")
+        .switch("-p", "--preview", &mut preview)
+        .switch("-s", "--recursive", &mut recursive)
+        .switch("-n", "--noconfirm", &mut no_confirm);
+   
+
+    args = args.parse_arguments();
+    let mut targets = args.targets().clone();
+    let runtime = args.get_runtime().clone();
+    let mut cache: InstanceCache = InstanceCache::new();
+
+    if targets.len() > 0 {
+        cache.populate_from(&targets, true);
+    } else {
+        invalid();
+    }
+
+    if recursive {
+        print_warning("Recursive removal is currently experimental. Reverse dependency resolution may be too aggressive.");
+    }
+
+    let target = targets.remove(0);
+    let inshandle = cache.instances().get(&target).unwrap();
+    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive), &cache)
+        .preview(preview)
+        .no_confirm(no_confirm);
+
+    update.queue(target, runtime);
+    update.transact(inshandle);
+}
+
 
 pub fn query() {
     let mut quiet = false;
@@ -119,13 +174,16 @@ fn query_database(instance: &String, explicit: bool, quiet: bool) {
     } 
 }
 
-fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
+pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
     let root = inshandle.vars().root().as_str();  
     test_root(&inshandle.vars());
     let mut handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
+    handle.set_hookdirs(vec![format!("{}/etc/pacman.d/hooks/", root), format!("{}/usr/share/libalpm/hooks/", root)].iter()).unwrap();
     handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
     handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap();
-    handle.set_parallel_downloads(parallel_downloads());   
+    handle.set_parallel_downloads(parallel_downloads());
+    handle.set_logfile(format!("{}/pacwrap.log", LOCATION.get_data())).unwrap();
+    handle.set_check_space(PACMAN_CONF.check_space);
     handle = register_remote(handle); handle
 }
 
@@ -152,7 +210,7 @@ fn register_remote(mut handle: Alpm) -> Alpm {
             core.add_server(server.as_str()).unwrap();
         }
 
-        core.set_usage(Usage::SYNC | Usage::SEARCH).unwrap();
+        core.set_usage(Usage::ALL).unwrap();
     }
 
     handle
@@ -217,4 +275,20 @@ fn signature_level(sig: &String) -> SigLevel {
 
 fn parallel_downloads() -> u32 {
     match PACMAN_CONF.parallel_downloads.try_into() { Ok(i) => i, Err(_) => 1 }
+}
+
+fn invalid_environment() {
+    print_error("Invalid environmental parameters.");
+    std::process::exit(1);
+}
+
+fn validate_environment() {
+    match std::env::var("LD_PRELOAD") {
+        Ok(var) => {
+            if var != "/usr/lib/libfakeroot/fakechroot/libfakechroot.so" {
+                invalid_environment();
+            }
+        },
+        Err(_) => invalid_environment()
+    }
 }

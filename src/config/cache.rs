@@ -24,13 +24,14 @@ impl InstanceCache {
         }
     }
 
- 
-    pub fn populate_from(&mut self, containers: &Vec<String>) {
+    pub fn populate_from(&mut self, containers: &Vec<String>, recursion: bool) {
         for name in containers {
             if self.map_instance(&name) {      
                 self.registered.push(name.clone());
                 let deps = self.instances.get(name).unwrap().instance().dependencies().clone();
-                self.populate_from(&deps); 
+                if recursion {
+                    self.populate_from(&deps, recursion); 
+                }
             }
         }
     } 

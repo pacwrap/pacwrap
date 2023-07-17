@@ -188,7 +188,7 @@ init_struct () {
 		 "$INSTANCE_ROOT/etc" \
 		 "$INSTANCE_ROOT/var/lib/pacman" \
 		 "$INSTANCE_ROOT/etc/pacman.d/hooks" \
-		 "$INSTANCE_ROOT/usr/lib32"
+		 "$INSTANCE_ROOT/usr/share/libalpm/hooks"
 
 	([[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]) && 
 		log_error "Directory creation failed." 2
@@ -209,6 +209,23 @@ init_struct () {
 
 	for pacman_hook in ${pacman_hooks[@]}; do
 		ln -s /dev/null "$INSTANCE_ROOT/etc/pacman.d/hooks/$pacman_hook.hook"; done
+ 	
+ 	if	[[ $C_TYPE == "BASE" ]]; then
+	echo -e $(cat << _CONFIG
+[Trigger]
+\nOperation = Install
+\nOperation = Upgrade
+\nOperation = Remove
+\nType = Path
+\nTarget = usr/share/ca-certificates/trust-source/*
+
+\n\n[Action]
+\nDescription = Permissing certificate store...
+\nWhen = PostTransaction
+\nExec = /usr/bin/chmod -R 755 /etc/ca-certificates/
+_CONFIG
+) > $INSTANCE_ROOT/usr/share/libalpm/hooks/42-trust-permission.hook
+ 	fi
 
 	echo "$LANG ${LANG#*.}" > "$INSTANCE_ROOT/etc/locale.gen"
 	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
@@ -248,7 +265,7 @@ init_chroot () {
 	--exclude=boot
 	--exclude=mnt"
 
-	[[ $DEPEND ]] && exclude_params+=" --exclude=usr/lib --exclude=usr/bin/ --exclude=usr/share"	
+	[[ $DEPEND ]] && exclude_params+=" --exclude=usr"	
 	
 	log_to_file "Extracting bootstrap tarball"
 	echo -n $ARROW "Extracting bootstrap tarball"
@@ -256,9 +273,7 @@ init_chroot () {
 		-C "$INSTANCE_ROOT" --checkpoint=.15000 $exclude_params 2>>/dev/null
 	echo
 
-	if [[ $C_TYPE != "BASE" ]]; then
-		$SYNC_SCRIPT -Syyyy $INSTANCE
-	fi
+	$SYNC_SCRIPT -Syyyy -t $INSTANCE
 
 	local gnupg=$(get_directory_pop "$INSTANCE_PACMAN_GNUPG") 
 	local sync=$(get_directory_pop "$INSTANCE_PACMAN_SYNC") 
@@ -286,7 +301,6 @@ finalise () {
 	log "$ARROW Generating locale..."
 	$EXEC_SCRIPT $PARAMS locale-gen 1>>"$OUTPUT_DEST" 2>>"$OUTPUT_DEST"
 	[[ $C_TYPE != "BASE" ]] && sync_foreign_elements
-	$SYNC_SCRIPT -Sg $INSTANCE
 	[[ $C_TYPE == "BASE" ]] && sync_base_packages
 	[[ ${#ARGS[@]} -gt 1 ]] && install_packages
 }
@@ -300,7 +314,7 @@ install_packages () {
 	fi
 
 	log_to_file "Installing specified packages"
-	$EXEC_SCRIPT $PARAMS pacman -Sy ${ARGS[@]} --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT -Suyo -t $INSTANCE ${ARGS[@]} --noconfirm
 	if [[ $? != 0 ]]; then
 		log_error $ARROW_RED "Installation failed." \
 				     "Use pacwrap -Cv and examine stdout for details."
@@ -313,9 +327,9 @@ install_packages () {
 
 sync_base_packages () {
 	log "$ARROW Some housekeeping..." "Removing arch-install-scripts"	
-	$EXEC_SCRIPT $PARAMS pacman -R arch-install-scripts --noconfirm 2>/dev/null 1>>$VERBOSE
+	$EXEC_SCRIPT -R -t $INSTANCE arch-install-scripts 2>/dev/null 1>>$VERBOSE
 	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
-	$EXEC_SCRIPT $PARAMS pacman -Syu --noconfirm 2>>$VERBOSE
+	$EXEC_SCRIPT -Suyo --noconfirm
 }
 
 sync_foreign_elements() {

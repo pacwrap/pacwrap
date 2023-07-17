@@ -1,4 +1,5 @@
 use std::fs::{create_dir, self, File, remove_file};
+use std::os::unix::fs::symlink;
 use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
 use std::sync::mpsc::{Sender, self, Receiver};
@@ -17,7 +18,7 @@ use crate::utils::{print_warning, print_error};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct HardLinkDS {
-    files: IndexMap<String, (String,bool)>
+    files: IndexMap<String, (String,bool,bool)>
 }
 
 impl HardLinkDS {
@@ -27,7 +28,7 @@ impl HardLinkDS {
         }
     }
 
-    fn files(&mut self) -> &mut IndexMap<String, (String,bool)> {
+    fn files(&mut self) -> &mut IndexMap<String, (String,bool,bool)> {
         &mut self.files
     }
 }
@@ -93,7 +94,13 @@ impl Linker {
                 continue;
             }
 
-            let inshandle = cache.instances().get(ins).unwrap();
+            let inshandle = match cache.instances().get(ins) {
+                Some(ins) => ins,
+                None => {
+                    print_error(format!("Linker: {} not found.", ins));
+                    std::process::exit(1) 
+                }
+            };
           
             cached_threads = self.link(cache, inshandle.instance().dependencies(), cached_threads);
 
@@ -201,11 +208,7 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
 
                     let metadata = entry.metadata().unwrap(); 
                     
-                    if metadata.is_symlink() {
-                        continue;
-                    }
-
-                    ds.files.insert(src_tr, (src,metadata.is_dir()));
+                    ds.files.insert(src_tr, (src,metadata.is_dir(),metadata.is_symlink()));
                 }
              } else {
                 ds.files.extend(hpds.1.files);
@@ -216,12 +219,14 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
     for file in ds_res.files.iter() { 
         if let None = ds.files.get(file.0) {  
             let path = format!("{}{}", root, file.0);
-
-            if ! Path::new(&path).exists() {
+            let file_path = Path::new(&path);
+            if ! file_path.exists() {
                 continue
             }
-    
-            if file.1.1 { 
+            
+            if file.1.2 { //TODO: Discover whether or not file.1.1
+                continue; //file.1.1 is correctly parameterised.
+            } else if file.1.1 { 
                 fs::remove_dir_all(path).unwrap();
             } else {
                 fs::remove_file(path).unwrap();
@@ -236,12 +241,40 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
             
         if file.1.1 {
             create_dir(&dest).ok();
+        } else if file.1.2 {
+            create_soft_link(&src, &dest);
         } else {
-            create_hard_link(&src, &dest);
+            create_hard_link(&src, &dest); 
         }
     }
     
     ds
+}
+
+fn create_soft_link(src: &str, dest_path: &str) {   
+    let file = Path::new(&dest_path);
+
+    if ! file.exists() {
+        let attr = fs::read_link(src).unwrap();
+        let attr_path = attr.as_path().to_str().unwrap();
+
+        if attr_path.is_empty() {
+            return;
+        }
+    
+        symlink(attr_path, dest_path).ok(); 
+    } else {
+        let attr = fs::read_link(src).unwrap();
+        if let Ok(attr_dest) = fs::read_link(dest_path) {
+            if attr.file_name().unwrap() != attr_dest.file_name().unwrap() {
+                if let Ok(_) = remove_file(dest_path) {
+                    let attr_path = attr.as_path().to_str().unwrap();
+
+                    symlink(attr_path, dest_path).ok(); 
+                }
+            }
+        }
+    }
 }
 
 pub fn create_hard_link(src_path: &str, dest_path: &str) {   

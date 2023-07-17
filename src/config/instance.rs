@@ -28,6 +28,10 @@ impl InstanceHandle {
         &self.instance
     }
 
+    pub fn extract_instance(self) -> Instance {
+        self.instance
+    }
+
     pub fn vars(&self) -> &InsVars {
         &self.vars
     }

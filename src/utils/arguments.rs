@@ -113,6 +113,13 @@ impl<'a> Arguments<'a> {
         self
     }
 
+    pub fn switch_big<'b>(mut self, big_switch: &str, conditional: &'a mut bool) -> Self { 
+        self.bool_map.insert(self.index, conditional);
+        self.prefixes.insert(big_switch.into(), self.index); 
+        self.index+=1;
+        self
+    }
+
     pub fn switch<'b>(mut self, switch: &str, big_switch: &str, conditional: &'a mut bool) -> Self { 
         self.bool_map.insert(self.index, conditional);
         self.prefixes.insert(switch.into(), self.index);

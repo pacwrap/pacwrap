@@ -48,7 +48,7 @@ MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap"
 CREATE_SCRIPT="pacwrap-create"
 UTILS_SCRIPT="pacwrap-utils"
-SYNC_SCRIPT="pacwrap-sync"
+SYNC_SCRIPT="pacwrap"
 PS_SCRIPT="pacwrap-ps"
 
 LOG_ERR_HELP=1

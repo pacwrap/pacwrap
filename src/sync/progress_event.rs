@@ -11,7 +11,8 @@ pub struct ProgressCallback {
     progress: MultiProgress,
     prbar: HashMap<String, ProgressBar>,
     style: ProgressStyle,
-    total: bool
+    total: bool,
+    offset: usize,
 }
 
 impl ProgressCallback {
@@ -21,6 +22,7 @@ impl ProgressCallback {
         let width_str = " {spinner:.green} {msg:<".to_owned()+width.as_str();
 
         Self {
+            offset: 1,
             total: t,
             progress: MultiProgress::new(),
             style:  ProgressStyle::with_template(&(width_str+"} [{wide_bar}] {percent:<3}%"))
@@ -30,27 +32,34 @@ impl ProgressCallback {
     }
 }
 
-//TODO: Implement total progress
-
 pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressCallback) {
     let progress_ident: String = progress_ident(progress,pkgname);
-
     match this.prbar.get_mut(&progress_ident) {
         Some(pb) => {
-            if percent < 100 {
-                pb.set_position(progress_u64(percent));
-            } else {
+            pb.set_position(progress_u64(percent));
+            if percent == 100 {
                 pb.finish();
             }
         },
         None => {
-            let pos = current + 1;
-            let total = howmany + 1;
+            if current == 1 {
+                pos_offset(this,progress);
+            }
+           
+            let pos = current + this.offset;
+            let total = howmany + this.offset; 
             let progress_name: String = progress_name(progress,pkgname);
             let pb = this.progress.add(ProgressBar::new(100));
             let whitespace = whitespace(total.to_string().len(), pos.to_string().len()); 
+            
             pb.set_style(this.style.clone());
             pb.set_message(format!("({}{}/{}) {}", whitespace, style(pos).bold().white(), style(total).bold().white(), progress_name)); 
+            pb.set_position(progress_u64(percent)); 
+
+            if percent == 100 {
+                pb.finish();
+            }
+
             this.prbar.insert(progress_ident, pb);   
         }
     }
@@ -68,6 +77,12 @@ fn progress_name(progress: Progress, pkgname: &str) -> String {
         Progress::RemoveStart => format!("Removing {}", pkgname),
         Progress::DowngradeStart => format!("Downgrading {}", pkgname),
         Progress::ReinstallStart => format!("Reinstalling {}", pkgname)
+    }
+}
+
+fn pos_offset(this: &mut ProgressCallback, progress: Progress) {
+    match progress {
+        Progress::RemoveStart => this.offset = 0, _ => ()
     }
 }
 

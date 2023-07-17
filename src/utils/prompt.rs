@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
-use console::{style, Style, StyledObject};
+use console::{style, Style};
 use dialoguer::{theme::ColorfulTheme, Input};
 
-pub fn prompt(prefix: &str, prompt: StyledObject<&str>, yn_prompt: bool)  -> Result<(),()> {
-    if let Ok(value) = create_prompt(prompt, prefix, 
+pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool)  -> Result<(),()> {
+    if let Ok(value) = create_prompt(prompt.into(), prefix, 
         if yn_prompt { "[Y/n]" } else { "[N/y]" }) {  
         if value.to_lowercase() == "y" || (yn_prompt && value.is_empty()) {
             Ok(())
@@ -16,7 +16,7 @@ pub fn prompt(prefix: &str, prompt: StyledObject<&str>, yn_prompt: bool)  -> Res
     }
 }
 
-fn create_prompt(message: StyledObject<&str>, prefix: &str, prompt: &str) -> Result<String, std::io::Error> {
+fn create_prompt(message: String, prefix: &str, prompt: &str) -> Result<String, std::io::Error> {
     let theme = ColorfulTheme {
         success_prefix: style(prefix.into()).green().bold(),
         prompt_prefix: style(prefix.into()).green().bold(),
@@ -29,7 +29,7 @@ fn create_prompt(message: StyledObject<&str>, prefix: &str, prompt: &str) -> Res
     };
 
     return Input::with_theme(&theme)
-            .with_prompt(message.to_string())
+            .with_prompt(message)
             .allow_empty(true)
             .interact_text();
 }
