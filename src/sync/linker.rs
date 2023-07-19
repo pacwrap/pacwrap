@@ -1,7 +1,7 @@
 use std::fs::{create_dir, self, File, remove_file};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::MetadataExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Sender, self, Receiver};
 use std::thread::JoinHandle;
 
@@ -219,14 +219,13 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
     for file in ds_res.files.iter() { 
         if let None = ds.files.get(file.0) {  
             let path = format!("{}{}", root, file.0);
-            let file_path = Path::new(&path);
+            let file_path = Path::new(&path); 
+
             if ! file_path.exists() {
-                continue
-            }
-            
-            if file.1.2 { //TODO: Discover whether or not file.1.1
-                continue; //file.1.1 is correctly parameterised.
-            } else if file.1.1 { 
+                if file.1.2 {
+                    fs::remove_file(path).unwrap();
+                }
+            } else if file.1.1 && ! file.1.2 { 
                 fs::remove_dir_all(path).unwrap();
             } else {
                 fs::remove_file(path).unwrap();
@@ -238,11 +237,11 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
         let src_tr = file.0;
         let src = file.1.0.clone();
         let dest = format!("{}{}", root, src_tr);   
-            
-        if file.1.1 {
+
+        if file.1.2 {
+            create_soft_link(&src, &dest); 
+        } else if file.1.1 {
             create_dir(&dest).ok();
-        } else if file.1.2 {
-            create_soft_link(&src, &dest);
         } else {
             create_hard_link(&src, &dest); 
         }
@@ -251,29 +250,46 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
     ds
 }
 
-fn create_soft_link(src: &str, dest_path: &str) {   
-    let file = Path::new(&dest_path);
+fn create_soft_link(src: &str, dest: &str) {   
+    let dest_path = Path::new(&dest);
 
-    if ! file.exists() {
+    if ! dest_path.exists() {
         let attr = fs::read_link(src).unwrap();
-        let attr_path = attr.as_path().to_str().unwrap();
 
-        if attr_path.is_empty() {
-            return;
+        if let Ok(attr_dest) = fs::read_link(dest_path) {
+            if attr.file_name().unwrap() == attr_dest.file_name().unwrap() {
+                return;
+            }
         }
-    
-        symlink(attr_path, dest_path).ok(); 
+
+        if let Ok(_) = remove_soft_link(dest_path, dest) {
+            soft_link(&attr, dest_path);
+        }
     } else {
         let attr = fs::read_link(src).unwrap();
         if let Ok(attr_dest) = fs::read_link(dest_path) {
             if attr.file_name().unwrap() != attr_dest.file_name().unwrap() {
-                if let Ok(_) = remove_file(dest_path) {
-                    let attr_path = attr.as_path().to_str().unwrap();
-
-                    symlink(attr_path, dest_path).ok(); 
+                if let Ok(_) = remove_soft_link(dest_path, dest) {
+                    soft_link(&attr, dest_path);
                 }
             }
         }
+    }
+}
+
+fn remove_soft_link(dest_path: &Path, dest: &str) -> Result<(),()> {
+    if let Ok(_) = fs::read_link(dest_path) {
+        if let Err(_) = fs::remove_file(dest_path) {        
+            print_warning(format!("'{}': Failed to delete symlink.", dest));
+            Err(())? 
+        } 
+    }
+    Ok(())
+}
+
+fn soft_link<'a>(src_path: impl Into<&'a PathBuf>, dest_path: &'a Path) {
+    if let Err(_) = symlink(src_path.into(), dest_path) {
+        print_warning(format!("'{}': Failed to create symlink", dest_path.to_str().unwrap())); 
     }
 }
 
