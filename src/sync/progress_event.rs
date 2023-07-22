@@ -11,19 +11,17 @@ pub struct ProgressCallback {
     progress: MultiProgress,
     prbar: HashMap<String, ProgressBar>,
     style: ProgressStyle,
-    total: bool,
     offset: usize,
 }
 
 impl ProgressCallback {
-    pub fn new(t: bool) -> Self {
+    pub fn new() -> Self {
         let size = Term::size(&Term::stdout());
         let width = (size.1 / 2).to_string();
         let width_str = " {spinner:.green} {msg:<".to_owned()+width.as_str();
 
         Self {
             offset: 1,
-            total: t,
             progress: MultiProgress::new(),
             style:  ProgressStyle::with_template(&(width_str+"} [{wide_bar}] {percent:<3}%"))
             .unwrap().progress_chars("#-").tick_strings(&[" ", "✓"]),

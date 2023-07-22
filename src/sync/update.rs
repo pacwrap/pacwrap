@@ -8,6 +8,7 @@ use alpm::{Alpm,
     CommitResult, 
     FileConflictType, Package, PackageReason};
 
+use crate::utils::print_warning;
 use crate::{sync, utils::print_error};
 use crate::sync::{dl_event, linker};
 use crate::sync::dl_event::DownloadCallback;
@@ -30,6 +31,7 @@ pub struct TransactionAggregator<'a> {
     pkg_queue: HashMap<String, Vec<String>>,
     action: TransactionType,
     linker: Linker,
+    force_database: bool,
     database_only: bool,
     preview: bool,
     no_confirm: bool,
@@ -44,6 +46,7 @@ impl <'a>TransactionAggregator<'a> {
             pkg_queue: HashMap::new(),
             linker: Linker::new(),
             action: t, 
+            force_database: false,
             preview: false,
             database_only: false,
             cache: icache,
@@ -58,6 +61,11 @@ impl <'a>TransactionAggregator<'a> {
 
     pub fn no_confirm(mut self, no_confirm: bool) -> Self {
         self.no_confirm = no_confirm;
+        self
+    }
+
+    pub fn force_database(mut self, force_database: bool) -> Self {
+        self.force_database = force_database;
         self
     }
 
@@ -85,11 +93,15 @@ impl <'a>TransactionAggregator<'a> {
             }
 
             let cache = self.cache;
-            let inshandle = cache.instances().get(ins).unwrap();
-        
-            self.transaction(inshandle.instance().dependencies());
-            self.queried.push(ins.clone());
-            self.transact(inshandle);
+            let inshandle = cache.instances().get(ins);
+
+            if let Some(inshandle) = inshandle {
+                self.transaction(inshandle.instance().dependencies());
+                self.queried.push(ins.clone());
+                self.transact(inshandle);
+            } else {
+                print_warning(format!("Handle for {} not initialised.", ins));
+            }
         }
     }
 
@@ -100,7 +112,9 @@ impl <'a>TransactionAggregator<'a> {
         let alpm = sync::instantiate_alpm(&inshandle);
         let mut handle = TransactionHandle::new(alpm, queue);
         let mut act: Transaction = Transaction::new(inshandle, &mut handle);
-           
+        
+        act.action_message(self);
+
         loop {  
             let result = act.engage(self);
                
@@ -173,13 +187,16 @@ impl <'a>Transaction<'a> {
 
     fn commit_foreign_sync(&mut self, ag: &mut TransactionAggregator) -> TransactionState {
         ag.link_filesystem(self.inshandle);
-        println!("{} Synchronizing foreign database...",style("->").bold().cyan());        
-        
+       
         let result = self.commit(ag,true);
-                
+               
         if let TransactionState::Complete(res) = result {
              if let Err(res) = res {
-                return TransactionState::Complete(Err(res));
+                if ag.force_database {
+                    print_error(res);
+                } else {
+                    return TransactionState::Complete(Err(res));
+                }
             }
         }
         
@@ -189,43 +206,70 @@ impl <'a>Transaction<'a> {
 
     fn prepare_foreign_sync(&mut self, ag: &mut TransactionAggregator) -> TransactionState { 
         let config = self.inshandle.instance();
-        
+       
         if config.dependencies().len() > 0 {
             self.handle.db(true);
         } else {
             return TransactionState::Commit(ag.database_only);
         }
 
-        if let Err(_) = self.handle.out_of_date() {
-            self.handle.db(false);
-            return TransactionState::Commit(ag.database_only);
+        if ! ag.force_database {
+            if let Err(_) = self.handle.out_of_date() { 
+                self.handle.db(false);
+                return TransactionState::Commit(ag.database_only);
+            }
         }
 
         TransactionState::CommitForeignSync
     }
 
-    fn prepare(&mut self, ag: &mut TransactionAggregator) -> TransactionState {
-        if let TransactionType::Upgrade(_) = ag.action {
-            let instance = self.inshandle.vars().instance();  
-            println!("{} {}", style("::").bold().cyan(), style(format!("Checking {} for updates...", instance)).bold()); 
+    fn action_message(&mut self, ag: &mut TransactionAggregator) {
+        let instance = self.inshandle.vars().instance();
+        let message;
+
+        if let TransactionType::Upgrade(upgrade) = ag.action {
+            if upgrade { 
+                message = format!("Checking {} for updates...", instance);
+            } else {
+                message = format!("Transacting {}...", instance);
+            }
+        } else {
+            message = format!("Transacting {}...", instance);
         }
 
+        println!("{} {}", style("::").bold().cyan(), style(message).bold());
+    }
+
+    fn prepare(&mut self, ag: &mut TransactionAggregator) -> TransactionState {
         let deps = self.inshandle.instance().dependencies();
         let dep_depth = deps.len(); 
        
         if dep_depth > 0 {
-            let dep_instance = ag.cache.instances().get(&deps[dep_depth-1]).unwrap();
-            let dep_alpm = sync::instantiate_alpm(dep_instance);
-            self.handle.enumerate_ignorelist(&dep_alpm); 
-        }
-
-        if let Err(_) = self.handle.out_of_date() {
-            if self.handle.queue.len() == 0 {
-                return TransactionState::UpToDate;
+            for dep in deps {
+                let dep_instance = ag.cache.instances().get(dep).unwrap();
+                let dep_alpm = sync::instantiate_alpm(dep_instance);
+                self.handle.enumerate_ignorelist(&dep_alpm);
+                dep_alpm.release().unwrap();
             }
         }
 
-        TransactionState::PrepareForeignSync
+        if let TransactionType::Upgrade(upgrade) = ag.action {
+            if ! upgrade && self.handle.queue.len() == 0 {
+                return TransactionState::Complete(Err(format!("Nothing to do.")));
+            }
+        }
+
+        if self.handle.queue.len() == 0 {
+            if let Err(_) = self.handle.out_of_date() { 
+               return TransactionState::UpToDate; 
+            }
+        }
+
+        if let TransactionType::Remove(_) = ag.action {
+            TransactionState::Commit(ag.database_only)
+        } else {
+            TransactionState::PrepareForeignSync  
+        }
     }
 
     fn commit(&mut self, ag: &mut TransactionAggregator, dbonly: bool) -> TransactionState { 
@@ -238,28 +282,39 @@ impl <'a>Transaction<'a> {
         let mut set_depends: Vec<String> = Vec::new();
 
         self.handle.alpm().trans_init(flags).unwrap();
+        self.handle.ignore();
 
         match ag.action {
-            TransactionType::Upgrade(sync) => {
-                if sync {
-                    self.handle.ignore();
+            TransactionType::Upgrade(upgrade) => { 
+                if ! dbonly {
+                    println!("{} Synchronizing resident container...",style("->").bold().cyan());
+                } else {
+                    println!("{} Synchronizing foreign database...",style("->").bold().cyan());
+                }
+
+                if upgrade {
                     self.handle.alpm().sync_sysupgrade(false).unwrap();
                     self.handle.sync();
                 }
 
                 match self.handle.prepare_add() {
-                    Err(error) => return TransactionState::Complete(Err(error)),
+                    Err(error) => {
+                        self.handle.alpm_mut().trans_release().unwrap();
+                        return TransactionState::Complete(Err(error))
+                    },
                     Ok(vec) => set_depends = vec,
                 }
 
                 if ! self.handle.trans_ready(false) {
+                    self.handle.alpm_mut().trans_release().unwrap(); 
                     return TransactionState::Complete(Err("Nothing to do.".into()));
                 }
 
-                if ! dbonly || ag.database_only {
+                if ! dbonly || ag.database_only || ag.force_database {
                     transaction_summary(self.handle.alpm());
 
                     if ag.preview {
+                        self.handle.alpm_mut().trans_release().unwrap(); 
                         return TransactionState::Complete(Ok(())); 
                     } 
 
@@ -272,19 +327,22 @@ impl <'a>Transaction<'a> {
                 }
             },
             TransactionType::Remove(depends) => {
+                println!("{} Preparing package removal...",style("->").bold().cyan());
                 if let Err(error) = self.handle.prepare_removal(depends) { 
                     return TransactionState::Complete(Err(error));
                 }            
 
                 if ! self.handle.trans_ready(true) {
-                   return TransactionState::Complete(Err("Nothing to do.".into()));
+                    self.handle.alpm_mut().trans_release().unwrap(); 
+                    return TransactionState::Complete(Err("Nothing to do.".into()));
                 }
                 
                 transaction_summary(self.handle.alpm());
 
-                if ! dbonly {
+                if ! dbonly || ag.database_only {
                     if ag.preview {
-                        return TransactionState::Complete(Ok(())); 
+                        self.handle.alpm_mut().trans_release().unwrap();  
+                        return TransactionState::Complete(Ok(()));
                     } 
                    
                     if ! ag.no_confirm {
@@ -297,9 +355,9 @@ impl <'a>Transaction<'a> {
             },
         }
         
-        if ! dbonly || ag.database_only { 
+        if ! dbonly || ag.database_only || ag.force_database { 
             self.handle.alpm().set_question_cb(QueryCallback, query_event::questioncb);
-            self.handle.alpm().set_progress_cb(ProgressCallback::new(true), progress_event::progress_event);
+            self.handle.alpm().set_progress_cb(ProgressCallback::new(), progress_event::progress_event);
         }
 
         if let Err(_) = handle_preparation(self.handle.alpm_mut().trans_prepare()) { 
@@ -316,9 +374,12 @@ impl <'a>Transaction<'a> {
             }
         }
 
+        if ! dbonly || ag.database_only || ag.force_database {  
+            println!(); //Required to fix spacing issue between summary and next, subsequent prompt.
+        }
+
         ag.updated.push(instance.clone()); 
         self.handle.alpm_mut().trans_release().unwrap();
-
         TransactionState::Complete(Ok(()))
     }
 }
@@ -327,7 +388,6 @@ pub struct TransactionHandle {
     ignore: Vec<String>, 
     ignore_dep: Vec<String>,
     queue: Vec<String>,
-    queue_db: Vec<String>,
     dbonly: bool,
     alpm: Alpm,
     mark_depends: Vec<String>
@@ -340,7 +400,6 @@ impl TransactionHandle {
             ignore_dep: Vec::new(),
             dbonly: false,
             queue: q,
-            queue_db: Vec::new(),
             alpm: al,
             mark_depends: Vec::new()
         }  
@@ -371,11 +430,20 @@ impl TransactionHandle {
             if let Ok(_) = dep_handle.localdb().pkg(pkg.name())  {
                  continue; 
             }
-            self.ignore_dep.push(pkg.name().into());  
+            
+            let pkg_name = pkg.name().into();
+            
+            if ! self.ignore_dep.contains(&pkg_name) { 
+                self.ignore_dep.push(pkg_name); 
+            }
         }
         
         for pkg in dep_handle.localdb().pkgs() {
-            self.ignore.push(pkg.name().into());
+            let pkg_name = pkg.name().into();
+            
+            if ! self.ignore.contains(&pkg_name) {
+                self.ignore.push(pkg_name);
+            }
         }
     }
 
@@ -406,16 +474,16 @@ impl TransactionHandle {
         } else {
             &self.ignore
         };
-        let queued = if self.dbonly { 
-            &self.queue_db
-        } else {
-            &self.queue
-        };
+        let queued = &self.queue;
 
-        for queue in queued {
-            if let None = get_package(&self.alpm, queue.as_str()) {
-                Err(format!("Target package not found: {}", queue))?
+        for queue in queued { 
+            if let None = get_package(&self.alpm, queue.as_str()) { 
+                Err(format!("Target package {}: Not found.", style(queue).bold()))?
             }
+
+            if ignored.contains(queue) && ! self.dbonly {
+                 print_warning(format!("Target package {}: Installed in upstream container.", style(queue).bold()));
+            } 
         }
 
         let ignored = ignored.iter().map(|i| i.as_str()) .collect::<Vec<_>>();
@@ -423,11 +491,11 @@ impl TransactionHandle {
         let packages = DependencyResolver::new(&self.alpm, &ignored).enumerate(&queued);
 
         for pkg in packages.0 {
-            if ignored.contains(&pkg.name()) {
+            if ! self.ignore.contains(&pkg.name().into()) && self.dbonly {
                 continue;
             }
 
-            self.alpm.trans_add_pkg(pkg).unwrap();
+            self.alpm.trans_add_pkg(pkg).unwrap();        
         }
 
         Ok(packages.1)
@@ -442,32 +510,12 @@ impl TransactionHandle {
 
         let ignored = ignor.iter().map(|i| i.as_str()) .collect::<Vec<_>>();
         let queued = self.queue.iter().map(|i| i.as_str()) .collect::<Vec<_>>(); 
+        let packages = InverseDependencyResolver::new(&self.alpm, &ignored, enumerate).enumerate(&queued);
 
-        for queue in queued.iter() {
-            if let Some(pkg) = get_local_package(&self.alpm, queue) {
-                if ignored.contains(&pkg.name()) {
-                    continue;
-                }
-            
-                self.alpm.trans_remove_pkg(pkg).unwrap();
-            } else {
-                Err(format!("Target package not found: {}", queue))?
-            }
+        for pkg in packages { 
+            self.alpm.trans_remove_pkg(pkg).unwrap(); 
         }
-
-        if enumerate { //TODO: Properly complete reverse dependency resolution.
-            let packages = InverseDependencyResolver::new(&self.alpm, &ignored).enumerate(&queued);
-
-            for pkg in packages { 
-                if let Ok(pkg) = self.alpm.localdb().pkg(pkg.name()) {
-                    if ignored.contains(&pkg.name()) {
-                        continue;
-                    }
-
-                    self.alpm.trans_remove_pkg(pkg).unwrap();
-                } 
-            }
-        }
+        
         Ok(())
     }
 
@@ -480,16 +528,11 @@ impl TransactionHandle {
     }
 
     fn sync(&mut self) { 
-        let queued = if self.dbonly { 
-            &mut self.queue_db
-        } else {
-            &mut self.queue
-        };
+        let queued = &mut self.queue;
 
         for pkg in self.alpm.trans_add() {
             let deps = pkg.depends().iter().map(|p| p.name()).collect::<Vec<&str>>();
-        
-            for dep in deps {
+            for dep in deps { 
                 if let None = get_local_package(&self.alpm, dep) { 
                     queued.push(dep.into());
                 }
@@ -524,16 +567,18 @@ struct InverseDependencyResolver<'a> {
     ignored: &'a Vec<&'a str>,
     handle: &'a Alpm,
     depth: i8,
+    recursive: bool,
 } 
 
 impl <'a>InverseDependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a Vec<&'a str>) -> Self {
+    pub fn new(alpm: &'a Alpm, ignorelist: &'a Vec<&'a str>, enumerate: bool) -> Self {
         Self {
             resolved: Vec::new(),
             packages: Vec::new(),
             ignored: ignorelist,
             depth: 0,
             handle: alpm,
+            recursive: enumerate,
         }
     }
 
@@ -553,20 +598,21 @@ impl <'a>InverseDependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(pkg) = get_package(&self.handle, pkg) {
+            if let Some(pkg) = get_local_package(&self.handle, pkg) {  
+                let deps = pkg.depends().iter().map(|p| p.name()).collect::<Vec<&str>>();
+
                 self.resolved.push(pkg.name());
                 self.packages.push(pkg);
-                let deps = pkg.depends().iter().map(|p| p.name()).collect::<Vec<&str>>(); 
 
                 for dep in deps {
-                    if let Some(_) = get_local_package(&self.handle, dep) { 
+                    if let Some(_) = get_local_package(&self.handle, dep) {
                         synchronize.push(dep);
                     }
                 }
             }             
         }
 
-        if synchronize.len() > 0 {
+        if synchronize.len() > 0 && self.recursive {
             self.depth += 1;       
             self.enumerate(&synchronize)
         } else {

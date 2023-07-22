@@ -144,6 +144,9 @@ impl<'a> Arguments<'a> {
 pub fn invalid() {
     let mut ar = String::new();
     for arg in env::args().skip(1).collect::<Vec<_>>().iter() {
+        if arg == "--fake-chroot" {
+            continue;
+        }
         ar.push_str(&format!("{} ", &arg));
     } 
     ar.truncate(ar.len()-1);

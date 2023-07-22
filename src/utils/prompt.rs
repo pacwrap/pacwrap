@@ -19,7 +19,7 @@ pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool)  -> Resu
 fn create_prompt(message: String, prefix: &str, prompt: &str) -> Result<String, std::io::Error> {
     let theme = ColorfulTheme {
         success_prefix: style(prefix.into()).green().bold(),
-        prompt_prefix: style(prefix.into()).green().bold(),
+        prompt_prefix: style(prefix.into()).blue().bold(),
         error_prefix: style(prefix.into()).red().bold(),
         prompt_suffix: style(prompt.to_string()).bold(),
         success_suffix: style(prompt.to_string()).bold(), 

@@ -223,9 +223,12 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
 
             if ! file_path.exists() {
                 if file.1.2 {
-                    fs::remove_file(path).unwrap();
+                    remove_soft_link(&file_path, &path).unwrap();
                 }
-            } else if file.1.1 && ! file.1.2 { 
+                continue;
+            }
+
+            if file.1.1 && ! file.1.2 { 
                 fs::remove_dir_all(path).unwrap();
             } else {
                 fs::remove_file(path).unwrap();

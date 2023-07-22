@@ -31,16 +31,20 @@ mod update;
 pub fn execute() { 
     validate_environment();
 
+    let mut force_database = false;
     let mut search = false;
     let mut refresh = false;
     let mut upgrade = false;
     let mut preview = false;
     let mut no_confirm = false;
     let mut no_deps = false;
+    let mut dbonly = false;
     let mut y_count = 0;
 
     let mut args = Arguments::new().prefix("-S")
         .ignore("--sync").ignore("--fake-chroot")
+        .switch_big("--force-foreign", &mut force_database) 
+        .switch_big("--db-only", &mut dbonly)
         .switch("-y", "--refresh", &mut refresh).count(&mut y_count)
         .switch("-u", "--upgrade", &mut upgrade)
         .switch("-s", "--search", &mut search)
@@ -66,22 +70,23 @@ pub fn execute() {
         l.finish();
     } else if search {
         print_help_msg("Functionality is currently unimplemented.");
-    } else if refresh || preview || upgrade {
+    } else {
         if refresh { 
             synchronize_database(&cache, y_count == 2); 
         }
 
-        if preview && upgrade || upgrade || refresh {
-            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Upgrade(refresh), &cache)
+        if upgrade || targets.len() > 0 {
+            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Upgrade(upgrade), &cache)
                 .preview(preview)
-                .database_only(y_count > 2)
+                .force_database(force_database)
+                .database_only(y_count > 2 || dbonly)
                 .no_confirm(no_confirm);
            
             if targets.len() > 0 { 
                 let target = targets.remove(0);
                 let inshandle = cache.instances().get(&target).unwrap();
                 update.queue(target, runtime);
-                if no_deps {
+                if no_deps || ! upgrade {
                     update.transact(inshandle);
                 } else {
                     update::update(update, &cache); 
@@ -92,8 +97,6 @@ pub fn execute() {
         } else if ! refresh {
             invalid();
         }
-    } else {
-        invalid();
     }
 }
 
@@ -101,12 +104,13 @@ pub fn remove() {
     let mut preview = false;
     let mut recursive = false;
     let mut no_confirm = false;
+    let mut db_only = false;
 
     let mut args = Arguments::new().prefix("-R").ignore("--remove")
         .switch("-p", "--preview", &mut preview)
         .switch("-s", "--recursive", &mut recursive)
-        .switch("-n", "--noconfirm", &mut no_confirm);
-   
+        .switch("-n", "--noconfirm", &mut no_confirm)
+        .switch_big("--db-only", &mut db_only);
 
     args = args.parse_arguments();
     let mut targets = args.targets().clone();
@@ -127,6 +131,7 @@ pub fn remove() {
     let inshandle = cache.instances().get(&target).unwrap();
     let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive), &cache)
         .preview(preview)
+        .database_only(db_only)
         .no_confirm(no_confirm);
 
     update.queue(target, runtime);
@@ -192,7 +197,7 @@ fn instantiate_alpm_syncdb(inshandle: &InstanceHandle) -> Alpm {
     test_root(&inshandle.vars()); 
     let mut handle = Alpm::new2(root, &format!("{}/pacman/", LOCATION.get_data())).unwrap();
     handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
-    handle.set_progress_cb(ProgressCallback::new(false), progress_event::progress_event);
+    handle.set_progress_cb(ProgressCallback::new(), progress_event::progress_event);
     handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap(); 
     handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
     handle.set_parallel_downloads(parallel_downloads());    
