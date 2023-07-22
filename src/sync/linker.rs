@@ -1,4 +1,4 @@
-use std::fs::{create_dir, self, File, remove_file};
+use std::fs::{create_dir, self, File};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -223,15 +223,17 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
 
             if ! file_path.exists() {
                 if file.1.2 {
-                    remove_soft_link(&file_path, &path).unwrap();
+                    remove_soft_link(&file_path, &path).ok();
                 }
                 continue;
             }
 
-            if file.1.1 && ! file.1.2 { 
-                fs::remove_dir_all(path).unwrap();
+            if file.1.2 {
+               remove_soft_link(&file_path, &path).ok();   
+            } else if file.1.1 { 
+                remove_directory(&path);
             } else {
-                fs::remove_file(path).unwrap();
+                remove_file(&path);
             }
         }
     }
@@ -282,8 +284,8 @@ fn create_soft_link(src: &str, dest: &str) {
 
 fn remove_soft_link(dest_path: &Path, dest: &str) -> Result<(),()> {
     if let Ok(_) = fs::read_link(dest_path) {
-        if let Err(_) = fs::remove_file(dest_path) {        
-            print_warning(format!("'{}': Failed to delete symlink.", dest));
+        if let Err(err) = fs::remove_file(dest_path) {        
+            print_warning(format!("Failed to delete symlink '{}': {}", dest, err.kind()));
             Err(())? 
         } 
     }
@@ -291,8 +293,8 @@ fn remove_soft_link(dest_path: &Path, dest: &str) -> Result<(),()> {
 }
 
 fn soft_link<'a>(src_path: impl Into<&'a PathBuf>, dest_path: &'a Path) {
-    if let Err(_) = symlink(src_path.into(), dest_path) {
-        print_warning(format!("'{}': Failed to create symlink", dest_path.to_str().unwrap())); 
+    if let Err(err) = symlink(src_path.into(), dest_path) {
+        print_warning(format!("Failed to create symlink '{}': {}", dest_path.to_str().unwrap(), err.kind())); 
     }
 }
 
@@ -302,7 +304,7 @@ pub fn create_hard_link(src_path: &str, dest_path: &str) {
        let meta_src = fs::metadata(&src_path).unwrap(); 
 
         if meta_src.ino() != meta_dest.ino() {
-            if let Ok(_) = remove_file(&dest_path) {
+            if let Ok(_) = fs::remove_file(&dest_path) {
                 hard_link(src_path, dest_path);
             }
         }
@@ -310,6 +312,20 @@ pub fn create_hard_link(src_path: &str, dest_path: &str) {
         hard_link(src_path, dest_path);
     }
 }
+
+fn remove_directory(path: &str) {
+    if let Err(err) = fs::remove_dir_all(path) {
+        print_warning(format!("Failed to delete directory '{}': {}", path, err.kind()));
+    } 
+}
+ 
+
+fn remove_file(path: &str) {
+    if let Err(err) = fs::remove_file(path) {
+        print_warning(format!("Failed to remove file '{}': {}", path, err.kind()));
+    } 
+}
+ 
 
 fn hard_link(src_path: &str, dest_path: &str) {
     if let Err(err) = fs::hard_link(src_path,dest_path) {
