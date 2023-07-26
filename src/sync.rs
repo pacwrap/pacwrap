@@ -11,7 +11,7 @@ use crate::sync::linker::Linker;
 use crate::sync::progress_event::ProgressCallback;
 use crate::sync::update::TransactionAggregator;
 use crate::sync::update::TransactionType;
-use crate::utils::{print_warning, print_error};
+use crate::utils::print_error;
 use crate::utils::{Arguments, arguments::invalid, test_root, print_help_msg};
 use crate::config::InsVars;
 use crate::config::cache::InstanceCache;
@@ -27,6 +27,9 @@ mod dl_event;
 mod query_event;
 mod linker;
 mod update;
+mod resolver;
+mod resolver_local;
+mod utils;
 
 pub fn execute() { 
     validate_environment();
@@ -45,11 +48,11 @@ pub fn execute() {
         .ignore("--sync").ignore("--fake-chroot")
         .switch_big("--force-foreign", &mut force_database) 
         .switch_big("--db-only", &mut dbonly)
+        .switch_big("--noconfirm", &mut no_confirm) 
         .switch("-y", "--refresh", &mut refresh).count(&mut y_count)
         .switch("-u", "--upgrade", &mut upgrade)
         .switch("-s", "--search", &mut search)
         .switch("-p", "--preview", &mut preview)
-        .switch("-n", "--noconfirm", &mut no_confirm)
         .switch("-o", "--target-only", &mut no_deps);
 
     args = args.parse_arguments();
@@ -103,15 +106,17 @@ pub fn execute() {
 pub fn remove() { 
     let mut preview = false;
     let mut recursive = false;
+    let mut cascade = false;
     let mut no_confirm = false;
     let mut db_only = false;
 
     let mut args = Arguments::new().prefix("-R").ignore("--remove")
         .switch("-p", "--preview", &mut preview)
         .switch("-s", "--recursive", &mut recursive)
-        .switch("-n", "--noconfirm", &mut no_confirm)
-        .switch_big("--db-only", &mut db_only);
-
+        .switch("-c", "--cascade", &mut cascade)
+        .switch_big("--db-only", &mut db_only)
+        .switch_big("--noconfirm", &mut no_confirm);
+      
     args = args.parse_arguments();
     let mut targets = args.targets().clone();
     let runtime = args.get_runtime().clone();
@@ -123,13 +128,9 @@ pub fn remove() {
         invalid();
     }
 
-    if recursive {
-        print_warning("Recursive removal is currently experimental. Reverse dependency resolution may be too aggressive.");
-    }
-
     let target = targets.remove(0);
     let inshandle = cache.instances().get(&target).unwrap();
-    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive), &cache)
+    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade), &cache)
         .preview(preview)
         .database_only(db_only)
         .no_confirm(no_confirm);
@@ -228,7 +229,13 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             let mut handle = instantiate_alpm_syncdb(&ins);
     
             println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
-            handle.syncdbs_mut().update(force).unwrap();
+
+            if let Err(err) = handle.syncdbs_mut().update(force) {
+                print_error(format!("Unable to initialize transaction: {}.",err.to_string()));
+                println!("{} Transaction failed.",style("->").bold().red());
+                std::process::exit(1);
+            }
+            
             Alpm::release(handle).unwrap();  
             break;
         }

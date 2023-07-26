@@ -6,23 +6,37 @@ use alpm::{Alpm,
     TransFlag, 
     PrepareResult, 
     CommitResult, 
-    FileConflictType, Package, PackageReason};
+    FileConflictType, 
+    PackageReason};
 
-use crate::utils::print_warning;
-use crate::{sync, utils::print_error};
-use crate::sync::{dl_event, linker};
-use crate::sync::dl_event::DownloadCallback;
-use crate::sync::progress_event::{self, ProgressCallback};
-use crate::sync::linker::Linker;
-use crate::sync::query_event::{self, QueryCallback};
-use crate::utils::prompt::prompt;
-use crate::config::cache::InstanceCache;
-use crate::config::InstanceHandle;
-
+use crate::sync::{self,
+    dl_event::{self, DownloadCallback}, 
+    linker::{self, Linker},
+    query_event::{self, QueryCallback},
+    progress_event::{self, ProgressCallback},
+    resolver_local::LocalDependencyResolver,
+    resolver::DependencyResolver,
+    utils::get_local_package,
+    utils::get_package,
+    utils::format_unit};
+use crate::utils::{prompt::prompt,
+    print_error, 
+    print_warning};
+use crate::config::{InstanceHandle, 
+    cache::InstanceCache};
 
 pub enum TransactionType {
     Upgrade(bool),
-    Remove(bool),
+    Remove(bool, bool),
+}
+
+impl TransactionType {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Upgrade(_) => "installation",
+            Self::Remove(_, _) => "removal"
+        }
+    }
 }
 
 pub struct TransactionAggregator<'a> {
@@ -257,6 +271,10 @@ impl <'a>Transaction<'a> {
             if ! upgrade && self.handle.queue.len() == 0 {
                 return TransactionState::Complete(Err(format!("Nothing to do.")));
             }
+        } else {
+            if self.handle.queue.len() == 0 {
+                return TransactionState::Complete(Err(format!("Nothing to do.")));
+            }  
         }
 
         if self.handle.queue.len() == 0 {
@@ -265,7 +283,7 @@ impl <'a>Transaction<'a> {
             }
         }
 
-        if let TransactionType::Remove(_) = ag.action {
+        if let TransactionType::Remove(_, _) = ag.action {
             TransactionState::Commit(ag.database_only)
         } else {
             TransactionState::PrepareForeignSync  
@@ -273,15 +291,17 @@ impl <'a>Transaction<'a> {
     }
 
     fn commit(&mut self, ag: &mut TransactionAggregator, dbonly: bool) -> TransactionState { 
+        let mut set_depends: Vec<String> = Vec::new();
         let instance = self.inshandle.vars().instance();
         let flags = match dbonly { 
             false => TransFlag::NO_DEP_VERSION,
             true => TransFlag::NO_DEP_VERSION | TransFlag::DB_ONLY
         };
 
-        let mut set_depends: Vec<String> = Vec::new();
-
-        self.handle.alpm().trans_init(flags).unwrap();
+        if let Err(error) = self.handle.alpm().trans_init(flags) {
+            return TransactionState::Complete(Err(format!("Failure to initialize transaction: {}.", error.to_string()))); 
+        }
+ 
         self.handle.ignore();
 
         match ag.action {
@@ -304,68 +324,49 @@ impl <'a>Transaction<'a> {
                     },
                     Ok(vec) => set_depends = vec,
                 }
-
-                if ! self.handle.trans_ready(false) {
-                    self.handle.alpm_mut().trans_release().unwrap(); 
-                    return TransactionState::Complete(Err("Nothing to do.".into()));
-                }
-
-                if ! dbonly || ag.database_only || ag.force_database {
-                    transaction_summary(self.handle.alpm());
-
-                    if ag.preview {
-                        self.handle.alpm_mut().trans_release().unwrap(); 
-                        return TransactionState::Complete(Ok(())); 
-                    } 
-
-                    if ! ag.no_confirm {
-                        if let Err(_) = prompt("::", format!("{}", style("Proceed with installation?").bold()), true) {
-                            self.handle.alpm_mut().trans_release().unwrap();
-                            return TransactionState::Complete(Ok(()));
-                        }
-                    }
-                }
             },
-            TransactionType::Remove(depends) => {
+            TransactionType::Remove(depends, cascade) => {
                 println!("{} Preparing package removal...",style("->").bold().cyan());
-                if let Err(error) = self.handle.prepare_removal(depends) { 
+                if let Err(error) = self.handle.prepare_removal(depends, cascade) { 
                     return TransactionState::Complete(Err(error));
                 }            
-
-                if ! self.handle.trans_ready(true) {
-                    self.handle.alpm_mut().trans_release().unwrap(); 
-                    return TransactionState::Complete(Err("Nothing to do.".into()));
-                }
-                
-                transaction_summary(self.handle.alpm());
-
-                if ! dbonly || ag.database_only {
-                    if ag.preview {
-                        self.handle.alpm_mut().trans_release().unwrap();  
-                        return TransactionState::Complete(Ok(()));
-                    } 
-                   
-                    if ! ag.no_confirm {
-                        if let Err(_) = prompt("::", format!("{}", style("Proceed with removal?").bold()), true) { 
-                            self.handle.alpm_mut().trans_release().unwrap();
-                            return TransactionState::Complete(Ok(()));
-                        }
-                    }
-                }
             },
         }
-        
+
+        if ! self.handle.trans_ready(&ag.action) {
+            self.handle.alpm_mut().trans_release().unwrap(); 
+            return TransactionState::Complete(Err("Nothing to do.".into()));
+        } 
+
+        if let Err(error) = handle_preparation(self.handle.alpm_mut().trans_prepare()) { 
+            return TransactionState::Complete(Err(format!("Failure to prepare transaction: {}.", error)));
+        }
+
+        if ! dbonly || ag.database_only || ag.force_database {
+            transaction_summary(self.handle.alpm());
+
+            if ag.preview {
+                self.handle.alpm_mut().trans_release().unwrap(); 
+                return TransactionState::Complete(Ok(())); 
+            } 
+
+            if ! ag.no_confirm {
+                let action = ag.action.as_str();
+                let query = format!("Proceed with {}?", action);
+                if let Err(_) = prompt("::", format!("{}", style(query).bold()), true) {
+                    self.handle.alpm_mut().trans_release().unwrap();
+                    return TransactionState::Complete(Ok(())); 
+                }
+            }
+        }
+
         if ! dbonly || ag.database_only || ag.force_database { 
             self.handle.alpm().set_question_cb(QueryCallback, query_event::questioncb);
             self.handle.alpm().set_progress_cb(ProgressCallback::new(), progress_event::progress_event);
         }
 
-        if let Err(_) = handle_preparation(self.handle.alpm_mut().trans_prepare()) { 
-            return TransactionState::Complete(Err("Preparation failed.".into()));
-        }
-
-        if let Err(_) = handle_transaction(self.handle.alpm_mut().trans_commit()) {
-            return TransactionState::Complete(Err("Failed to commit transaction.".into()));
+        if let Err(error) = handle_transaction(self.handle.alpm_mut().trans_commit()) {
+            return TransactionState::Complete(Err(format!("Failure to commit transaction: {}", error)));
         }
 
         for pkg in set_depends {
@@ -432,7 +433,7 @@ impl TransactionHandle {
             }
             
             let pkg_name = pkg.name().into();
-            
+
             if ! self.ignore_dep.contains(&pkg_name) { 
                 self.ignore_dep.push(pkg_name); 
             }
@@ -440,7 +441,7 @@ impl TransactionHandle {
         
         for pkg in dep_handle.localdb().pkgs() {
             let pkg_name = pkg.name().into();
-            
+
             if ! self.ignore.contains(&pkg_name) {
                 self.ignore.push(pkg_name);
             }
@@ -501,29 +502,38 @@ impl TransactionHandle {
         Ok(packages.1)
     }
 
-    fn prepare_removal(&mut self, enumerate: bool) -> Result<(),String> {
-        let ignor = if self.dbonly { 
+    fn prepare_removal(&mut self, enumerate: bool, cascade: bool) -> Result<(),String> {
+        let ignored = if self.dbonly { 
             &self.ignore_dep
         } else {
             &self.ignore
         };
 
-        let ignored = ignor.iter().map(|i| i.as_str()) .collect::<Vec<_>>();
+        for queue in self.queue.iter() { 
+            if let None = get_local_package(&self.alpm, queue.as_str()) { 
+                Err(format!("Target package {}: Not installed.", style(queue).bold()))?
+            }
+
+            if ignored.contains(queue) && ! self.dbonly {
+                 print_warning(format!("Target package {}: Installed in upstream container.", style(queue).bold()));
+            } 
+        }
+
+        let ignored = ignored.iter().map(|i| i.as_str()) .collect::<Vec<_>>();
         let queued = self.queue.iter().map(|i| i.as_str()) .collect::<Vec<_>>(); 
-        let packages = InverseDependencyResolver::new(&self.alpm, &ignored, enumerate).enumerate(&queued);
+        let packages = LocalDependencyResolver::new(&self.alpm, &ignored, enumerate, cascade).enumerate(&queued);
 
         for pkg in packages { 
             self.alpm.trans_remove_pkg(pkg).unwrap(); 
         }
-        
+
         Ok(())
     }
 
-    fn trans_ready(&self, remove: bool) -> bool {
-        if remove {
-            self.alpm.trans_remove().len() > 0
-        } else {
-            self.alpm.trans_add().len() > 0
+    fn trans_ready(&self, trans_type: &TransactionType) -> bool {
+        match trans_type {
+            TransactionType::Upgrade(_) => self.alpm.trans_add().len() > 0,
+            TransactionType::Remove(_,_) => self.alpm.trans_remove().len() > 0
         }
     }
 
@@ -559,131 +569,6 @@ impl TransactionHandle {
     fn db(&mut self, dbonly: bool) { self.dbonly = dbonly; }
     fn alpm_mut(&mut self) -> &mut Alpm { &mut self.alpm }
     fn alpm(&mut self) -> &Alpm { &self.alpm }
-}
-
-struct InverseDependencyResolver<'a> {
-    resolved: Vec<&'a str>,
-    packages: Vec<Package<'a>>,
-    ignored: &'a Vec<&'a str>,
-    handle: &'a Alpm,
-    depth: i8,
-    recursive: bool,
-} 
-
-impl <'a>InverseDependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a Vec<&'a str>, enumerate: bool) -> Self {
-        Self {
-            resolved: Vec::new(),
-            packages: Vec::new(),
-            ignored: ignorelist,
-            depth: 0,
-            handle: alpm,
-            recursive: enumerate,
-        }
-    }
-
-    fn check_depth(&mut self) {
-        if self.depth == 15 {
-            print_error("Recursion depth exceeded maximum.");
-            exit(2);
-        }
-    }
-    
-    fn enumerate(mut self, packages: &Vec<&'a str>) -> Vec<Package<'a>> {
-        let mut synchronize: Vec<&'a str> = Vec::new();
-        self.check_depth();
-
-        for pkg in packages {
-            if self.resolved.contains(&pkg) || self.ignored.contains(&pkg) {
-                continue;
-            }
-
-            if let Some(pkg) = get_local_package(&self.handle, pkg) {  
-                let deps = pkg.depends().iter().map(|p| p.name()).collect::<Vec<&str>>();
-
-                self.resolved.push(pkg.name());
-                self.packages.push(pkg);
-
-                for dep in deps {
-                    if let Some(_) = get_local_package(&self.handle, dep) {
-                        synchronize.push(dep);
-                    }
-                }
-            }             
-        }
-
-        if synchronize.len() > 0 && self.recursive {
-            self.depth += 1;       
-            self.enumerate(&synchronize)
-        } else {
-            self.packages
-        }
-    }
-}
-
-struct DependencyResolver<'a> {
-    resolved: Vec<&'a str>,
-    packages: Vec<Package<'a>>,
-    dependencies: Vec<String>,
-    ignored: &'a Vec<&'a str>,
-    handle: &'a Alpm,
-    depth: i8,
-} 
-
-impl <'a>DependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a Vec<&'a str>) -> Self {
-        Self {
-            resolved: Vec::new(),
-            packages: Vec::new(),
-            dependencies: Vec::new(),
-            ignored: ignorelist,
-            depth: 0,
-            handle: alpm,
-        }
-    }
-
-    fn check_depth(&mut self) {
-        if self.depth == 15 {
-            print_error("Recursion depth exceeded maximum.");
-            exit(2);
-        }
-    }
-    
-    fn enumerate(mut self, packages: &Vec<&'a str>) -> (Vec<Package<'a>>, Vec<String>) {
-        let mut synchronize: Vec<&'a str> = Vec::new();
-        self.check_depth();
-
-        for pkg in packages {
-            if self.resolved.contains(&pkg) || self.ignored.contains(&pkg) {
-                continue;
-            } 
-
-            if let Some(pkg) = get_package(&self.handle, pkg) {  
-                let deps = pkg.depends().iter().map(|p| p.name()).collect::<Vec<&str>>();
-
-                self.resolved.push(pkg.name());
-                self.packages.push(pkg);
-                
-                if self.depth > 0 {
-                    self.dependencies.push(pkg.name().into());
-                }
-
-                for dep in deps {
-                    if let None = get_local_package(&self.handle, dep) { 
-                        synchronize.push(dep);
-                        self.dependencies.push(dep.into());
-                    }
-                }
-            }             
-        }
-
-        if synchronize.len() > 0 {
-            self.depth += 1;
-            self.enumerate(&synchronize)
-        } else {
-            (self.packages, self.dependencies)
-        }
-    }
 }
 
 pub fn update(mut update: TransactionAggregator, cache: &InstanceCache) {
@@ -778,14 +663,14 @@ fn transaction_summary(handle: &Alpm) {
     println!();
 }
 
-fn handle_transaction<'a>(result: Result<(),(CommitResult<'a>, alpm::Error)>) -> Result<(),()> {
+fn handle_transaction<'a>(result: Result<(),(CommitResult<'a>, alpm::Error)>) -> Result<(),String> {
     match result {
         Ok(_) => Ok(()),
-        Err(result) => { handle_erroneous_transaction(result); Err(()) }
+        Err(result) => Err(handle_erroneous_transaction(result))
     }
 }
 
-fn handle_erroneous_transaction<'a>(result: (CommitResult<'a>, alpm::Error)) {
+fn handle_erroneous_transaction<'a>(result: (CommitResult<'a>, alpm::Error)) -> String {
     match result.0 {
         CommitResult::FileConflict(file) => {
             print_error("Conflicting files in container filesystem:");
@@ -817,17 +702,17 @@ fn handle_erroneous_transaction<'a>(result: (CommitResult<'a>, alpm::Error)) {
        },
         CommitResult::Ok => print_error(format!("{}", result.1))
     }
+    result.1.to_string()
 }
 
-fn handle_preparation<'a>(result: Result<(), (PrepareResult<'a>, alpm::Error)>) -> Result<(),()> {
+fn handle_preparation<'a>(result: Result<(), (PrepareResult<'a>, alpm::Error)>) -> Result<(),String> {
     match result {
         Ok(_) => Ok(()),
-        Err(result) => { handle_erroneous_preparation(result); Err(()) }
+        Err(result) => Err(handle_erroneous_preparation(result))
     }
 }
  
-
-fn handle_erroneous_preparation<'a>(result: (PrepareResult<'a>, alpm::Error)) {
+fn handle_erroneous_preparation<'a>(result: (PrepareResult<'a>, alpm::Error)) -> String {
     match result.0 {
         PrepareResult::PkgInvalidArch(list) => {
             for package in list.iter() {
@@ -846,65 +731,5 @@ fn handle_erroneous_preparation<'a>(result: (PrepareResult<'a>, alpm::Error)) {
         },
         PrepareResult::Ok => print_error(format!("{}", result.1))
     }
-}
-
-fn unit_suffix<'a>(i: i8) -> &'a str {
-    match i {
-        0 => "KB",
-        1 => "MB",
-        2 => "GB",
-        3 => "TB",
-        4 => "PB",
-        _ => "B"
-    }
-}
-
-fn format_unit(bytes: i64) -> String {
-    let conditional: f64 = if bytes > -1 { 1000.0 } else { -1000.0 };
-    let diviser: f64 = 1000.0;
-    let mut size: f64 = bytes as f64;
-    let mut idx: i8 = -1;
-
-    while if bytes > -1 { size > conditional } else { size < conditional } {
-        size = size / diviser;
-        idx += 1;
-    }
-    
-    if idx == -1 {
-        format!("{:.0} {}", size, unit_suffix(idx))
-    } else {
-        format!("{:.2} {}", size, unit_suffix(idx)) 
-    }
-}
-
-fn get_local_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
-    if let Ok(pkg) = handle.localdb().pkg(pkg) {
-        return Some(pkg);
-    } else {
-        for pkgs in handle.localdb().pkgs() {
-            let is_present = pkgs.provides().iter().filter(|d| pkg == d.name()).collect::<Vec<_>>().len() > 0;
-            if is_present {
-                if let Ok(pkg) = handle.localdb().pkg(pkgs.name()) { 
-                    return Some(pkg);
-                }
-            }
-        }
-    }
-    None
-}
-
-fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
-    for sync in handle.syncdbs() {  
-        if let Ok(pkg) = sync.pkg(pkg) {
-           return Some(pkg);
-        } else {
-            for pkgs in sync.pkgs() { 
-                let is_present = pkgs.provides().iter().filter(|d| pkg == d.name()).collect::<Vec<_>>().len() > 0;
-                if is_present {
-                    return Some(pkgs);
-                }
-            }
-        }
-    }
-    None
+    return result.1.to_string();
 }
