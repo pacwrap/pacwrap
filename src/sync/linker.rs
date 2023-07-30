@@ -27,10 +27,6 @@ impl HardLinkDS {
             files: IndexMap::new()
         }
     }
-
-    fn files(&mut self) -> &mut IndexMap<String, (String,bool,bool)> {
-        &mut self.files
-    }
 }
 
 pub struct Linker {
@@ -38,7 +34,6 @@ pub struct Linker {
     hlds_res: HashMap<String, HardLinkDS>,
     linked: Vec<String>,
     progress: ProgressBar,
-    writer_tr: Vec<JoinHandle<()>>
 }
 
 impl Linker {
@@ -57,7 +52,6 @@ impl Linker {
             hlds: HashMap::new(),
             hlds_res: HashMap::new(),
             linked: Vec::new(),
-            writer_tr: Vec::new()
        }
     }
 

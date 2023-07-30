@@ -1,21 +1,23 @@
-#![allow(dead_code)]
-
 use alpm::{Alpm,  SigLevel, Usage, PackageReason};
 use console::style;
 use lazy_static::lazy_static;
 use pacmanconf;
 
 use crate::constants::{self, LOCATION};
-use crate::sync::dl_event::DownloadCallback;
-use crate::sync::linker::Linker;
-use crate::sync::progress_event::ProgressCallback;
-use crate::sync::update::TransactionAggregator;
-use crate::sync::update::TransactionType;
+use crate::sync::{
+    dl_event::DownloadCallback,
+    linker::Linker,
+    progress_event::ProgressCallback,
+    transaction::TransactionType,
+    transaction::TransactionAggregator};
 use crate::utils::print_error;
-use crate::utils::{Arguments, arguments::invalid, test_root, print_help_msg};
-use crate::config::InsVars;
-use crate::config::cache::InstanceCache;
-use crate::config::InstanceHandle;
+use crate::utils::{Arguments, 
+    arguments::invalid, 
+    test_root, 
+    print_help_msg};
+use crate::config::{InsVars,
+    InstanceHandle,
+    cache::InstanceCache};
 
 lazy_static! {
     static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman/pacman.conf", constants::LOCATION.get_config())).unwrap(); 
@@ -26,7 +28,7 @@ mod progress_event;
 mod dl_event;
 mod query_event;
 mod linker;
-mod update;
+mod transaction;
 mod resolver;
 mod resolver_local;
 mod utils;
@@ -92,10 +94,10 @@ pub fn execute() {
                 if no_deps || ! upgrade {
                     update.transact(inshandle);
                 } else {
-                    update::update(update, &cache); 
+                    transaction::update(update, &cache); 
                 }
             } else {
-                update::update(update, &cache);
+                transaction::update(update, &cache);
             }
         } else if ! refresh {
             invalid();

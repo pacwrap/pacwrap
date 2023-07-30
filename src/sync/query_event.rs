@@ -7,12 +7,6 @@ use crate::utils::prompt::prompt;
 #[derive(Clone)]
 pub struct QueryCallback;
 
-impl QueryCallback {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 pub fn questioncb(question: AnyQuestion, this: &mut QueryCallback) {
     match question.question() {
         Conflict(mut x) => {
