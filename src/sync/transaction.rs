@@ -73,13 +73,13 @@ impl TransactionType {
     fn action_message(&self, dbonly: bool) {
         let message = match self {
             Self::Upgrade(_) => match dbonly {
-                true => format!("{} Synchronizing foreign container...",style("->").bold().cyan()),
-                false => format!("{} Synchronizing resident database...",style("->").bold().cyan())
+                true => "Synchronizing foreign database...",
+                false => "Synchronizing resident container..."
             }, 
-            Self::Remove(_, _) => format!("{} Preparing package removal...",style("->").bold().cyan())
+            Self::Remove(_, _) => "Preparing package removal..."
         };
 
-        println!("{}", message);
+        println!("{} {}", style("->").bold().cyan(), message);
     }
 
     fn begin_message(&self, inshandle: &InstanceHandle) {
