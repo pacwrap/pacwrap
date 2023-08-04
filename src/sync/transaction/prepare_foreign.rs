@@ -2,7 +2,7 @@ use crate::config::InstanceHandle;
 use super::{Transaction, 
     TransactionState, 
     TransactionHandle, 
-    TransactionAggregator};
+    TransactionAggregator, TransactionType};
 
 pub struct PrepareForeign;
 
@@ -16,8 +16,14 @@ impl Transaction for PrepareForeign {
 
         if config.dependencies().len() == 0 {
             return TransactionState::Commit(ag.is_database_only());
-        
         }
+
+        if let TransactionType::Upgrade(upgrade) = ag.action() {
+            if ! upgrade {
+                return TransactionState::Commit(ag.is_database_only()); 
+            }
+        }
+
         if ! ag.is_database_force() { 
             if let Err(_) = handle.out_of_date(true) { 
                 if ag.updated()

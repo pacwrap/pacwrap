@@ -42,8 +42,6 @@ pub fn execute() {
 
     let instance = runtime.remove(0);
     let instance_vars = InsVars::new(&instance);
-
-
     let cfg = config::load_configuration(&instance_vars.config_path()); 
 
     if verbose { instance_vars.debug(&cfg, &String::new(), &runtime); }
@@ -154,8 +152,8 @@ fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<
                 job.kill().unwrap();
             } 
             
+            tc.reset_terminal().ok();
             clean_up_socket();
-            tc.reset_terminal().unwrap();
             process_exit(status);
         },
         Err(_) => {
