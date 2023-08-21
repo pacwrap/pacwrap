@@ -15,7 +15,7 @@ use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
 use serde_json::{Value, json};
 
-use crate::config::{self, Instance, InsVars, Filesystem, Permission, Dbus, permission::*};
+use crate::config::{self, InsVars, Filesystem, Permission, Dbus, permission::*, InstanceHandle};
 use crate::utils::{self, TermControl, Arguments, env_var, print_error, print_warning};
 use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET};
 use crate::exec::args::ExecutionArgs;
@@ -36,25 +36,35 @@ pub fn execute() {
         .switch("-s", "--shell", &mut shell)
         .parse_arguments();
 
-    let mut runtime = args.get_runtime().clone();
+    let mut runtime = args.get_runtime()
+        .iter()
+        .map(|a| a.to_string())
+        .collect::<Vec<String>>();
 
     args.require_target(1);
 
-    let instance = runtime.remove(0);
-    let instance_vars = InsVars::new(&instance);
-    let cfg = config::load_configuration(&instance_vars.config_path()); 
+    let handle = &config::provide_handle(&runtime.remove(0));
 
-    if verbose { instance_vars.debug(&cfg, &String::new(), &runtime); }
+    if verbose { 
+        handle.vars().debug(handle.config(), &runtime); 
+    }
 
-        if root && cmd { execute_fakeroot(instance_vars, &runtime) }
-        else if root && shell { execute_fakeroot(instance_vars, &["bash".into()].to_vec()); }
-        else if shell { execute_container(instance_vars,&["bash".into()].to_vec(), cfg, shell, verbose); }
-        else { execute_container(instance_vars, &runtime, cfg, false, verbose); } 
+    if root && cmd { 
+        execute_fakeroot(handle, &runtime) 
+    } else if root && shell { 
+        execute_fakeroot(handle, &["bash".into()].to_vec()); 
+    } else if shell { 
+        execute_container(handle ,&["bash".into()].to_vec(), shell, verbose); 
+    } else { 
+        execute_container(handle, &runtime, false, verbose); 
+    } 
 }
 
-fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, shell: bool, verbose: bool) {
+fn execute_container(ins: &InstanceHandle, arguments: &Vec<String>, shell: bool, verbose: bool) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
+    let cfg = ins.config();
+    let vars = ins.vars();
 
     if shell { exec_args.env("TERM", "xterm"); }    
     if ! cfg.allow_forking() { exec_args.push_env("--die-with-parent"); }
@@ -67,10 +77,12 @@ fn execute_container(vars: InsVars, arguments: &Vec<String>, cfg: Instance, shel
         exec_args.push_env("--disable-userns"); 
     }
 
-    if cfg.dbus().len() > 0 { jobs.push(register_dbus(cfg.dbus(), &vars, &mut exec_args).into()); } 
+    if cfg.dbus().len() > 0 { 
+        jobs.push(register_dbus(cfg.dbus(), &mut exec_args).into()); 
+    } 
 
     register_filesystems(cfg.filesystem(), &vars, &mut exec_args);
-    register_permissions(cfg.permissions(), &vars, &mut exec_args);
+    register_permissions(cfg.permissions(), &mut exec_args);
    
     //TODO: Implement separate abstraction for path vars.
 
@@ -152,8 +164,8 @@ fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<
                 job.kill().unwrap();
             } 
             
-            tc.reset_terminal().ok();
             clean_up_socket();
+            tc.reset_terminal().unwrap();
             process_exit(status);
         },
         Err(_) => {
@@ -186,13 +198,13 @@ fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &InsVars, args: &m
     }
 }
 
-fn register_permissions(per: &Vec<Box<dyn Permission>>, vars: &InsVars, args: &mut ExecutionArgs) {
+fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut ExecutionArgs) {
     for p in per.iter() {
         match p.check() {
         Ok(condition) => {
             match condition {
                 Some(b) => {
-                    p.register(args, vars);
+                    p.register(args);
                     if let Condition::SuccessWarn(warning) = b {
                         print_warning(format!("{}: {} ", p.module(), warning));
                     }
@@ -214,9 +226,9 @@ fn register_permissions(per: &Vec<Box<dyn Permission>>, vars: &InsVars, args: &m
     }
 }
 
-fn register_dbus(per: &Vec<Box<dyn Dbus>>, vars: &InsVars, args: &mut ExecutionArgs) -> Child {
+fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
     for p in per.iter() {
-        p.register(args, vars);
+        p.register(args);
     }
 
     create_dbus_socket();
@@ -294,24 +306,24 @@ fn clean_up_socket() {
     }
 }
 
-fn execute_fakeroot(instance: InsVars, arguments: &Vec<String>) { 
+fn execute_fakeroot(ins: &InstanceHandle, arguments: &Vec<String>) { 
     let tc = TermControl::new(0);
     
-    utils::test_root(&instance);
+    utils::test_root(ins.vars());
  
     match Command::new(BWRAP_EXECUTABLE)
     .arg("--tmpfs").arg("/tmp")
-    .arg("--bind").arg(&instance.root()).arg("/")
+    .arg("--bind").arg(ins.vars().root()).arg("/")
     .arg("--ro-bind").arg("/usr/lib/libfakeroot").arg("/usr/lib/libfakeroot/")
     .arg("--ro-bind").arg("/usr/bin/fakeroot").arg("/usr/bin/fakeroot")
     .arg("--ro-bind").arg("/usr/bin/fakechroot").arg("/usr/bin/fakechroot")
     .arg("--ro-bind").arg("/usr/bin/faked").arg("/usr/bin/faked")
     .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
     .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime")
-    .arg("--bind").arg(&instance.pacman_sync).arg("/var/lib/pacman/sync")
-    .arg("--bind").arg(&instance.pacman_gnupg).arg("/etc/pacman.d/gnupg")
-    .arg("--bind").arg(&instance.pacman_cache).arg("/var/cache/pacman/pkg")
-    .arg("--bind").arg(&instance.home()).arg(&instance.home_mount())  
+    .arg("--bind").arg(&ins.vars().pacman_sync).arg("/var/lib/pacman/sync")
+    .arg("--bind").arg(&ins.vars().pacman_gnupg).arg("/etc/pacman.d/gnupg")
+    .arg("--bind").arg(&ins.vars().pacman_cache).arg("/var/cache/pacman/pkg")
+    .arg("--bind").arg(ins.vars().home()).arg(ins.vars().home_mount())  
     .arg("--dev").arg("/dev")
     .arg("--proc").arg("/proc")
     .arg("--unshare-all").arg("--share-net")
@@ -320,9 +332,9 @@ fn execute_fakeroot(instance: InsVars, arguments: &Vec<String>) {
     .arg("--new-session")
     .arg("--setenv").arg("TERM").arg("xterm")
     .arg("--setenv").arg("PATH").arg("/usr/bin")
-    .arg("--setenv").arg("CWD").arg(&instance.home_mount())
-    .arg("--setenv").arg("HOME").arg(&instance.home_mount())
-    .arg("--setenv").arg("USER").arg(&instance.user())
+    .arg("--setenv").arg("CWD").arg(ins.vars().home_mount())
+    .arg("--setenv").arg("HOME").arg(ins.vars().home_mount())
+    .arg("--setenv").arg("USER").arg(ins.vars().user())
     .arg("--die-with-parent")
     .arg("--unshare-user")
     .arg("--disable-userns")

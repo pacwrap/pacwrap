@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::fs::read_dir;
 
 use crate::constants::LOCATION;
-use crate::config::{self, InsVars, InstanceHandle};
+use crate::config::{self, InstanceHandle};
+
+use super::instance::InstanceType;
 
 
 pub struct InstanceCache {
@@ -26,9 +28,14 @@ impl InstanceCache {
 
     pub fn populate_from(&mut self, containers: &Vec<String>, recursion: bool) {
         for name in containers {
-            if self.map_instance(&name) {      
+            if self.map(&name) {      
                 self.registered.push(name.clone());
-                let deps = self.instances.get(name).unwrap().instance().dependencies().clone();
+                let deps = self.instances.get(name)
+                    .unwrap()
+                    .metadata()
+                    .dependencies()
+                    .clone();
+
                 if recursion {
                     self.populate_from(&deps, recursion); 
                 }
@@ -40,8 +47,12 @@ impl InstanceCache {
         if let Ok(dir) = read_dir(format!("{}/root", LOCATION.get_data())) {
             for f in dir {
                 if let Ok(file) = f {
-                    let name: String = file.file_name().to_str().unwrap().to_string();
-                    if self.map_instance(&name) {      
+                    let name: String = file.file_name()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+
+                    if self.map(&name) {      
                         self.registered.push(name);
                     }
                 }
@@ -49,22 +60,17 @@ impl InstanceCache {
         }
     }
 
-    fn map_instance(&mut self, ins: &String) -> bool {
+    fn map(&mut self, ins: &String) -> bool {
         let mut register = true;
         if let None = self.instances.get(ins) {
-            let vars = InsVars::new(ins);
-            let config_path = vars.config_path(); 
-            let config = InstanceHandle::new(config::load_configuration(config_path), vars);
-            
-            if config.instance().container_type() == "BASE" {
-                self.containers_base.push(ins.clone());
-            } else if config.instance().container_type() == "DEP" {
-                self.containers_dep.push(ins.clone());
-            } else if config.instance().container_type() == "ROOT" {
-                self.containers_root.push(ins.clone());
-            } else {
-               register = false; 
-            }
+            let config = config::provide_handle(ins);
+           
+            match config.metadata().container_type() {
+                InstanceType::BASE => self.containers_base.push(ins.clone()),
+                InstanceType::DEP => self.containers_dep.push(ins.clone()),
+                InstanceType::ROOT => self.containers_root.push(ins.clone()),
+                InstanceType::LINK => register = false,
+            } 
 
             self.instances.insert(ins.clone(), config);
         }

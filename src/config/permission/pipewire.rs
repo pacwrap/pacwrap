@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::XDG_RUNTIME_DIR;
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::*};
+use crate::config::{Permission, permission::*};
 use crate::utils::check_socket;
 use crate::config::permission::{Condition::Success, PermError::Warn};
 
@@ -28,7 +28,7 @@ impl Permission for PIPEWIRE {
         Ok(Some(Success))
     }
     
-    fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut  ExecutionArgs) {
         args.robind(&self.socket, default_socket());
     }
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::*};
+use crate::config::{Permission, permission::*};
 use crate::config::permission::Condition::Success;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,7 +13,7 @@ impl Permission for NET {
         Ok(Some(Success))
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs) {
         args.push_env("--share-net");
         args.bind("/etc/resolv.conf", "/etc/resolv.conf");
     }

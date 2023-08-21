@@ -14,7 +14,7 @@ pub struct NEW_DIR {
 
 #[typetag::serde]
 impl Filesystem for NEW_DIR {
-    fn check(&self, vars: &InsVars) -> Result<(), Error> {
+    fn check(&self, _vars: &InsVars) -> Result<(), Error> {
         if self.path.len() == 0 {
             Err(Error::new("DIR", format!("Path not specified."), false))?
         }
@@ -22,7 +22,7 @@ impl Filesystem for NEW_DIR {
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, _vars: &InsVars) {
         for dir in self.path.iter() {
             args.dir(dir);
         }

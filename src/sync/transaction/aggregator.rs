@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use console::style;
 
 use crate::sync::{self,
-    linker::{self, Linker}};
+    linker::Linker};
 use crate::utils:: print_warning;
 use crate::config::{InstanceHandle, 
+    InstanceType::ROOT,
     cache::InstanceCache};
 use super::{
     Transaction,
@@ -18,7 +19,7 @@ pub struct TransactionAggregator<'a> {
     updated: Vec<String>,
     pkg_queue: HashMap<String, Vec<String>>,
     action: TransactionType,
-    linker: Linker,
+    linker: Linker<'a>,
     force_database: bool,
     database_only: bool,
     preview: bool,
@@ -32,7 +33,7 @@ impl <'a>TransactionAggregator<'a> {
             queried: Vec::new(),
             updated: Vec::new(),
             pkg_queue: HashMap::new(),
-            linker: Linker::new(),
+            linker: Linker::new(icache),
             action: t, 
             force_database: false,
             preview: false,
@@ -52,7 +53,7 @@ impl <'a>TransactionAggregator<'a> {
             let inshandle = cache.instances().get(ins);
 
             if let Some(inshandle) = inshandle {
-                self.transaction(inshandle.instance().dependencies());
+                self.transaction(inshandle.metadata().dependencies());
                 self.queried.push(ins.clone());
                 self.transact(inshandle);
             } else {
@@ -87,17 +88,17 @@ impl <'a>TransactionAggregator<'a> {
     }
 
     pub fn link_filesystem(&mut self, inshandle: &InstanceHandle) { 
-        if inshandle.instance().container_type() == "ROOT" {
+        if let ROOT = inshandle.metadata().container_type() {
             return;
         }
 
         println!("{} {}",style("->").bold().cyan(), style(format!("Synchronizing container filesystem...")));     
-        linker::wait_on(self.linker.link(self.cache, &vec![inshandle.vars().instance().into()], Vec::new()));
+        self.linker.link(&vec![inshandle.vars().instance().into()], 2);
     }
 
     pub fn cache(&self) -> &'a InstanceCache { &self.cache }
     pub fn action(&self) -> &TransactionType { &self.action } 
-    pub fn linker(&mut self) -> &mut Linker { &mut self.linker }
+    pub fn linker(&mut self) -> &mut Linker<'a> { &mut self.linker }
     pub fn updated(&self) -> &Vec<String> { &self.updated }
     pub fn skip_confirm(&self) -> bool { self.no_confirm } 
     pub fn is_preview(&self) -> bool { self.preview }

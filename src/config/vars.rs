@@ -1,7 +1,7 @@
 use std::env::var;
 
 use crate::constants::{LOCATION, HOME, USER};
-use crate::config::instance::Instance;
+use crate::config::instance::InstanceRuntime;
 
 #[derive(Clone)]
 pub struct InsVars {
@@ -38,14 +38,20 @@ impl InsVars {
             instance: ins
         };
 
-        if let Ok(var) = var("PACWRAP_HOME") { vars.home=var; }
+        if let Ok(var) = var("PACWRAP_HOME") { 
+            vars.home=var; 
+        }
 
         vars
     }
 
-    pub fn debug(&self, cfg: &Instance, switch: &String, runtime: &Vec<String>) {
-        print!("Arguments: "); for arg in runtime.iter() { print!("{} ", arg); } println!();
-        println!("Switch: -{}", switch);
+    pub fn debug(&self, cfg: &InstanceRuntime, runtime: &Vec<String>) { 
+        let mut args = String::new();
+        for arg in runtime.iter() {
+            args.push_str(format!("{} ", arg).as_str()); 
+        }
+
+        println!("Arguments: {}", args);
         println!("Instance: {}", self.instance);
         println!("User: {}", *USER);
         println!("Home: {}", *HOME);

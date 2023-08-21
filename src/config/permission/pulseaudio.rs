@@ -3,7 +3,10 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::*, permission::PermError::*, permission::Condition::*};
+use crate::config::{Permission, 
+    permission::*, 
+    permission::PermError::*, 
+    permission::Condition::*};
 use crate::utils::check_socket;
 use crate::constants::XDG_RUNTIME_DIR;
 
@@ -27,7 +30,7 @@ impl Permission for PULSEAUDIO {
         Ok(Some(Success))
     }
     
-    fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut  ExecutionArgs) {
         args.robind(&self.socket, default_socket());
     }
 

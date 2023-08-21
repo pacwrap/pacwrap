@@ -1,7 +1,6 @@
-use nix::sys::termios::{Termios, 
-    tcgetattr, 
-    tcsetattr, 
-    SetArg::TCSANOW};
+use std::mem::zeroed;
+
+use nix::sys::termios::{Termios, tcgetattr, tcsetattr, SetArg::TCSANOW};
 
 /*******
     *
@@ -12,7 +11,8 @@ use nix::sys::termios::{Termios,
    ***/
 
 pub struct TermControl {
-    tm: Option<Termios>,
+    tm: Termios,
+    init: bool,
     fd: i32 
 }
 
@@ -27,14 +27,8 @@ impl TermControl {
 
     pub fn new(f: i32) -> Self {
         match tcgetattr(f) {
-            Ok(output) => Self { 
-                tm: Some(output), 
-                fd: f
-            },
-            Err(_) => Self { 
-                tm: None, 
-                fd: f
-            }
+            Ok(output) => Self { tm: output, init: true, fd: f},
+            Err(_) => Self { tm: unsafe { zeroed() }, init: false, fd: f}
         }
     }
 
@@ -43,8 +37,8 @@ impl TermControl {
     */
 
     pub fn reset_terminal(&self) -> Result<(), ()>  {
-        if let Some(tm) = &self.tm {
-            match tcsetattr(self.fd, TCSANOW, &tm) {
+        if self.init {
+            match tcsetattr(self.fd, TCSANOW, &self.tm) {
                 Ok(_) => Ok(()),
                 Err(_) => Err(())
             }

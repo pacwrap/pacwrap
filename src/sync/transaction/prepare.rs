@@ -13,7 +13,7 @@ impl Transaction for Prepare {
     }
 
     fn engage(&mut self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> TransactionState {
-        let deps = inshandle.instance().dependencies();
+        let deps = inshandle.metadata().dependencies();
         let dep_depth = deps.len(); 
        
         if dep_depth > 0 {

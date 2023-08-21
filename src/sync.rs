@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use alpm::{Alpm,  SigLevel, Usage, PackageReason};
 use console::style;
 use lazy_static::lazy_static;
@@ -10,10 +12,11 @@ use crate::sync::{
     progress_event::ProgressCallback,
     transaction::TransactionType,
     transaction::TransactionAggregator};
-use crate::utils::print_error;
 use crate::utils::{Arguments, 
     arguments::invalid, 
-    test_root, 
+    test_root,
+    print_warning,
+    print_error,
     print_help_msg};
 use crate::config::{InsVars,
     InstanceHandle,
@@ -69,9 +72,9 @@ pub fn execute() {
     }
  
     if refresh && y_count == 4 {      
-        let mut l: Linker = Linker::new(); 
+        let mut l: Linker = Linker::new(&cache); 
         l.start(cache.registered().len());
-        linker::wait_on(l.link(&cache, cache.registered(), Vec::new()));
+        l.link(&cache.registered(), 0);
         l.finish();
     } else if search {
         print_help_msg("Functionality is currently unimplemented.");
@@ -225,9 +228,9 @@ fn register_remote(mut handle: Alpm) -> Alpm {
 }
 
 fn synchronize_database(cache: &InstanceCache, force: bool) {
-    for i in cache.registered().iter() {
-        let ins: &InstanceHandle = cache.instances().get(i).unwrap();
-        if ins.instance().container_type() == "BASE" {
+     match cache.containers_base().get(0) {
+        Some(insname) => {
+            let ins: &InstanceHandle = cache.instances().get(insname).unwrap();      
             let mut handle = instantiate_alpm_syncdb(&ins);
     
             println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
@@ -239,20 +242,25 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             }
             
             Alpm::release(handle).unwrap();  
-            break;
+
+            for i in cache.registered().iter() {
+                let ins: &InstanceHandle = cache.instances().get(i).unwrap();
+                let vars: &InsVars = ins.vars();
+        
+                for repo in PACMAN_CONF.repos.iter() {
+                    let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), repo.name);
+                    let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
+                    if let Err(error) = linker::create_hard_link(src, dest) {
+                        print_warning(error);
+                    }
+                }
+            } 
+        },
+        None => {
+            print_error("No compatible containers available to synchronize remote database.");
+            exit(2)
         }
     }
-
-    for i in cache.registered().iter() {
-        let ins: &InstanceHandle = cache.instances().get(i).unwrap();
-        let vars: &InsVars = ins.vars();
-        
-        for repo in PACMAN_CONF.repos.iter() {
-            let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), repo.name);
-            let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
-            linker::create_hard_link(src, dest);
-        }
-    } 
 }
 
 fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
@@ -293,7 +301,7 @@ fn parallel_downloads() -> u32 {
 
 fn invalid_environment() {
     print_error("Invalid environmental parameters.");
-    std::process::exit(1);
+    exit(1);
 }
 
 fn validate_environment() {

@@ -73,7 +73,10 @@ impl Transaction for Commit {
         }
 
         if ! handle.trans_ready(&ag.action()) {
-            return erroneous_state_transition(handle, "Nothing to do.".into());
+            return match self.state { 
+                TransactionState::CommitForeign => state_transition(&self.state, handle, ag),
+                _ => erroneous_state_transition(handle, "Nothing to do.".into())
+            }
         } 
 
         if let Err(error) = handle_preparation(handle.alpm_mut().trans_prepare()) { 

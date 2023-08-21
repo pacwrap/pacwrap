@@ -3,7 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::*};
+use crate::config::{Permission, permission::*};
 use crate::config::permission::{Condition::Success, PermError::Fail};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,7 +21,7 @@ impl Permission for DEV {
         Ok(Some(Success))
     }
     
-    fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) { 
+    fn register(&self, args: &mut  ExecutionArgs) { 
         args.dev(&format!("/dev/{}", self.device));
     }
 

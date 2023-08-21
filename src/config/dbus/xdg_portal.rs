@@ -3,14 +3,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Dbus};
+use crate::config::Dbus;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct XDG_PORTAL;
 
 #[typetag::serde]
 impl Dbus for XDG_PORTAL {
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) { 
+    fn register(&self, args: &mut ExecutionArgs) { 
         args.dbus("call", "org.freedesktop.portal.*=*");
         args.dbus("broadcast", "org.freedesktop.portal.*=@/org/freedesktop/portal/*");
     }

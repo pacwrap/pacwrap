@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::constants::XDG_RUNTIME_DIR;
 use crate::utils::check_socket;
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::*};
+use crate::config::{Permission, permission::*};
 use crate::config::permission::{Condition::{Success, SuccessWarn}, PermError::Fail};
 
 lazy_static! {
@@ -46,9 +46,14 @@ impl Permission for DISPLAY {
         }
    }
     
-    fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) {
-        if ! WAYLAND_DISPLAY.is_empty() { configure_wayland(args); } 
-        if ! DISPLAY_ENV.is_empty() { configure_xorg(args); }          
+    fn register(&self, args: &mut  ExecutionArgs) {
+        if ! WAYLAND_DISPLAY.is_empty() { 
+            configure_wayland(args); 
+        } 
+
+        if ! DISPLAY_ENV.is_empty() { 
+            configure_xorg(args); 
+        }          
     }
 
     fn module(&self) -> &str {

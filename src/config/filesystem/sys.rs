@@ -14,7 +14,7 @@ struct SYSFS {
 
 #[typetag::serde]
 impl Filesystem for SYSFS {
-    fn check(&self, vars: &InsVars) -> Result<(),Error> {  
+    fn check(&self, _vars: &InsVars) -> Result<(),Error> {  
         for dir in self.path.iter() {
             if ! Path::new(&format!("/sys/{}",dir)).exists() {
                 Err(Error::new("SYSFS", format!("/sys/{} is inaccessible.", dir), true))?
@@ -23,7 +23,7 @@ impl Filesystem for SYSFS {
         Ok(())
     }
     
-    fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) { 
+    fn register(&self, args: &mut  ExecutionArgs, _vars: &InsVars) { 
         for dir in self.path.iter() { 
             args.robind(format!("/sys/{}", dir), format!("/sys/{}", dir));
         }

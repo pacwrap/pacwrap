@@ -29,7 +29,7 @@ struct Mount {
 
 #[typetag::serde]
 impl Filesystem for TO_HOME {
-    fn check(&self, vars: &InsVars) -> Result<(), Error> {
+    fn check(&self, _vars: &InsVars) -> Result<(), Error> {
         if self.path.len() > 0 {
             if let Err(e) = check_mount(&self.permission, &self.path[0]) {
                 return Err(e);

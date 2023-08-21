@@ -1,5 +1,4 @@
 use crate::exec::args::ExecutionArgs;
-use crate::config::vars::InsVars;
 
 pub mod none;
 mod display;
@@ -24,6 +23,6 @@ pub enum PermError {
 #[typetag::serde(tag = "permission")]
 pub trait Permission {
     fn check(&self) -> Result<Option<Condition>, PermError>;
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars);
+    fn register(&self, args: &mut ExecutionArgs);
     fn module(&self) -> &str;
 }

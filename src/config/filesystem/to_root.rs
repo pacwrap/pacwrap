@@ -27,7 +27,7 @@ struct Mount {
 
 #[typetag::serde]
 impl Filesystem for TO_ROOT {
-    fn check(&self, vars: &InsVars) -> Result<(), Error> {
+    fn check(&self, _vars: &InsVars) -> Result<(), Error> {
         if self.path.len() > 0 {
             if let Err(e) = check_mount(&self.permission, &self.path[0]) {
                 return Err(e);
@@ -49,18 +49,18 @@ impl Filesystem for TO_ROOT {
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, _vars: &InsVars) {
         if self.path.len() > 0 { 
-            bind_filesystem(args,vars, &self.permission, &self.path);
+            bind_filesystem(args, &self.permission, &self.path);
         }
 
         for m in self.filesystem.iter() { 
-            bind_filesystem(args,vars, &m.permission, &m.path);
+            bind_filesystem(args, &m.permission, &m.path);
         }
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, path: &Vec<String>) {
+fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, path: &Vec<String>) {
     let src = &path[0];
     let mut dest: &String = src; 
 

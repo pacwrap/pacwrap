@@ -2,7 +2,7 @@
 
 [package]
 name = "pacwrap"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 
 [dependencies]
@@ -10,8 +10,9 @@ command-fds = "0.2.2"
 #tempfile = "3"
 serde_json = "1.0"
 #envy = "0.4"
-nix = "0.26.2"
-serde = { version = "1.0", features = ["derive"] }
+rayon = "1.7.0"
+nix = "0.22.3, <= 0.22.3"
+serde = { version = "1.0, < 1.0.172", features = ["derive"] }
 serde_yaml = "0.9"
 typetag="0.2"
 os_pipe = "1.1.4"
@@ -24,7 +25,7 @@ dialoguer = "0.10.4"
 pacmanconf = "2.0.0"
 ciborium = "0.2.1"
 walkdir = "2.3.3"
-indexmap = { version = "2.0.0", features = ["serde"] }
+indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 
 [profile.release]
 lto = "thin"

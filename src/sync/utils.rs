@@ -43,6 +43,7 @@ pub fn get_local_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'
             }
         }
     }
+
     None
 }
 
@@ -59,5 +60,14 @@ pub fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
             }
         }
     }
+
     None
+}
+
+pub fn usize_into_u64(u: usize) -> u64 {
+    match u.try_into() { Ok(i) => i, Err(_) => { 0 }}
+}
+
+pub fn i32_into_u64(u: i32) -> u64 {
+    match u.try_into() { Ok(i) => i, Err(_) => { 0 }}
 }

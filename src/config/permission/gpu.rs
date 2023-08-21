@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
-use crate::config::{InsVars, Permission, permission::*};
+use crate::config::{Permission, permission::*};
 use crate::config::permission::{Condition::Success, PermError::Fail};
 
 lazy_static! {
@@ -29,7 +29,7 @@ impl Permission for GPU {
         Ok(Some(Success))
     }
     
-    fn register(&self, args: &mut  ExecutionArgs, vars: &InsVars) { 
+    fn register(&self, args: &mut  ExecutionArgs) { 
         for dev in GPU_DEV.iter() {
             args.dev(dev);
         }

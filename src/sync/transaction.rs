@@ -3,7 +3,7 @@ use std::process::exit;
 use console::style;
 use alpm::Alpm;
 
-use crate::sync::{linker,
+use crate::sync::{
     resolver_local::LocalDependencyResolver,
     resolver::DependencyResolver,
     utils::get_local_package,
@@ -284,12 +284,14 @@ pub fn update(mut update: TransactionAggregator, cache: &InstanceCache) {
     update.transaction(&cache.containers_base());
     update.transaction(&cache.containers_dep());
 
+    update.linker().finish();
+
     if update.updated().len() > 0 {
         let mut cache = InstanceCache::new();
         println!("{} {} ",style("::").bold().green(), style("Synchronising container filesystems...").bold());  
         cache.populate();
         update.linker().start(cache.registered().len());
-        linker::wait_on(update.linker().link(&cache, cache.registered(), Vec::new()));
+        update.linker().link(&cache.registered(), 0);
         update.linker().finish();
     }
 

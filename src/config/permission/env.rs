@@ -4,7 +4,7 @@ use std::env;
 
 use crate::exec::args::ExecutionArgs;
 use crate::utils::print_warning;
-use crate::config::{InsVars, Permission, permission::*, permission::Condition::*};
+use crate::config::{Permission, permission::*, permission::Condition::*};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ENV { 
@@ -30,7 +30,7 @@ impl Permission for ENV {
         Ok(Some(Success))
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {        
+    fn register(&self, args: &mut ExecutionArgs) {        
         if self.var != "" {
             let set = set_env(&self.var, &self.set);
             args.env(&self.var, set);         
