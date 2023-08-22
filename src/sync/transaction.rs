@@ -280,19 +280,17 @@ impl TransactionHandle {
     fn alpm(&mut self) -> &Alpm { &self.alpm }
 }
 
-pub fn update(mut update: TransactionAggregator, cache: &InstanceCache) {
+pub fn update<'a>(mut update: TransactionAggregator<'a>, cache: &'a InstanceCache, aux_cache: &'a mut InstanceCache) {
     update.transaction(&cache.containers_base());
     update.transaction(&cache.containers_dep());
 
-    update.linker().finish();
-
-    if update.updated().len() > 0 {
-        let mut cache = InstanceCache::new();
+    if update.updated().len() > 0 { 
         println!("{} {} ",style("::").bold().green(), style("Synchronising container filesystems...").bold());  
-        cache.populate();
-        update.linker().start(cache.registered().len());
-        update.linker().link(&cache.registered(), 0);
-        update.linker().finish();
+        aux_cache.populate(); 
+        update.linker().set_cache(aux_cache);
+        update.linker().start(aux_cache.registered().len());
+        update.linker().link(&aux_cache.registered(), 0);
+        update.linker().finish(); 
     }
 
     update.transaction(&cache.containers_root());

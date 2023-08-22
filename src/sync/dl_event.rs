@@ -5,7 +5,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use console::Term;
 use lazy_static::lazy_static;
 
-use crate::utils::whitespace;
+use super::utils::whitespace;
 
 lazy_static!{
    static ref INIT: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg}")

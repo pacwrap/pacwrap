@@ -15,12 +15,23 @@ use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
 use serde_json::{Value, json};
 
-use crate::config::{self, InsVars, Filesystem, Permission, Dbus, permission::*, InstanceHandle};
-use crate::utils::{self, TermControl, Arguments, env_var, print_error, print_warning};
-use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET};
 use crate::exec::args::ExecutionArgs;
+use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET};
+use crate::config::{self, 
+    InsVars, 
+    Filesystem, 
+    Permission, 
+    Dbus, 
+    permission::*, 
+    InstanceHandle};
+use crate::utils::{TermControl, 
+    Arguments, 
+    env_var, 
+    print_error, 
+    print_warning};
 
 pub mod args;
+pub mod utils;
 
 pub fn execute() {
     let mut root = false;
@@ -34,15 +45,10 @@ pub fn execute() {
         .switch("-v", "--verbose", &mut verbose)
         .switch("-c", "--command", &mut cmd) 
         .switch("-s", "--shell", &mut shell)
-        .parse_arguments();
+        .parse_arguments()
+        .require_target(1);
 
-    let mut runtime = args.get_runtime()
-        .iter()
-        .map(|a| a.to_string())
-        .collect::<Vec<String>>();
-
-    args.require_target(1);
-
+    let mut runtime = args.get_runtime().clone();
     let handle = &config::provide_handle(&runtime.remove(0));
 
     if verbose { 
@@ -50,17 +56,17 @@ pub fn execute() {
     }
 
     if root && cmd { 
-        execute_fakeroot(handle, &runtime) 
+        execute_fakeroot_container(handle, runtime); 
     } else if root && shell { 
-        execute_fakeroot(handle, &["bash".into()].to_vec()); 
+        execute_fakeroot_container(handle, vec!("bash".into())); 
     } else if shell { 
-        execute_container(handle ,&["bash".into()].to_vec(), shell, verbose); 
+        execute_container(handle, vec!("bash".into()), shell, verbose); 
     } else { 
-        execute_container(handle, &runtime, false, verbose); 
+        execute_container(handle, runtime, false, verbose); 
     } 
 }
 
-fn execute_container(ins: &InstanceHandle, arguments: &Vec<String>, shell: bool, verbose: bool) {
+fn execute_container(ins: &InstanceHandle, arguments: Vec<String>, shell: bool, verbose: bool) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
@@ -69,7 +75,7 @@ fn execute_container(ins: &InstanceHandle, arguments: &Vec<String>, shell: bool,
     if shell { exec_args.env("TERM", "xterm"); }    
     if ! cfg.allow_forking() { exec_args.push_env("--die-with-parent"); }
     if ! cfg.retain_session() { exec_args.push_env("--new-session"); } else {
-        print_warning(format!("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details.")); 
+        print_warning("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details."); 
     }
 
     if ! cfg.enable_userns() { 
@@ -280,7 +286,7 @@ fn check_socket(socket: &String, increment: &u8, child: &mut Child) -> bool {
     }
 
     thread::sleep(Duration::from_micros(500));
-    utils::check_socket(socket)
+    crate::utils::check_socket(socket)
 }
 
 fn create_dbus_socket() {
@@ -306,43 +312,11 @@ fn clean_up_socket() {
     }
 }
 
-fn execute_fakeroot(ins: &InstanceHandle, arguments: &Vec<String>) { 
-    let tc = TermControl::new(0);
-    
-    utils::test_root(ins.vars());
+fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<String>) {  
+    crate::utils::test_root(ins.vars());
  
-    match Command::new(BWRAP_EXECUTABLE)
-    .arg("--tmpfs").arg("/tmp")
-    .arg("--bind").arg(ins.vars().root()).arg("/")
-    .arg("--ro-bind").arg("/usr/lib/libfakeroot").arg("/usr/lib/libfakeroot/")
-    .arg("--ro-bind").arg("/usr/bin/fakeroot").arg("/usr/bin/fakeroot")
-    .arg("--ro-bind").arg("/usr/bin/fakechroot").arg("/usr/bin/fakechroot")
-    .arg("--ro-bind").arg("/usr/bin/faked").arg("/usr/bin/faked")
-    .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
-    .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime")
-    .arg("--bind").arg(&ins.vars().pacman_sync).arg("/var/lib/pacman/sync")
-    .arg("--bind").arg(&ins.vars().pacman_gnupg).arg("/etc/pacman.d/gnupg")
-    .arg("--bind").arg(&ins.vars().pacman_cache).arg("/var/cache/pacman/pkg")
-    .arg("--bind").arg(ins.vars().home()).arg(ins.vars().home_mount())  
-    .arg("--dev").arg("/dev")
-    .arg("--proc").arg("/proc")
-    .arg("--unshare-all").arg("--share-net")
-    .arg("--clearenv")
-    .arg("--hostname").arg("FakeChroot")
-    .arg("--new-session")
-    .arg("--setenv").arg("TERM").arg("xterm")
-    .arg("--setenv").arg("PATH").arg("/usr/bin")
-    .arg("--setenv").arg("CWD").arg(ins.vars().home_mount())
-    .arg("--setenv").arg("HOME").arg(ins.vars().home_mount())
-    .arg("--setenv").arg("USER").arg(ins.vars().user())
-    .arg("--die-with-parent")
-    .arg("--unshare-user")
-    .arg("--disable-userns")
-    .arg("fakechroot")
-    .arg("fakeroot")
-    .args(arguments)
-    .spawn() {
-        Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), tc),
+    match utils::fakeroot_container(ins, arguments.iter().map(|a| a.as_str()).collect()) {
+        Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0)),
         Err(_) => print_error("Failed to initialise bwrap."), 
     }
 }

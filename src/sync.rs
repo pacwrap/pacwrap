@@ -64,6 +64,7 @@ pub fn execute() {
     let mut targets = args.targets().clone();
     let runtime = args.get_runtime().clone();
     let mut cache: InstanceCache = InstanceCache::new();
+    let mut aux_cache: InstanceCache = InstanceCache::new();
 
     if targets.len() > 0 {
         cache.populate_from(&targets, true);
@@ -97,10 +98,10 @@ pub fn execute() {
                 if no_deps || ! upgrade {
                     update.transact(inshandle);
                 } else {
-                    transaction::update(update, &cache); 
+                    transaction::update(update, &cache, &mut aux_cache); 
                 }
             } else {
-                transaction::update(update, &cache);
+                transaction::update(update, &cache, &mut aux_cache);
             }
         } else if ! refresh {
             invalid();

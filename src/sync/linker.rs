@@ -59,18 +59,6 @@ impl <'a>Linker<'a> {
         }
     }
 
-    pub fn start(&mut self, length: usize) {
-        self.progress.set_draw_target(ProgressDrawTarget::stdout());
-        self.progress.set_message("Synhcronizing containers..");
-        self.progress.set_position(0);
-        self.progress.set_length(usize_into_u64(length));
-    }
-
-    pub fn finish(&mut self) { 
-        self.progress.set_message("Synchronization complete."); 
-        self.progress.finish();
-    }
-
     fn build_pool(&mut self, workers: usize) -> ThreadPool {
         ThreadPoolBuilder::new()
                 .num_threads(workers)
@@ -190,7 +178,23 @@ impl <'a>Linker<'a> {
         pool.spawn(move ||{ 
             tx.send((dep, link_instance(ds, ds_res, root, map))).unwrap(); 
         })
-    }    
+    }
+
+    pub fn start(&mut self, length: usize) {
+        self.progress.set_draw_target(ProgressDrawTarget::stdout());
+        self.progress.set_message("Synhcronizing containers..");
+        self.progress.set_position(0);
+        self.progress.set_length(usize_into_u64(length));
+    }
+
+    pub fn set_cache(&mut self, inscache: &'a InstanceCache) {
+        self.cache = inscache;
+    }
+
+    pub fn finish(&mut self) { 
+        self.progress.set_message("Synchronization complete."); 
+        self.progress.finish();
+    }
 }
 
 fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: IndexMap<String,HardLinkDS>) -> HardLinkDS {

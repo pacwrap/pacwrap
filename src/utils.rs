@@ -1,3 +1,4 @@
+use std::io::Error;
 use std::path::Path;
 use std::process::{Child, exit};
 use std::env::var;
@@ -5,7 +6,6 @@ use std::os::unix::net::UnixStream;
 use std::fmt::Display;
 
 use console::style;
-use serde_json::Value;
 
 use crate::config::vars::InsVars;
 
@@ -42,27 +42,17 @@ pub fn check_socket(socket: &String) -> bool {
     match UnixStream::connect(&Path::new(socket)) { Ok(_) => true, Err(_) => false, }
 }
 
-pub fn job_i32(process: &mut Child) -> i32 {
-    match process.id().try_into() { Ok(i) => i, Err(_) => 0 }
-}
-
-pub fn derive_bwrap_child(value: &Value) -> i32 {
-    match serde_json::from_value(value.clone()) { Ok(u) => u, Err(_) => 0 }
-}
-
 pub fn print_help_msg(args: &str) {
     println!("pacwrap error: {} ", args);
     println!("Try 'pacwrap -h' for more information on valid operational parameters.");
     exit(1);
 }
 
-pub fn whitespace(total: usize, current: usize) -> String {
-    let difference = total-current;
-    let mut whitespace = String::new();
-    if difference > 0 {
-        for _ in 0..difference {
-            whitespace.push_str(" ");
-        } 
+pub fn handle_process(result: Result<Child, Error>) {
+    match result {
+        Ok(child) => wait_on_process(child),
+        Err(_) => print_error("Failed to spawn child process."),
     }
-    whitespace
 }
+
+fn wait_on_process(mut child: Child) { child.wait().ok(); }

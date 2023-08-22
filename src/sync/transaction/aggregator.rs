@@ -25,6 +25,7 @@ pub struct TransactionAggregator<'a> {
     preview: bool,
     no_confirm: bool,
     cache: &'a InstanceCache,
+    keyring: bool,
 }
 
 impl <'a>TransactionAggregator<'a> { 
@@ -40,6 +41,7 @@ impl <'a>TransactionAggregator<'a> {
             database_only: false,
             cache: icache,
             no_confirm: false,
+            keyring: false,
         }  
     }
 
@@ -101,7 +103,8 @@ impl <'a>TransactionAggregator<'a> {
     pub fn linker(&mut self) -> &mut Linker<'a> { &mut self.linker }
     pub fn updated(&self) -> &Vec<String> { &self.updated }
     pub fn skip_confirm(&self) -> bool { self.no_confirm } 
-    pub fn is_preview(&self) -> bool { self.preview }
+    pub fn is_preview(&self) -> bool { self.preview } 
+    pub fn is_keyring_synced(&self) -> bool { self.keyring }
     pub fn is_database_only(&self) -> bool { self.database_only }
     pub fn is_database_force(&self) -> bool { self.force_database } 
 
@@ -127,6 +130,10 @@ impl <'a>TransactionAggregator<'a> {
 
     pub fn queue(&mut self, ins: String, install: Vec<String>) {
         self.pkg_queue.insert(ins, install);
+    }
+
+    pub fn set_keyring_synced(&mut self) {
+        self.keyring = true;
     }
 
     pub fn set_updated(&mut self, updated: String) {

@@ -64,6 +64,18 @@ pub fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
     None
 }
 
+pub fn whitespace(total: usize, current: usize) -> String {
+    let difference = total-current;
+    let mut whitespace = String::new();
+    if difference > 0 {
+        for _ in 0..difference {
+            whitespace.push_str(" ");
+        } 
+    }
+
+    whitespace
+}
+
 pub fn usize_into_u64(u: usize) -> u64 {
     match u.try_into() { Ok(i) => i, Err(_) => { 0 }}
 }

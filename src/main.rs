@@ -1,7 +1,6 @@
-use std::{process::{Command, Child}, env, io::Error};
+use std::{process::Command, env};
 use utils::arguments::{self, Arguments};
-
-use crate::utils::print_error;
+use utils::handle_process;
 
 mod config;
 mod exec;
@@ -80,12 +79,3 @@ fn execute_pacwrap_bash(executable: &str) {
         .args(env::args().skip(1).collect::<Vec<_>>())
         .spawn());
 }
-
-fn handle_process(result: Result<Child, Error>) {
-    match result {
-        Ok(child) => wait_on_process(child),
-        Err(_) => print_error("Failed to spawn child process."),
-    }
-}
-
-fn wait_on_process(mut child: Child) { child.wait().ok(); }

@@ -4,8 +4,7 @@ use alpm::Progress;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use console::{Term, style};
 
-use crate::utils::whitespace;
-use super::utils::i32_into_u64;
+use super::utils::{whitespace, i32_into_u64};
 
 #[derive(Clone)]
 pub struct ProgressCallback {

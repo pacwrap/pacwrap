@@ -11,7 +11,8 @@ use crate::{sync::{
     progress_event::{self, ProgressCallback},
     utils::{get_local_package, format_unit}, 
     dl_event::{DownloadCallback, self}}, 
-    utils::print_error};
+    exec::utils::execute_in_container,
+    utils::print_error, config::InstanceType};
 use crate::utils::prompt::prompt;
 use crate::config::InstanceHandle;
 use super::{Transaction, 
@@ -33,6 +34,7 @@ impl Transaction for Commit {
 
     fn engage(&mut self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> TransactionState {
         let mut set_depends: Vec<String> = Vec::new();
+        let mut keyring = None;
         let instance = inshandle.vars().instance();
         let dbonly = match self.state {
             TransactionState::Commit(dbonly) => dbonly, _ => true
@@ -63,6 +65,16 @@ impl Transaction for Commit {
                 match handle.prepare_add() {
                     Ok(vec) => set_depends = vec,
                     Err(error) => return erroneous_state_transition(handle, error), 
+                }
+
+
+                if let InstanceType::BASE = inshandle.metadata().container_type() {
+                    if ! ag.is_keyring_synced() {
+                        keyring = handle.alpm()
+                            .trans_add()
+                            .iter()
+                            .find_map(|a| Some(a.name() == "archlinux-keyring"));
+                    }
                 }
             },
             TransactionType::Remove(depends, cascade) => {
@@ -97,9 +109,7 @@ impl Transaction for Commit {
                     return state_transition(&self.state, handle, ag);
                 }
             }
-        }
 
-        if ! dbonly || ag.is_database_only() || ag.is_database_force() {   
             handle.alpm().set_question_cb(QueryCallback, query_event::questioncb);
             handle.alpm().set_progress_cb(ProgressCallback::new(), progress_event::progress_event);
         }
@@ -114,8 +124,9 @@ impl Transaction for Commit {
             }
         }
 
-        if ! dbonly || ag.is_database_only() || ag.is_database_force() {  
-            println!(); //Required to fix spacing issue between summary and next, subsequent prompt.
+        if if let Some(bool) = keyring { bool } else { false } {
+            keyring_update(inshandle);
+            ag.set_keyring_synced();
         }
 
         ag.set_updated(instance.clone());
@@ -284,3 +295,7 @@ fn handle_erroneous_preparation<'a>(result: (PrepareResult<'a>, alpm::Error)) ->
     return result.1.to_string();
 }
 
+fn keyring_update(inshandle: &InstanceHandle) {
+    execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"));
+    execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"));
+}
