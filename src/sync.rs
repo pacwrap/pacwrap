@@ -8,7 +8,7 @@ use pacmanconf;
 use crate::constants::{self, LOCATION};
 use crate::sync::{
     dl_event::DownloadCallback,
-    linker::FilesystemStateSync,
+    filesystem::FilesystemStateSync,
     progress_event::ProgressCallback,
     transaction::TransactionType,
     transaction::TransactionAggregator};
@@ -30,7 +30,7 @@ lazy_static! {
 mod progress_event;
 mod dl_event;
 mod query_event;
-mod linker;
+mod filesystem;
 mod transaction;
 mod resolver;
 mod resolver_local;
@@ -251,7 +251,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
-                    if let Err(error) = linker::create_hard_link(src, dest) {
+                    if let Err(error) = filesystem::create_hard_link(src, dest) {
                         print_warning(error);
                     }
                 }

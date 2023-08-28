@@ -3,7 +3,7 @@ use std::process::exit;
 use std::rc::Rc;
 
 use crate::sync::{self,
-    linker::FilesystemStateSync};
+    filesystem::FilesystemStateSync};
 use crate::utils::print_warning;
 use crate::config::{InstanceHandle, 
     InstanceType::ROOT,
