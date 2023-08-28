@@ -23,7 +23,7 @@ pub mod cache;
 pub mod instance;
 
 pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {   
-    let mut f = match File::create(Path::new(ins.vars().config_path())) {
+    let mut f = match File::create(Path::new(ins.vars().config_path().as_ref())) {
         Ok(f) => f,
         Err(error) => Err(format!("{}", error))?
     };
@@ -37,7 +37,7 @@ pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {
 
 pub fn provide_some_handle(instance: &str) -> Option<InstanceHandle> {
     let vars = InsVars::new(instance); 
-    let path: &str = vars.config_path().as_str();
+    let path: &str = vars.config_path().as_ref();
         
     match File::open(path) {
         Ok(file) => {
@@ -52,7 +52,7 @@ pub fn provide_some_handle(instance: &str) -> Option<InstanceHandle> {
 
 pub fn provide_handle(instance: &str) -> InstanceHandle {
     let vars = InsVars::new(instance); 
-    let path: &str = vars.config_path().as_str();
+    let path: &str = vars.config_path().as_ref();
 
     match File::open(path) {
         Ok(file) => {

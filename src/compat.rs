@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use alpm::PackageReason;
 
 use crate::config::{self, InstanceType};
@@ -10,7 +12,7 @@ use crate::utils::env_var;
 
 fn save_bash_configuration(ins: &str) {
     let mut pkgs = Vec::new();
-    let deps: Vec<String> = env_var("PACWRAP_DEPS").split_whitespace().map(str::to_string).collect(); 
+    let deps: Vec<Rc<str>> = env_var("PACWRAP_DEPS").split_whitespace().map(|a| a.into()).collect(); 
     let ctype = InstanceType::new(env_var("PACWRAP_TYPE").as_str()); 
     let mut instance = match config::provide_some_handle(ins) {
         Some(handle) => handle,
@@ -50,7 +52,7 @@ fn save_bash_configuration(ins: &str) {
                 .contains(&p.name()
                     .into()))
         .collect::<Vec<_>>() {
-        pkgs.push(pkg.name().to_string());
+        pkgs.push(pkg.name().into());
     }
 
     alpm.release().unwrap();

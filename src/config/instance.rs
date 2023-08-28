@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use std::fmt::Display;
+use std::rc::Rc;
 use std::vec::Vec;
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +19,7 @@ pub struct Instance {
 }
 
 impl Instance { 
-    pub fn new(ctype: InstanceType, pkg: Vec<String>, deps: Vec<String>) -> Self {
+    pub fn new(ctype: InstanceType, pkg: Vec<Rc<str>>, deps: Vec<Rc<str>>) -> Self {
         Self {
             metadata: InstanceMetadata::new(ctype,pkg,deps),
             runtime: InstanceRuntime::new(), 
@@ -147,13 +148,13 @@ pub struct InstanceMetadata {
     #[serde(default)]  
     container_type: InstanceType, 
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    dependencies: Vec<String>,    
+    dependencies: Vec<Rc<str>>,    
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    explicit_packages: Vec<String>,
+    explicit_packages: Vec<Rc<str>>,
 }
 
 impl InstanceMetadata {
-    fn new(ctype: InstanceType, pkg: Vec<String>, deps: Vec<String>) -> Self {
+    fn new(ctype: InstanceType, pkg: Vec<Rc<str>>, deps: Vec<Rc<str>>) -> Self {
         Self {
             container_type: ctype,
             dependencies: deps,
@@ -161,12 +162,12 @@ impl InstanceMetadata {
         }
     }
 
-    pub fn set(&mut self, dep: Vec<String>, pkg: Vec<String>) {
+    pub fn set(&mut self, dep: Vec<Rc<str>>, pkg: Vec<Rc<str>>) {
           self.dependencies=dep;
           self.explicit_packages=pkg;
     }
 
     pub fn container_type(&self) -> &InstanceType { &self.container_type }
-    pub fn dependencies(&self) -> &Vec<String> { &self.dependencies }
-    pub fn explicit_packages(&self) -> &Vec<String> { &self.explicit_packages }
+    pub fn dependencies(&self) -> &Vec<Rc<str>> { &self.dependencies }
+    pub fn explicit_packages(&self) -> &Vec<Rc<str>> { &self.explicit_packages }
 }

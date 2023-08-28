@@ -30,21 +30,25 @@ fn unit_suffix<'a>(i: i8) -> &'a str {
     }
 }
 
+
 pub fn get_local_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
     if let Ok(pkg) = handle.localdb().pkg(pkg) {
         return Some(pkg);
     } else {
-        for pkgs in handle.localdb().pkgs() {
-            let is_present = pkgs.provides().iter().filter(|d| pkg == d.name()).collect::<Vec<_>>().len() > 0;
-            if is_present {
-                if let Ok(pkg) = handle.localdb().pkg(pkgs.name()) { 
-                    return Some(pkg);
-                }
-            }
-        }
+        handle.localdb()
+            .pkgs()
+            .iter()
+            .find_map(|f| {
+            if f.provides()
+                    .iter()
+                    .filter(|d| pkg == d.name())
+                    .collect::<Vec<_>>().len() > 0 {
+                Some(f)
+            } else {
+                None
+            }  
+        })
     }
-
-    None
 }
 
 pub fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
@@ -52,12 +56,24 @@ pub fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
         if let Ok(pkg) = sync.pkg(pkg) {
            return Some(pkg);
         } else {
-            for pkgs in sync.pkgs() { 
-                let is_present = pkgs.provides().iter().filter(|d| pkg == d.name()).collect::<Vec<_>>().len() > 0;
-                if is_present {
-                    return Some(pkgs);
-                }
+            let package = sync.pkgs()
+                .iter()
+                .find_map(|f| {
+                if f.provides()
+                        .iter()
+                        .filter(|d| pkg == d.name())
+                        .collect::<Vec<_>>().len() > 0 {
+                    Some(f)
+                } else {
+                    None
+                }  
+            });
+
+            if let None = package {
+                continue;
             }
+
+            return package
         }
     }
 

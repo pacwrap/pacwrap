@@ -8,7 +8,7 @@ use pacmanconf;
 use crate::constants::{self, LOCATION};
 use crate::sync::{
     dl_event::DownloadCallback,
-    linker::Linker,
+    linker::FilesystemStateSync,
     progress_event::ProgressCallback,
     transaction::TransactionType,
     transaction::TransactionAggregator};
@@ -73,9 +73,9 @@ pub fn execute() {
     }
  
     if refresh && y_count == 4 {      
-        let mut l: Linker = Linker::new(&cache); 
-        l.start(cache.registered().len());
-        l.link(&cache.registered(), 0);
+        let mut l: FilesystemStateSync = FilesystemStateSync::new(&cache); 
+        l.prepare(cache.registered().len());
+        l.engage(&cache.registered());
         l.finish();
     } else if search {
         print_help_msg("Functionality is currently unimplemented.");
@@ -162,15 +162,15 @@ pub fn query() {
         print_help_msg("Target not specified.");
     }
     
-    query_database(targets.get(0).unwrap(), explicit, quiet) 
+    query_database(targets.get(0).unwrap().as_ref(), explicit, quiet) 
 }
 
-fn query_database(instance: &String, explicit: bool, quiet: bool) {    
+fn query_database(instance: &str, explicit: bool, quiet: bool) {    
     let instance_vars = InsVars::new(instance);
 
     test_root(&instance_vars);
 
-    let root = instance_vars.root().as_str(); 
+    let root = instance_vars.root().as_ref(); 
     let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", instance_vars.root())).unwrap();
 
     for pkg in handle.localdb().pkgs() {
@@ -187,7 +187,7 @@ fn query_database(instance: &String, explicit: bool, quiet: bool) {
 }
 
 pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
-    let root = inshandle.vars().root().as_str();  
+    let root = inshandle.vars().root().as_ref();  
     test_root(&inshandle.vars());
     let mut handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
     handle.set_hookdirs(vec![format!("{}/etc/pacman.d/hooks/", root), format!("{}/usr/share/libalpm/hooks/", root)].iter()).unwrap();
@@ -200,7 +200,7 @@ pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm {
 }
 
 fn instantiate_alpm_syncdb(inshandle: &InstanceHandle) -> Alpm { 
-    let root = inshandle.vars().root().as_str();  
+    let root = inshandle.vars().root().as_ref();  
     test_root(&inshandle.vars()); 
     let mut handle = Alpm::new2(root, &format!("{}/pacman/", LOCATION.get_data())).unwrap();
     handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();

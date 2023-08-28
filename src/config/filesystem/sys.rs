@@ -23,7 +23,7 @@ impl Filesystem for SYSFS {
         Ok(())
     }
     
-    fn register(&self, args: &mut  ExecutionArgs, _vars: &InsVars) { 
+    fn register(&self, args: &mut  ExecutionArgs, _: &InsVars) { 
         for dir in self.path.iter() { 
             args.robind(format!("/sys/{}", dir), format!("/sys/{}", dir));
         }

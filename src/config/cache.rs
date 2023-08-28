@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs::read_dir;
+use std::rc::Rc;
 
 use crate::constants::LOCATION;
 use crate::config::{self, InstanceHandle};
@@ -8,11 +9,11 @@ use super::instance::InstanceType;
 
 
 pub struct InstanceCache {
-    instances: HashMap<String,InstanceHandle>,
-    registered: Vec<String>,
-    containers_base: Vec<String>,
-    containers_dep: Vec<String>,
-    containers_root: Vec<String>
+    instances: HashMap<Rc<str>,InstanceHandle>,
+    registered: Vec<Rc<str>>,
+    containers_base: Vec<Rc<str>>,
+    containers_dep: Vec<Rc<str>>,
+    containers_root: Vec<Rc<str>>
 }
 
 impl InstanceCache {
@@ -26,7 +27,7 @@ impl InstanceCache {
         }
     }
 
-    pub fn populate_from(&mut self, containers: &Vec<String>, recursion: bool) {
+    pub fn populate_from(&mut self, containers: &Vec<Rc<str>>, recursion: bool) {
         for name in containers {
             if self.map(&name) {      
                 self.registered.push(name.clone());
@@ -47,10 +48,10 @@ impl InstanceCache {
         if let Ok(dir) = read_dir(format!("{}/root", LOCATION.get_data())) {
             for f in dir {
                 if let Ok(file) = f {
-                    let name: String = file.file_name()
+                    let name: Rc<str> = file.file_name()
                         .to_str()
                         .unwrap()
-                        .to_string();
+                        .into();
 
                     if self.map(&name) {      
                         self.registered.push(name);
@@ -60,7 +61,7 @@ impl InstanceCache {
         }
     }
 
-    fn map(&mut self, ins: &String) -> bool {
+    fn map(&mut self, ins: &Rc<str>) -> bool {
         let mut register = true;
         if let None = self.instances.get(ins) {
             let config = config::provide_handle(ins);
@@ -77,9 +78,9 @@ impl InstanceCache {
         return register;
     }
 
-    pub fn registered(&self) -> &Vec<String> { &self.registered }
-    pub fn containers_base(&self) -> &Vec<String> { &self.containers_base }
-    pub fn containers_dep(&self) -> &Vec<String> { &self.containers_dep }
-    pub fn containers_root(&self) -> &Vec<String> { &self.containers_root }
-    pub fn instances(&self) -> &HashMap<String,InstanceHandle> { &self.instances }
+    pub fn registered(&self) -> &Vec<Rc<str>> { &self.registered }
+    pub fn containers_base(&self) -> &Vec<Rc<str>> { &self.containers_base }
+    pub fn containers_dep(&self) -> &Vec<Rc<str>> { &self.containers_dep }
+    pub fn containers_root(&self) -> &Vec<Rc<str>> { &self.containers_root }
+    pub fn instances(&self) -> &HashMap<Rc<str>,InstanceHandle> { &self.instances }
 }

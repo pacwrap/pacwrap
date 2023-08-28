@@ -1,5 +1,6 @@
 use std::env;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::utils;
 
@@ -7,10 +8,10 @@ use super::print_help_msg;
 
 pub struct Arguments<'a> {
     prefix: String,
-    runtime: Vec<String>,
-    targets: Vec<String>,
-    prefixes: HashMap<String, i8>,
-    amalgamation: HashMap<String, i8>,
+    runtime: Vec<Rc<str>>,
+    targets: Vec<Rc<str>>,
+    prefixes: HashMap<Rc<str>, i8>,
+    amalgamation: HashMap<Rc<str>, i8>,
     bool_map: HashMap<i8, &'a mut bool>,
     count_map: HashMap<i8, &'a mut i32>,
     count: HashMap<i8, i32>,
@@ -38,6 +39,7 @@ impl<'a> Arguments<'a> {
         let mut target = false;
 
         for string in env::args().skip(1) {
+            let string: Rc<str> = string.into();
             if target {
                 self.targets.push(string);
                 target = false;
@@ -108,7 +110,7 @@ impl<'a> Arguments<'a> {
 
     pub fn ignore(mut self, switch: &str) -> Self {
         self.prefixes.insert(switch.into(), self.index);
-        self.amalgamation.insert(switch.split_at(1).1.to_string(), self.index);
+        self.amalgamation.insert(switch.split_at(1).1.into(), self.index);
         self.index+=1; 
         self
     }
@@ -124,7 +126,7 @@ impl<'a> Arguments<'a> {
         self.bool_map.insert(self.index, conditional);
         self.prefixes.insert(switch.into(), self.index);
         self.prefixes.insert(big_switch.into(), self.index); 
-        self.amalgamation.insert(switch.split_at(1).1.to_string(), self.index);
+        self.amalgamation.insert(switch.split_at(1).1.into(), self.index);
         self.index+=1;
         self
     }
@@ -136,8 +138,8 @@ impl<'a> Arguments<'a> {
         self
     }
 
-    pub fn targets(&self) -> &Vec<String> { &self.targets }
-    pub fn get_runtime(&self) -> &Vec<String> { &self.runtime }
+    pub fn targets(&self) -> &Vec<Rc<str>> { &self.targets }
+    pub fn get_runtime(&self) -> &Vec<Rc<str>> { &self.runtime }
     pub fn get_prefix(&self) -> &String { &self.prefix }
 }
 

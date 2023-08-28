@@ -2,6 +2,8 @@ use std::fs::{self, File};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
+use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::mpsc::{Sender, self, Receiver};
 
 use rayon::prelude::*;
@@ -11,19 +13,24 @@ use indicatif::{ProgressBar, ProgressStyle, ProgressDrawTarget};
 use serde::{Serialize, Deserialize};
 use walkdir::WalkDir;
 use std::collections::HashMap;
-use console::Term;
+use console::{Term, style};
 
 use crate::config::{InstanceHandle, InstanceCache};
 use crate::constants::LOCATION;
 use crate::utils::{print_warning, print_error};
 use super::utils::usize_into_u64;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct HardLinkDS {
-    files: IndexMap<String, (String,bool,bool)>
+#[derive(Debug)]
+enum Error {
+    ThreadPoolUninitialised
 }
 
-impl HardLinkDS {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct FilesystemState {
+    files: IndexMap<Arc<str>, (Arc<str>, bool, bool)>
+}
+
+impl FilesystemState {
     fn new() -> Self {
         Self {
             files: IndexMap::new()
@@ -31,15 +38,16 @@ impl HardLinkDS {
     }
 }
 
-pub struct Linker<'a> {
-    hlds: HashMap<String, HardLinkDS>, 
-    hlds_res: HashMap<String, HardLinkDS>,
-    linked: Vec<String>,
+pub struct FilesystemStateSync<'a> {
+    state_map: HashMap<Arc<str>, FilesystemState>, 
+    state_map_prev: HashMap<Arc<str>, FilesystemState>,
+    linked: Vec<Rc<str>>,
     progress: ProgressBar,
     cache: &'a InstanceCache,
+    pool: Option<ThreadPool>
 }
 
-impl <'a>Linker<'a> {
+impl <'a>FilesystemStateSync<'a> {
     pub fn new(inscache: &'a InstanceCache) -> Self {
         let size = Term::size(&Term::stdout());
         let width = (size.1 / 2).to_string();
@@ -51,45 +59,25 @@ impl <'a>Linker<'a> {
         pr.set_draw_target(ProgressDrawTarget::hidden());
 
         Self {
+            pool: None,
             progress: pr,
-            hlds: HashMap::new(),
-            hlds_res: HashMap::new(),
+            state_map: HashMap::new(),
+            state_map_prev: HashMap::new(),
             linked: Vec::new(),
             cache: inscache,
         }
     }
 
-    fn build_pool(&mut self, workers: usize) -> ThreadPool {
-        ThreadPoolBuilder::new()
-                .num_threads(workers)
-                .thread_name(|f| { format!("PW-LINKER-{}", f) })
-                .build()
-                .unwrap()
-    }
-
-    fn load_hlds(&mut self, instance: &String) -> Option<HardLinkDS> {
-        let path_string = format!("{}/hlds/{}.dat", LOCATION.get_data(), instance);
-        let file = match File::open(path_string) { 
-            Ok(file) => file, Err(_) => return Some(HardLinkDS::new())
-        };
-
-        match ciborium::from_reader(file) {
-            Ok(st) => self.hlds_res.insert(instance.clone(), st),
-            Err(err) => { print_error(format!("load_hlds: {:?}", err)); Some(HardLinkDS::new())  }
-        }
-    }
-
-    pub fn link(&mut self, containers: &Vec<String>, workers: usize) {
-        let pool = self.build_pool(workers);
-        let (tx, rx) = self.linker(containers, &pool, mpsc::channel());
+    pub fn engage(&mut self, containers: &Vec<Rc<str>>) {
+        let (tx, rx) = self.link(containers, mpsc::channel()); 
         
-        drop(tx);
+        drop(tx); 
         
-        while let Ok(()) = rx.recv() {} 
+        while let Ok(()) = rx.recv() {}    
     }
   
-    fn linker(&mut self, containers: &Vec<String>, pool: &ThreadPool, mut write_chan: (Sender<()>, Receiver<()>)) -> (Sender<()>, Receiver<()>) { 
-        let (tx, rx): (Sender<(String, HardLinkDS)>, Receiver<(String, HardLinkDS)>) = mpsc::channel();
+    fn link(&mut self, containers: &Vec<Rc<str>>, mut write_chan: (Sender<()>, Receiver<()>)) -> (Sender<()>, Receiver<()>) { 
+        let (tx, rx): (Sender<(Arc<str>, FilesystemState)>, Receiver<(Arc<str>, FilesystemState)>) = mpsc::channel();
 
         for ins in containers.iter() { 
             if self.linked.contains(ins) {
@@ -104,40 +92,57 @@ impl <'a>Linker<'a> {
                 }
             };
           
-            write_chan = self.linker(inshandle.metadata().dependencies(), pool, write_chan);
-            self.link_instance(pool, inshandle, tx.clone());
+            write_chan = self.link(inshandle.metadata().dependencies(), write_chan);
+            self.link_instance(inshandle, tx.clone());
             self.linked.push(ins.clone());
         }
 
         drop(tx);
-        self.wait(pool, rx, &write_chan);
+        self.wait(rx, &write_chan);
         write_chan
     }
 
-    fn wait(&mut self, pool: &ThreadPool, rx: Receiver<(String, HardLinkDS)>, write_chan: &(Sender<()>, Receiver<()>)) {
+    fn wait(&mut self, rx: Receiver<(Arc<str>, FilesystemState)>, write_chan: &(Sender<()>, Receiver<()>)) {
         while let Ok(recv) = rx.recv() {
-            if let None = self.hlds.get(&recv.0) {
+
+            if let None = self.state_map.get(&recv.0) {
                 if recv.1.files.len() == 0 {
                     continue
                 }
 
-                self.hlds.insert(recv.0.clone(), recv.1.clone());
-                self.write_cache(pool, write_chan.0.clone(), recv.1, recv.0.clone());
+                self.state_map.insert(recv.0.clone(), recv.1.clone());
+                self.write(write_chan.0.clone(), recv.1, recv.0.clone());
             }
-            self.progress.set_message(recv.0);
+
+            self.progress.set_message(recv.0.to_string());
             self.progress.inc(1);
         } 
     }
 
-    fn write_cache(&mut self, pool: &ThreadPool, tx: Sender<()>, ds: HardLinkDS, dep: String) {
+    fn load(&mut self, instance: &Arc<str>) -> Option<FilesystemState> {
+        let path_string = format!("{}/hlds/{}.dat", LOCATION.get_data(), instance);
+        let file = match File::open(path_string) { 
+            Ok(file) => file, Err(_) => return Some(FilesystemState::new())
+        };
+
+        match ciborium::from_reader(file) {
+            Ok(st) => self.state_map_prev.insert(instance.clone(), st),
+            Err(err) => { 
+                print_error(format!("Loading filesystem state data from {}: {:?}", instance, err)); 
+                Some(FilesystemState::new())  
+            }
+        }
+    }
+
+    fn write(&mut self, tx: Sender<()>, ds: FilesystemState, dep: Arc<str>) {
         let output = File::create(format!("{}/hlds/{}.dat", LOCATION.get_data(), &dep)).unwrap();
-        pool.spawn(move ||{ 
+        self.pool().unwrap().spawn(move ||{ 
             ciborium::into_writer(&ds, output).unwrap();
             drop(tx);
         });
-    }
-   
-    fn link_instance(&mut self, pool: &ThreadPool, inshandle: &InstanceHandle, tx: Sender<(String, HardLinkDS)>) {
+    } 
+
+    fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<(Arc<str>, FilesystemState)>) {
         let deps = inshandle.metadata().dependencies();
         let dep_depth = deps.len();
    
@@ -145,42 +150,67 @@ impl <'a>Linker<'a> {
             return;
         }
         
-        let mut map = IndexMap::new();
+        let mut map = Vec::new();
         let dephandle = self.cache.instances().get(&deps[dep_depth-1]).unwrap();
-        let dep = dephandle.vars().instance().clone();  
-   
-        for dep in deps {
-            let dephandle = self.cache.instances().get(dep).unwrap();
-            let ds = match self.hlds.get(dep) { 
-                Some(ds) => ds.clone(),
-                None => HardLinkDS::new()
-            };
-            map.insert(dephandle.vars().root().clone(), ds);
-        }
-
-
+        let dep = Arc::from(dephandle.vars().instance().as_ref()); 
         let root = inshandle.vars().root().clone();
-        let ds_res = match self.hlds_res.get(&dep) { 
+        let ds_res = match self.state_map_prev.get(&dep) { 
             Some(ds) => ds.clone(),
-            None => { 
-                if let Some(new) = self.load_hlds(&dep) {
-                     new
-                } else {
-                     self.hlds_res.get(&dep).unwrap().clone()
-                }
+            None => match self.load(&dep) {
+                Some(new) => new,
+                None => self.state_map_prev.get(&dep).unwrap().clone()
             }
         }; 
-        let ds = match self.hlds.get(&dep) { 
+        let ds = match self.state_map.get(&dep) { 
             Some(ds) => ds.clone(),
-            None => HardLinkDS::new()
+            None => FilesystemState::new()
         }; 
 
-        pool.spawn(move ||{ 
-            tx.send((dep, link_instance(ds, ds_res, root, map))).unwrap(); 
+        for dep in deps {
+            let dephandle = self.cache.instances().get(dep).unwrap();
+            let ds = match self.state_map.get(&Arc::from(dep.as_ref())) { 
+                Some(ds) => ds.clone(),
+                None => FilesystemState::new()
+            };
+            map.push((dephandle.vars().root().clone(), ds));
+        }
+
+        self.pool().unwrap().spawn(move ||{
+            let state = filesystem_state(ds, map);
+
+            link_filesystem(&state, &root);
+            delete_files(&state, &ds_res, &root);
+            delete_directories(&state, &ds_res, &root);
+            tx.send((dep, state)).unwrap(); 
         })
     }
 
-    pub fn start(&mut self, length: usize) {
+    fn pool(&self) -> Result<&ThreadPool, Error> {
+        match self.pool.as_ref() {
+          Some(pool) =>  Ok(pool),
+          None => Err(Error::ThreadPoolUninitialised)
+        }
+    }
+
+    pub fn prepare_single(&mut self) {
+        println!("{} {}",style("->").bold().cyan(), style(format!("Synchronizing container filesystem...")));     
+
+        if let None = self.pool {
+            self.pool = Some(ThreadPoolBuilder::new()
+                .thread_name(|f| { format!("PW-LINKER-{}", f) })
+                .num_threads(2)
+                .build()
+                .unwrap());  
+        }
+    }
+
+    pub fn prepare(&mut self, length: usize) {
+        println!("{} {} ",style("::").bold().green(), style("Synchronizing container filesystems...").bold());  
+
+        self.pool = Some(ThreadPoolBuilder::new()
+            .thread_name(|f| { format!("PW-LINKER-{}", f) })
+            .build()
+            .unwrap());
         self.progress.set_draw_target(ProgressDrawTarget::stdout());
         self.progress.set_message("Synhcronizing containers..");
         self.progress.set_position(0);
@@ -191,42 +221,70 @@ impl <'a>Linker<'a> {
         self.cache = inscache;
     }
 
-    pub fn finish(&mut self) { 
+    pub fn finish(&mut self) {
         self.progress.set_message("Synchronization complete."); 
         self.progress.finish();
+        self.pool = None;
+    }
+
+    pub fn release(self) -> Option<FilesystemStateSync<'a>> {
+        drop(self);
+        None
     }
 }
 
-fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: IndexMap<String,HardLinkDS>) -> HardLinkDS {
-    if ds.files.len() == 0 {
-        for hpds in map {
-            if hpds.1.files.len() == 0 {
-                let entries = WalkDir::new(format!("{}/usr", hpds.0))
+fn filesystem_state(mut state: FilesystemState, map: Vec<(Arc<str>,FilesystemState)>) -> FilesystemState {
+    if state.files.len() == 0 {
+        for ins_state in map {
+            if ins_state.1.files.len() == 0 {
+                let entries = WalkDir::new(format!("{}/usr", ins_state.0))
                     .into_iter()
                     .filter_map(|e| e.ok());
 
                 for entry in entries { 
-                    let src = entry.path().to_str().unwrap().to_string();
-                    let src_tr = src.split_at(hpds.0.len()).1.to_string();
+                    let src: Arc<str> = entry.path().to_str().unwrap().into();
+                    let src_tr: Arc<str> = src.split_at(ins_state.0.len()).1.into();
                     
-                    if let Some(_) = ds.files.get(&src_tr) {
+                    if let Some(_) = state.files.get(&src_tr) {
                         continue
                     }
 
                     let metadata = entry.metadata().unwrap(); 
                     
-                    ds.files.insert(src_tr, (src,metadata.is_dir(),metadata.is_symlink()));
+                    state.files.insert(src_tr, (src,metadata.is_dir(),metadata.is_symlink()));
                 }
              } else {
-                ds.files.extend(hpds.1.files);
+                state.files.extend(ins_state.1.files);
              }
         }
     }
 
-    ds_res.files.par_iter().for_each(|file| { 
-        if let None = ds.files.get(file.0) {  
-            let dest = format!("{}{}", root, file.0);
-            let path = Path::new(&dest); 
+    state
+}
+
+fn link_filesystem(state: &FilesystemState, root: &str) {
+    state.files.par_iter().for_each(|file| {
+        if file.1.2 {
+            if let Err(error) = create_soft_link(&file.1.0, &format!("{}{}", root, file.0)) {
+                print_warning(error);
+            } 
+        } else if ! file.1.1 {
+            if let Err(error) = create_hard_link(&file.1.0, &format!("{}{}", root, file.0)) {
+                print_warning(error);
+            }
+        }
+    });
+}
+ 
+fn delete_files(state: &FilesystemState, state_res: &FilesystemState, root: &str) { 
+    let (tx, rx) = mpsc::sync_channel(0);
+    let tx_clone: mpsc::SyncSender<()> = tx.clone();
+
+    state_res.files.par_iter().for_each(|file| { 
+        if let None = state.files.get(file.0) {  
+            let _ = tx_clone; 
+            let dest: &str = &format!("{}{}", root, file.0);
+            let path = Path::new(dest); 
 
             if ! path.exists() {
                 if file.1.2 {
@@ -239,11 +297,7 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
                 if let Err(error) = remove_soft_link(path) {
                     print_warning(error);
                 } 
-            } else if file.1.1 { 
-                if let Err(error) = remove_directory(path) {
-                    print_warning(error);
-                }
-            } else {
+            } else if ! file.1.1 {
                 if let Err(error) = remove_file(path) {
                     print_warning(error);
                 }
@@ -251,19 +305,23 @@ fn link_instance(mut ds: HardLinkDS, ds_res: HardLinkDS, root: String, map: Inde
         }
     });
 
-    ds.files.par_iter().for_each(|file| {
-        if file.1.2 {
-            if let Err(error) = create_soft_link(&file.1.0, &format!("{}{}", root, file.0)) {
-                print_warning(error);
-            } 
-        } else if ! file.1.1 {
-            if let Err(error) = create_hard_link(&file.1.0, &format!("{}{}", root, file.0)) {
-                print_warning(error);
-            } 
+    drop(tx);
+    rx.try_iter();
+}
+
+fn delete_directories(state: &FilesystemState, state_res: &FilesystemState, root: &str) { 
+    state_res.files.par_iter().for_each(move |file| { 
+        if let None = state.files.get(file.0) {  
+           let dest: &str = &format!("{}{}", root, file.0);
+            let path = Path::new(dest); 
+
+            if path.exists() && file.1.1 { 
+                if let Err(error) = remove_directory(path) {
+                    print_warning(error);
+                }
+            }
         }
     });
-    
-    ds
 }
 
 fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {   
@@ -374,7 +432,7 @@ fn soft_link<'a>(src_path: &'a Path, dest_path: &'a Path) -> Result<(),String> {
 }
 
 fn create_directory(path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::create_dir_all(path) {
+    if let Err(err) = fs::create_dir(path) {
         Err(format!("Failed to create directory tree '{}': {}", path.to_str().unwrap(), err.kind()))?
     }
 
@@ -390,7 +448,7 @@ fn remove_directory(path: &Path) -> Result<(), String> {
 } 
 
 fn remove_file(path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::remove_file(path) {
+    if let Err(err) = fs::remove_file(path) { 
         Err(format!("Failed to remove file '{}': {}", path.to_str().unwrap(), err.kind()))?
     }
 
@@ -399,7 +457,7 @@ fn remove_file(path: &Path) -> Result<(), String> {
 
 fn remove_soft_link(path: &Path) -> Result<(),String> {
     if let Ok(_) = fs::read_link(path) {
-        if let Err(err) = fs::remove_file(path) {        
+        if let Err(err) = fs::remove_file(path) {         
             Err(format!("Failed to delete symlink '{}': {}", path.to_str().unwrap(), err.kind()))?
         } 
     }

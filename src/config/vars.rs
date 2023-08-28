@@ -1,51 +1,53 @@
 use std::env::var;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::constants::{LOCATION, HOME, USER};
 use crate::config::instance::InstanceRuntime;
 
 #[derive(Clone)]
 pub struct InsVars {
-    home: String,
-    root: String,
-    user: String,
-    config: String,
-    instance: String,
-    home_mount: String,
-    pub pacman_sync: String,
-    pub pacman_cache: String,
-    pub pacman_gnupg: String,
-    pub pacman_mirrorlist: String, 
-    sync: String,
-    syncdb: String 
+    home: Rc<str>,
+    root: Arc<str>,
+    user: Rc<str>,
+    config: Rc<str>,
+    instance: Rc<str>,
+    home_mount: Rc<str>,
+    pub pacman_sync: Rc<str>,
+    pub pacman_cache: Rc<str>,
+    pub pacman_gnupg: Rc<str>,
+    pub pacman_mirrorlist: Rc<str>, 
+    sync: Rc<str>,
+    syncdb: Rc<str> 
 }
 
 impl InsVars {
-    pub fn new(_i: impl Into<String>) -> Self {
+    pub fn new(_i: impl Into<Rc<str>>) -> Self {
         let ins = _i.into();
 
         let mut vars = Self {
-            home: format!("{}/home/{}", LOCATION.get_data(), ins),
-            root: format!("{}/root/{}", LOCATION.get_data(), ins),
-            pacman_gnupg: format!("{}/pacman/gnupg", LOCATION.get_data()),
-            pacman_sync: format!("{}/pacman/sync", LOCATION.get_data()),
-            pacman_cache: format!("{}/pkg", LOCATION.get_cache()),
-            pacman_mirrorlist: format!("{}/pacman.d/mirrorlist", LOCATION.get_config()),
-            sync: format!("{}/pacman/sync/pacman.{}.conf", LOCATION.get_config(), ins),
-            syncdb: format!("{}/pacman/syncdb/pacman.{}.conf", LOCATION.get_config(), ins), 
-            config: format!("{}/instance/{}.yml", LOCATION.get_config(), ins), 
-            home_mount: format!("/home/{}", &ins),   
+            home: format!("{}/home/{}", LOCATION.get_data(), ins).into(),
+            root: format!("{}/root/{}", LOCATION.get_data(), ins).into(),
+            pacman_gnupg: format!("{}/pacman/gnupg", LOCATION.get_data()).into(),
+            pacman_sync: format!("{}/pacman/sync", LOCATION.get_data()).into(),
+            pacman_cache: format!("{}/pkg", LOCATION.get_cache()).into(),
+            pacman_mirrorlist: format!("{}/pacman.d/mirrorlist", LOCATION.get_config()).into(),
+            sync: format!("{}/pacman/sync/pacman.{}.conf", LOCATION.get_config(), ins).into(),
+            syncdb: format!("{}/pacman/syncdb/pacman.{}.conf", LOCATION.get_config(), ins).into(), 
+            config: format!("{}/instance/{}.yml", LOCATION.get_config(), ins).into(), 
+            home_mount: format!("/home/{}", &ins).into(),   
             user: ins.clone(),
-            instance: ins
+            instance: ins.into(),
         };
 
         if let Ok(var) = var("PACWRAP_HOME") { 
-            vars.home=var; 
+            vars.home=var.into(); 
         }
 
         vars
     }
 
-    pub fn debug(&self, cfg: &InstanceRuntime, runtime: &Vec<String>) { 
+    pub fn debug(&self, cfg: &InstanceRuntime, runtime: &Vec<Rc<str>>) { 
         let mut args = String::new();
         for arg in runtime.iter() {
             args.push_str(format!("{} ", arg).as_str()); 
@@ -66,12 +68,12 @@ impl InsVars {
         println!("INSTANCE_SYNCDB: {}", self.syncdb);
     }
 
-    pub fn sync(&self) -> &String { &self.sync }
-    pub fn syncdb(&self) -> &String { &self.syncdb }
-    pub fn config_path(&self) -> &String { &self.config }
-    pub fn root(&self) -> &String { &self.root }
-    pub fn home(&self) -> &String { &self.home }
-    pub fn home_mount(&self) -> &String { &self.home_mount }
-    pub fn user(&self) -> &String { &self.user }
-    pub fn instance(&self) -> &String { &self.instance }
+    pub fn sync(&self) -> &Rc<str> { &self.sync }
+    pub fn syncdb(&self) -> &Rc<str> { &self.syncdb }
+    pub fn config_path(&self) -> &Rc<str> { &self.config }
+    pub fn root(&self) -> &Arc<str> { &self.root }
+    pub fn home(&self) -> &Rc<str> { &self.home }
+    pub fn home_mount(&self) -> &Rc<str> { &self.home_mount }
+    pub fn user(&self) -> &Rc<str> { &self.user }
+    pub fn instance(&self) -> &Rc<str> { &self.instance }
 }

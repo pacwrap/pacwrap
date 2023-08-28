@@ -3,48 +3,80 @@ use super::{Transaction,
     TransactionType, 
     TransactionState, 
     TransactionHandle, 
-    TransactionAggregator};
+    TransactionAggregator, 
+    SyncReqResult, TransactionMode, 
+    Error,
+    Result};
 
-pub struct Prepare;
+pub struct Prepare {
+    state: TransactionState,
+}
 
 impl Transaction for Prepare { 
-    fn new(_: TransactionState) -> Box<Self> {
-        Box::new(Self {})
+    fn new(new_state: TransactionState, _: &TransactionAggregator) -> Box<Self> {
+        Box::new(Self {
+            state: new_state,
+        })
     }
 
-    fn engage(&mut self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> TransactionState {
-        let deps = inshandle.metadata().dependencies();
-        let dep_depth = deps.len(); 
+    fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
+        match self.state {
+            TransactionState::Prepare => {
+                let deps = inshandle.metadata().dependencies();
        
-        if dep_depth > 0 {
-            for dep in deps.iter().rev() {
-                let dep_instance = ag.cache().instances().get(dep).unwrap();
-                let dep_alpm = sync::instantiate_alpm(dep_instance);
-                handle.enumerate_ignorelist(&dep_alpm);
-                dep_alpm.release().unwrap();
-            }
-        }
+                if deps.len() > 0 {
+                    for dep in deps.iter().rev() {
+                        let dep_instance = ag.cache().instances().get(dep).unwrap();
+                        let dep_alpm = sync::instantiate_alpm(dep_instance);
+                        handle.enumerate_ignorelist(&dep_alpm);
+                        dep_alpm.release().unwrap();
+                    }
+                }
 
-        if let TransactionType::Upgrade(upgrade) = ag.action() {
-            if ! upgrade && handle.queue.len() == 0 {
-                return TransactionState::Complete(Err(format!("Nothing to do.")));
-            }
-        } else {
-            if handle.queue.len() == 0 {
-                return TransactionState::Complete(Err(format!("Nothing to do.")));
-            }  
-        }
+                if let TransactionType::Upgrade(upgrade) = ag.action() {
+                    if ! upgrade && handle.queue.len() == 0 {
+                        Err(Error::NothingToDo)?
+                    }
+                } else {
+                    if handle.queue.len() == 0 {
+                        Err(Error::NothingToDo)?
+                    }  
+                }
 
-        if handle.queue.len() == 0 {
-            if let Err(_) = handle.out_of_date(false) { 
-               return TransactionState::UpToDate; 
-            }
-        }
+                if handle.queue.len() == 0 {
+                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Local) { 
+                        return Ok(TransactionState::UpToDate)
+                    }
+                }
 
-        if let TransactionType::Remove(_, _) = ag.action() {
-            TransactionState::Commit(ag.is_database_only())
-        } else {
-            TransactionState::PrepareForeign 
-        } 
+                if let TransactionType::Remove(_, _) = ag.action() {
+                    Ok(TransactionState::Stage)
+                } else if deps.len() == 0 {
+                    Ok(TransactionState::Stage)
+                } else {
+                    Ok(TransactionState::PrepareForeign)    
+                }
+            },
+            TransactionState::PrepareForeign => {
+                if ! ag.is_database_force() { 
+                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) { 
+                        if ag.updated()
+                            .iter()
+                            .filter(|a| inshandle.metadata()
+                                .dependencies()
+                                .contains(a))
+                                .collect::<Vec<_>>().len() > 0 {
+                                    return Ok(TransactionState::StageForeign)
+                            }
+
+                            return Ok(TransactionState::Stage)
+                        }
+                    }
+
+                ag.link_filesystem(inshandle);
+                Ok(TransactionState::StageForeign)
+            }
+            _ => unreachable!()
+        }
     }
 }

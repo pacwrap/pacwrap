@@ -24,7 +24,7 @@ impl <'a>LocalDependencyResolver<'a> {
             depth: 0,
             handle: alpm,
             recursive: recurse,
-            cascading: cascade
+            cascading: cascade,
         }
     }
 
@@ -44,27 +44,30 @@ impl <'a>LocalDependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(pkg) = get_local_package(&self.handle, pkg) {  
+            if let Some(pkg) = get_local_package(&self.handle, pkg) {   
                 if self.depth > 0 {
-                    let required = pkg.required_by();
-                    let mut skip = false;
-
-                    for req in required {  
-                        if self.resolved.contains(&req.as_str()) {
-                            continue;
+                    let req_by = pkg.required_by();
+                    let required = req_by.iter().collect::<Vec<&str>>();    
+               
+                    if required.iter().filter_map(|a| {
+                        if ! self.resolved.contains(&a) {
+                            Some(())
+                        } else {
+                            None
                         }
-
-                        skip = true;
-                        break;
-                    }
-
-                    if skip {
+                    }).collect::<Vec<_>>().len() > 0 {
                         continue;
                     }
                 }
 
-                let deps = pkg.depends().iter().map(|p| p.name()).collect::<Vec<&str>>();
-                let deps_opt = pkg.optdepends().iter().map(|p| p.name()).collect::<Vec<&str>>();
+                let deps = pkg.depends()
+                    .iter()
+                    .map(|p| p.name())
+                    .collect::<Vec<&str>>();
+                let deps_opt = pkg.optdepends()
+                    .iter()
+                    .map(|p| p.name())
+                    .collect::<Vec<&str>>();
 
                 for dep in deps { 
                     if let Some(dep) = get_local_package(&self.handle, dep) {  

@@ -11,7 +11,6 @@ pub struct ExecutionArgs {
 
 
 impl ExecutionArgs {
-
     pub fn new() -> Self {
         Self { bind: Vec::new(), dev: Vec::new(), envir: Vec::new(), dbus: Vec::new() }
     }
@@ -60,5 +59,4 @@ impl ExecutionArgs {
     pub fn dbus(&mut self, per: impl Into<String>, socket: impl Into<String>) {
         self.dbus.push(format!("--{}={}", per.into(), socket.into()));
     }
-
 }

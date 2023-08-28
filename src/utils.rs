@@ -17,7 +17,7 @@ pub mod arguments;
 pub mod prompt;
 
 pub fn test_root(instance: &InsVars) {
-    if ! Path::new(&instance.root()).exists() || ! Path::new(&instance.home()).exists() {  
+    if ! Path::new(instance.root().as_ref()).exists() || ! Path::new(&instance.home().as_ref()).exists() {  
         print_error(format!("Target container {}: not found.", instance.instance()));
         exit(2);
     }

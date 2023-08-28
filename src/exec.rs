@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::{thread, time::Duration};
 use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
@@ -66,7 +67,7 @@ pub fn execute() {
     } 
 }
 
-fn execute_container(ins: &InstanceHandle, arguments: Vec<String>, shell: bool, verbose: bool) {
+fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: bool, verbose: bool) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
@@ -110,7 +111,8 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<String>, shell: bool, 
         .arg("--unshare-all")
         .arg("--clearenv")
         .args(exec_args.get_env()).arg("--info-fd")
-        .arg(fd.to_string()).args(arguments)
+        .arg(fd.to_string())
+        .args(arguments.iter().map(|a| a.as_ref()).collect::<Vec<&str>>())
         .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
@@ -312,10 +314,10 @@ fn clean_up_socket() {
     }
 }
 
-fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<String>) {  
+fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>) {  
     crate::utils::test_root(ins.vars());
  
-    match utils::fakeroot_container(ins, arguments.iter().map(|a| a.as_str()).collect()) {
+    match utils::fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
         Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0)),
         Err(_) => print_error("Failed to initialise bwrap."), 
     }
