@@ -1,18 +1,8 @@
 use std::{process::{Child, Command}, io::Error};
 
-use serde_json::Value;
-
 use crate::{constants::BWRAP_EXECUTABLE, 
     config::InstanceHandle, 
     utils::handle_process};
-
-pub fn job_i32(process: &mut Child) -> i32 {
-    match process.id().try_into() { Ok(i) => i, Err(_) => 0 }
-}
-
-pub fn derive_bwrap_child(value: &Value) -> i32 {
-    match serde_json::from_value(value.clone()) { Ok(u) => u, Err(_) => 0 }
-}
 
 pub fn execute_in_container(ins: &InstanceHandle, arguments: Vec<&str>) {
     handle_process(fakeroot_container(ins, arguments))

@@ -27,6 +27,16 @@ mod stage;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub enum Error {
+    NothingToDo,
+    TargetUpstream(Rc<str>),
+    TargetNotInstalled(Rc<str>),
+    TargetNotAvailable(Rc<str>),
+    PreparationFailure(String),
+    TransactionFailure(String),
+    InitializationFailure(String),
+}
+
 pub enum TransactionState {
     Complete,
     Prepare,
@@ -38,30 +48,20 @@ pub enum TransactionState {
     CommitForeign,
 }
 
-pub enum Error {
-    NothingToDo,
-    TargetUpstream(Rc<str>),
-    TargetNotInstalled(Rc<str>),
-    TargetNotAvailable(Rc<str>),
-    PreparationFailure(String),
-    TransactionFailure(String),
-    InitializationFailure(String),
-}
-
 pub enum TransactionType {
     Upgrade(bool),
     Remove(bool, bool),
-}
-
-pub enum SyncReqResult {
-    Required,
-    NotRequired,
 }
 
 #[derive(Copy, Clone)]
 pub enum TransactionMode {
     Foreign,
     Local
+}
+
+pub enum SyncReqResult {
+    Required,
+    NotRequired,
 }
 
 pub trait Transaction {
@@ -299,10 +299,14 @@ impl TransactionHandle {
         Ok(())
     }
 
-    fn trans_ready(&self, trans_type: &TransactionType) -> bool {
-        match trans_type {
-            TransactionType::Upgrade(_) => self.alpm.trans_add().len() > 0,
-            TransactionType::Remove(_,_) => self.alpm.trans_remove().len() > 0
+    fn trans_ready(&self, trans_type: &TransactionType) -> Result<()> {
+        if match trans_type {
+            TransactionType::Upgrade(_) => self.alpm.trans_add().len(),
+            TransactionType::Remove(_,_) => self.alpm.trans_remove().len()
+        } > 0 {
+            Ok(())
+        } else {
+            Err(Error::NothingToDo)
         }
     }
 

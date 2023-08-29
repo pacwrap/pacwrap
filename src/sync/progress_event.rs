@@ -4,7 +4,7 @@ use alpm::Progress;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use console::{Term, style};
 
-use super::utils::{whitespace, i32_into_u64};
+use super::utils::whitespace;
 
 #[derive(Clone)]
 pub struct ProgressCallback {
@@ -34,7 +34,7 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
     let progress_ident: String = progress_ident(progress,pkgname);
     match this.prbar.get_mut(&progress_ident) {
         Some(pb) => {
-            pb.set_position(i32_into_u64(percent));
+            pb.set_position(percent as u64);
             if percent == 100 {
                 pb.finish();
             }
@@ -52,7 +52,7 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
             
             pb.set_style(this.style.clone());
             pb.set_message(format!("({}{}/{}) {}", whitespace, style(pos).bold().white(), style(total).bold().white(), progress_name)); 
-            pb.set_position(i32_into_u64(percent)); 
+            pb.set_position(percent as u64); 
 
             if percent == 100 {
                 pb.finish();

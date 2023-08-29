@@ -91,11 +91,3 @@ pub fn whitespace(total: usize, current: usize) -> String {
 
     whitespace
 }
-
-pub fn usize_into_u64(u: usize) -> u64 {
-    match u.try_into() { Ok(i) => i, Err(_) => { 0 }}
-}
-
-pub fn i32_into_u64(u: i32) -> u64 {
-    match u.try_into() { Ok(i) => i, Err(_) => { 0 }}
-}

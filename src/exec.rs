@@ -132,7 +132,7 @@ fn read_info_json(mut reader: PipeReader, writer: PipeWriter) -> Value {
 }
 
 
-fn signal_trap(pids: Vec<i32>, block: bool) {
+fn signal_trap(pids: Vec<u64>, block: bool) {
     let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
 
     thread::spawn(move || {
@@ -140,7 +140,7 @@ fn signal_trap(pids: Vec<i32>, block: bool) {
             if block { 
                 for pid in pids.iter() {
                     if Path::new(&format!("/proc/{}/", pid)).exists() { 
-                        kill(Pid::from_raw(*pid), Signal::SIGKILL).unwrap(); 
+                        kill(Pid::from_raw(*pid as i32), Signal::SIGKILL).unwrap(); 
                     }
                 }
             }
@@ -149,21 +149,20 @@ fn signal_trap(pids: Vec<i32>, block: bool) {
 }
 
 fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<Child>, tc: TermControl) {  
-    let bwrap_pid = utils::derive_bwrap_child(&value["child-pid"]);
-    let mut j: Vec<i32> = [bwrap_pid].to_vec();
+    let bwrap_pid = value["child-pid"].as_u64().unwrap_or_default();
+    let proc: &str = &format!("/proc/{}/", bwrap_pid);
+    let mut j: Vec<u64> = [bwrap_pid].to_vec();
     
     for job in jobs.iter_mut() { 
-        j.push(utils::job_i32(job)); 
+        j.push(job.id() as u64); 
     }
 
     signal_trap(j, block.clone()); 
 
     match process.wait() {
         Ok(status) => { 
-            if block {
-                let proc = format!("/proc/{}/", bwrap_pid);
-
-                while Path::new(&proc).exists() { 
+            if block {                
+                while Path::new(proc).exists() { 
                     thread::sleep(Duration::from_millis(250)); 
                 }
             }
@@ -172,7 +171,7 @@ fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<
                 job.kill().unwrap();
             } 
             
-            clean_up_socket();
+            clean_up_socket(&*DBUS_SOCKET);
             tc.reset_terminal().unwrap();
             process_exit(status);
         },
@@ -186,7 +185,10 @@ fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<
 fn process_exit(status: ExitStatus) {
     match status.code() {
         Some(o) => exit(o),
-        None => { eprint!("\nbwrap process {}\n", status); exit(2); }
+        None => { 
+            eprint!("\nbwrap process {}\n", status); 
+            exit(2); 
+        }
     }
 }
 
@@ -239,7 +241,7 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
         p.register(args);
     }
 
-    create_dbus_socket();
+    create_socket(&*DBUS_SOCKET);
 
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
     let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS");
@@ -278,12 +280,11 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
     }
 }
 
-fn check_socket(socket: &String, increment: &u8, child: &mut Child) -> bool {
+fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> bool {
     if increment == &200 { 
-        let _ = child.kill();
-
-        print_error("xdg-dbux-proxy socket timed out.");
-        clean_up_socket();
+        process_child.kill().ok();
+        print_error(format!("Socket '{}': timed out.", socket));
+        clean_up_socket(&*DBUS_SOCKET);
         exit(2); 
     }
 
@@ -291,26 +292,24 @@ fn check_socket(socket: &String, increment: &u8, child: &mut Child) -> bool {
     crate::utils::check_socket(socket)
 }
 
-fn create_dbus_socket() {
-    match File::create(&*DBUS_SOCKET) {
-        Ok(file) =>  {
-            drop(file);
-        },
-        Err(_) => {
-            print_error("Failed to create dbus socket.");
+fn create_socket(path: &str) {
+    match File::create(path) {
+        Ok(file) => drop(file),
+        Err(error) => {
+            print_error(format!("Failed to create socket '{}': {}", path, error));
             eprintln!("Ensure you have write permissions to /run/user/.");
             exit(2);
         }
     }
 }
 
-fn clean_up_socket() { 
-    if ! Path::new(&*DBUS_SOCKET).exists() {
+fn clean_up_socket(path: &str) { 
+    if ! Path::new(path).exists() {
        return;
     }
 
-    if let Err(_) = remove_file(&*DBUS_SOCKET) {
-        print_error(format!("Failed to remove FD."));
+    if let Err(error) = remove_file(path) {
+        print_error(format!("'Failed to remove socket '{}': {}", path, error));
     }
 }
 

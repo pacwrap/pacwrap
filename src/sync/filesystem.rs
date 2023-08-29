@@ -18,7 +18,6 @@ use console::{Term, style};
 use crate::config::{InstanceHandle, InstanceCache};
 use crate::constants::LOCATION;
 use crate::utils::{print_warning, print_error};
-use super::utils::usize_into_u64;
 
 #[derive(Debug)]
 enum Error {
@@ -214,7 +213,7 @@ impl <'a>FilesystemStateSync<'a> {
         self.progress.set_draw_target(ProgressDrawTarget::stdout());
         self.progress.set_message("Synhcronizing containers..");
         self.progress.set_position(0);
-        self.progress.set_length(usize_into_u64(length));
+        self.progress.set_length(length.try_into().unwrap_or(0));
     }
 
     pub fn set_cache(&mut self, inscache: &'a InstanceCache) {

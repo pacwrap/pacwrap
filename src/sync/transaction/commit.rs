@@ -39,11 +39,13 @@ impl Transaction for Commit {
 
     fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
+        let ready = handle.trans_ready(&ag.action());
 
-        if ! handle.trans_ready(&ag.action()) {
-            return match self.state { 
-                TransactionState::CommitForeign => state_transition(&self.state, handle),
-                _ => Err(Error::NothingToDo)
+        if let Err(_) = ready {
+            match self.state { 
+                TransactionState::CommitForeign => return state_transition(&self.state, handle),
+                TransactionState::Commit(_) => ready?,
+                _ => unreachable!()
             }
         } 
 
