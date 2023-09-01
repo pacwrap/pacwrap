@@ -9,7 +9,9 @@ use super::{Transaction,
     TransactionType, 
     TransactionState, 
     TransactionHandle, 
-    TransactionAggregator};
+    TransactionAggregator, 
+    TransactionFlags};
+
 
 pub struct Stage {
     state: TransactionState,
@@ -26,7 +28,7 @@ impl Transaction for Stage {
             modeset = TransactionMode::Local;
             flag = TransFlag::NO_DEP_VERSION;
                 
-            if ag.is_database_only() {
+            if ag.flags().contains(TransactionFlags::DATABASE_ONLY) {
                 flag = flag | TransFlag::DB_ONLY;
             }
         } else {
@@ -57,7 +59,7 @@ impl Transaction for Stage {
                     handle.alpm().sync_sysupgrade(false).unwrap();
                 }
 
-                let result = handle.prepare_add();
+                let result = handle.prepare_add(ag.flags());
 
                 if let Err(_) = result {
                     result?

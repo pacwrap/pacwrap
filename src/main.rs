@@ -8,6 +8,7 @@ mod constants;
 mod utils;
 mod compat;
 mod sync;
+mod log;
 
 fn main() {
     let mut sync = false;

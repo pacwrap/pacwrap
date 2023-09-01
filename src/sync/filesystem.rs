@@ -431,7 +431,7 @@ fn soft_link<'a>(src_path: &'a Path, dest_path: &'a Path) -> Result<(),String> {
 }
 
 fn create_directory(path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::create_dir(path) {
+    if let Err(err) = fs::create_dir_all(path) {
         Err(format!("Failed to create directory tree '{}': {}", path.to_str().unwrap(), err.kind()))?
     }
 

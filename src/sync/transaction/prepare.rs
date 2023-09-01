@@ -4,6 +4,7 @@ use super::{Transaction,
     TransactionState, 
     TransactionHandle, 
     TransactionAggregator, 
+    TransactionFlags,
     SyncReqResult, TransactionMode, 
     Error,
     Result};
@@ -58,7 +59,7 @@ impl Transaction for Prepare {
                 }
             },
             TransactionState::PrepareForeign => {
-                if ! ag.is_database_force() { 
+                if ! ag.flags().contains(TransactionFlags::FORCE_DATABASE) { 
                     if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) { 
                         if ag.updated()
                             .iter()
@@ -73,7 +74,7 @@ impl Transaction for Prepare {
                         }
                     }
 
-                ag.link_filesystem(inshandle);
+                ag.sync_filesystem(inshandle);
                 Ok(TransactionState::StageForeign)
             }
             _ => unreachable!()

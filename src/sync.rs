@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use pacmanconf;
 
 use crate::constants::{self, LOCATION};
+use crate::log::Logger;
 use crate::sync::{
     dl_event::DownloadCallback,
     filesystem::FilesystemStateSync,
@@ -85,7 +86,8 @@ pub fn execute() {
         }
 
         if upgrade || targets.len() > 0 {
-            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Upgrade(upgrade), &cache)
+            let mut logger = Logger::new("pacwrap-sync").init().unwrap();
+            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Upgrade(upgrade), &cache, &mut logger)
                 .preview(preview)
                 .force_database(force_database)
                 .database_only(y_count > 2 || dbonly)
@@ -136,7 +138,8 @@ pub fn remove() {
 
     let target = targets.remove(0);
     let inshandle = cache.instances().get(&target).unwrap();
-    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade), &cache)
+    let mut logger = Logger::new("pacwrap-sync").init().unwrap();
+    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade), &cache, &mut logger)
         .preview(preview)
         .database_only(db_only)
         .no_confirm(no_confirm);

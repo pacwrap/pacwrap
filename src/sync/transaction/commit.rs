@@ -18,6 +18,7 @@ use super::{Transaction,
     TransactionState, 
     TransactionHandle, 
     TransactionAggregator,
+    TransactionFlags,
     Result, Error};
 
 pub struct Commit {
@@ -40,6 +41,7 @@ impl Transaction for Commit {
     fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
         let ready = handle.trans_ready(&ag.action());
+        let state = self.state.as_str();
 
         if let Err(_) = ready {
             match self.state { 
@@ -53,16 +55,16 @@ impl Transaction for Commit {
             erroneous_preparation(error)?
         }
 
-        if ! handle.get_mode().bool() || ag.is_database_only() || ag.is_database_force() {
+        if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {// || ag.is_database_only() || ag.is_database_force() {
             summary(handle.alpm());
 
-            if ag.is_preview() {
+            if ag.flags().contains(TransactionFlags::PREVIEW) {
                 return state_transition(&self.state, handle); 
             } 
 
-            if ! ag.skip_confirm() {
+            if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
                 let action = ag.action().as_str();
-                let query = format!("Proceed with {}?", action);
+                let query = format!("Proceed with {action}?");
 
                 if let Err(_) = prompt("::", format!("{}", style(query).bold()), true) {
                     return state_transition(&self.state, handle);
@@ -83,6 +85,7 @@ impl Transaction for Commit {
 
         handle.mark_depends();
         ag.set_updated(instance.clone());
+        ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
         state_transition(&self.state, handle)
     }
 }

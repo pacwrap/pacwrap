@@ -1,5 +1,6 @@
 use std::env::var;
 use std::process::id;
+use std::sync::Arc;
 
 use lazy_static::lazy_static;
 use nix::unistd::geteuid;
@@ -18,7 +19,7 @@ lazy_static! {
    pub static ref USER: String = env_var("USER");
    pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}/", geteuid());
    pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", geteuid(), &id());
-
+   pub static ref LOGGER_LOCATION: Arc<str> = format!("{}/pacwrap.log", LOCATION.get_data()).into();
 }
 
 pub struct LocationVars {

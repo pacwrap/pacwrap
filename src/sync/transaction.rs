@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use bitflags::bitflags;
 use console::style;
 use alpm::{Alpm, PackageReason};
 
@@ -69,6 +70,16 @@ pub trait Transaction {
     fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState>;
 }
 
+bitflags! {
+    pub struct TransactionFlags: u8 {
+        const NONE = 0;
+        const PREVIEW = 0b0001;
+        const NO_CONFIRM =  0b0010;
+        const FORCE_DATABASE = 0b0100;
+        const DATABASE_ONLY = 0b1000;
+    }
+}
+
 pub struct TransactionHandle {
     ignore: Vec<Rc<str>>, 
     ignore_dep: Vec<Rc<str>>,
@@ -98,6 +109,14 @@ impl TransactionState {
             Self::Commit(_) => Commit::new(self, ag),
             Self::CommitForeign => Commit::new(self, ag),
             Self::Complete => unreachable!(),
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Commit(_) => "resident",
+            Self::CommitForeign => "foreign",
+            _ => ""
         }
     }
 }
@@ -142,9 +161,9 @@ impl Error {
             Self::TargetUpstream(pkg) => format!("Target package {}: Installed in upstream container.", style(pkg).bold()),
             Self::TargetNotInstalled(pkg) => format!("Target package {}: Not installed.", style(pkg).bold()),
             Self::TargetNotAvailable(pkg) => format!("Target package {}: Not available in remote repositories.", style(pkg).bold()),
-            Self::InitializationFailure(msg) => format!("Failure to initialize transaction: {}", msg),
-            Self::PreparationFailure(msg) => format!("Failure to prepare transaction: {}", msg),
-            Self::TransactionFailure(msg) => format!("Failure to commit transaction: {}", msg),
+            Self::InitializationFailure(msg) => format!("Failure to initialize transaction: {msg}"),
+            Self::PreparationFailure(msg) => format!("Failure to prepare transaction: {msg}"),
+            Self::TransactionFailure(msg) => format!("Failure to commit transaction: {msg}"),
             Self::NothingToDo => format!("Nothing to do."),
         });
     }
@@ -230,7 +249,7 @@ impl TransactionHandle {
         }    
     }
 
-    fn prepare_add(&mut self) -> Result<()> {
+    fn prepare_add(&mut self, flags: &TransactionFlags) -> Result<()> {
         let ignored = match self.mode { 
             TransactionMode::Foreign => &self.ignore_dep,
             TransactionMode::Local => &self.ignore,
@@ -242,7 +261,11 @@ impl TransactionHandle {
             }
 
             if ignored.contains(queue) && ! self.mode.bool() {
-                Err(Error::TargetUpstream(Rc::clone(queue)))? 
+                if flags.contains(TransactionFlags::FORCE_DATABASE) {
+                    continue;
+                }
+            
+                Err(Error::TargetUpstream(Rc::clone(queue)))?
             } 
         }        
 
@@ -344,7 +367,7 @@ pub fn update<'a>(mut update: TransactionAggregator<'a>, cache: &'a InstanceCach
         aux_cache.populate(); 
 
         if aux_cache.containers_root().len() > 0 {
-            let linker = update.linker().unwrap();
+            let linker = update.fs_sync().unwrap();
 
             linker.set_cache(aux_cache);
             linker.prepare(aux_cache.registered().len());
@@ -352,7 +375,7 @@ pub fn update<'a>(mut update: TransactionAggregator<'a>, cache: &'a InstanceCach
             linker.finish();
         }
         
-        update = update.linker_release(); 
+        update = update.fs_sync_release(); 
     }
 
     update.transaction(&cache.containers_root());

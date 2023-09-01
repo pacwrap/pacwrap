@@ -32,10 +32,10 @@ impl DownloadCallback {
         let files_str_len = files.to_string().len();
         let size = Term::size(&Term::stdout());
         let width = ((size.1 / 2) - 14).to_string();
-        let width_str = " {spinner:.green} {msg:<".to_owned()+width.as_str();
         let multiprogress = MultiProgress::new();
-        let pb_style_tmpl = "} {bytes:>11} {bytes_per_sec:>12} {elapsed_precise:>5} [{wide_bar}] {percent:<3}%";
-        let pb_style = ProgressStyle::with_template(&(width_str+pb_style_tmpl))
+        let pb_style_tmpl = " {spinner:.green} {msg:<".to_owned()+width.as_str() 
+        + "} {bytes:>11} {bytes_per_sec:>12} {elapsed_precise:>5} [{wide_bar}] {percent:<3}%";
+        let pb_style = ProgressStyle::with_template(&(pb_style_tmpl))
             .unwrap()
             .progress_chars("#-")
             .tick_strings(&[" ", "✓"]);

@@ -4,6 +4,7 @@ use alpm::PackageReason;
 
 use crate::config::{self, InstanceType};
 use crate::config::InstanceHandle;
+use crate::log::Logger;
 use crate::sync;
 use crate::utils::print_error;
 use crate::Arguments;
@@ -11,6 +12,7 @@ use crate::config::{Instance, InsVars};
 use crate::utils::env_var;
 
 fn save_bash_configuration(ins: &str) {
+    let mut logger = Logger::new("pacwrap-compat").init().unwrap();
     let mut pkgs = Vec::new();
     let deps: Vec<Rc<str>> = env_var("PACWRAP_DEPS").split_whitespace().map(|a| a.into()).collect(); 
     let ctype = InstanceType::new(env_var("PACWRAP_TYPE").as_str()); 
@@ -58,6 +60,7 @@ fn save_bash_configuration(ins: &str) {
     alpm.release().unwrap();
     instance.metadata_mut().set(deps, pkgs);
     config::save_handle(&instance).ok(); 
+    logger.log(format!("Configuration file written for {} by request of compatibility layer.", instance.vars().instance())).unwrap();
 }
 
 fn bash_configuration(instance: &str) {
@@ -83,11 +86,13 @@ fn bash_configuration(instance: &str) {
 pub fn compat() {
     let mut save = false;
     let mut bash = false;
+    let mut test = false;
 
     let args = Arguments::new()
         .prefix("-Axc")
         .switch("-s", "--save", &mut save)
         .switch("-l", "--link", &mut bash)
+        .switch("-t", "--test", &mut test) 
         .parse_arguments();
     let mut runtime = args.get_runtime().clone();
     args.require_target(1);
