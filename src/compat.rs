@@ -60,7 +60,7 @@ fn save_bash_configuration(ins: &str) {
     alpm.release().unwrap();
     instance.metadata_mut().set(deps, pkgs);
     config::save_handle(&instance).ok(); 
-    logger.log(format!("Configuration file written for {} by request of compatibility layer.", instance.vars().instance())).unwrap();
+    logger.log("configuration file written for {ins} via compatibility layer").unwrap();
 }
 
 fn bash_configuration(instance: &str) {

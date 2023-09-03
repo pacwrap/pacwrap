@@ -45,8 +45,8 @@ impl Transaction for Commit {
 
         if let Err(_) = ready {
             match self.state { 
-                TransactionState::CommitForeign => return state_transition(&self.state, handle),
                 TransactionState::Commit(_) => ready?,
+                TransactionState::CommitForeign => return state_transition(&self.state, handle),
                 _ => unreachable!()
             }
         } 
@@ -55,7 +55,7 @@ impl Transaction for Commit {
             erroneous_preparation(error)?
         }
 
-        if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {// || ag.is_database_only() || ag.is_database_force() {
+        if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
             summary(handle.alpm());
 
             if ag.flags().contains(TransactionFlags::PREVIEW) {

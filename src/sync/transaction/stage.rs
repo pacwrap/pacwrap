@@ -12,7 +12,6 @@ use super::{Transaction,
     TransactionAggregator, 
     TransactionFlags};
 
-
 pub struct Stage {
     state: TransactionState,
     mode: TransactionMode,
@@ -36,7 +35,6 @@ impl Transaction for Stage {
             flag = TransFlag::NO_DEP_VERSION | TransFlag::DB_ONLY;
         }
 
-
         Box::new(Self { 
             state: new,
             flags: flag,
@@ -59,21 +57,11 @@ impl Transaction for Stage {
                     handle.alpm().sync_sysupgrade(false).unwrap();
                 }
 
-                let result = handle.prepare_add(ag.flags());
-
-                if let Err(_) = result {
-                    result?
-                }
-
+                handle.prepare_add(ag.flags())?;
                 state_transition(&self.state, check_keyring(ag, handle, inshandle))
             },
-            TransactionType::Remove(depends, cascade) => {
-                let result = handle.prepare_removal(*depends, *cascade);
-
-                if let Err(_) = result {
-                    result?
-                }
-
+            TransactionType::Remove(depends, cascade, explicit) => {
+                handle.prepare_removal(*depends, *cascade, *explicit)?;
                 state_transition(&self.state, false)
             },
         }

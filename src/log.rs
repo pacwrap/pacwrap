@@ -6,7 +6,7 @@ use time::{OffsetDateTime,
     format_description::FormatItem,
     macros::format_description, UtcOffset};
 
-use crate::constants::LOGGER_LOCATION;
+use crate::constants::LOG_LOCATION;
 
 const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
 const UTC_OFFSET: &[FormatItem<'static>] = format_description!("[offset_hour]");
@@ -45,7 +45,7 @@ impl Logger {
     }
 
     pub fn init(mut self) -> Result<Self, LoggerError> {
-        let path = Path::new(LOGGER_LOCATION.as_ref());
+        let path = Path::new(LOG_LOCATION.as_ref());
         
         if ! path.parent().unwrap().exists() {
             Err(LoggerError::ParentNotFound)?
@@ -60,7 +60,7 @@ impl Logger {
 
         self.file = Some(match file {
             Ok(file) => file,
-            Err(error) => Err(LoggerError::GenericIOError(LOGGER_LOCATION.clone(), error))?, 
+            Err(error) => Err(LoggerError::GenericIOError(LOG_LOCATION.clone(), error))?, 
         });
 
         Ok(self)
@@ -86,7 +86,7 @@ impl Logger {
 
         match write {
             Ok(_) => Ok(()),
-            Err(error) => Err(LoggerError::GenericIOError(LOGGER_LOCATION.clone(), error)),
+            Err(error) => Err(LoggerError::GenericIOError(LOG_LOCATION.clone(), error)),
         }
     }
 }

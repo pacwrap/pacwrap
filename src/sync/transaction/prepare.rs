@@ -50,7 +50,7 @@ impl Transaction for Prepare {
                     }
                 }
 
-                if let TransactionType::Remove(_, _) = ag.action() {
+                if let TransactionType::Remove(_, _,_) = ag.action() {
                     Ok(TransactionState::Stage)
                 } else if deps.len() == 0 {
                     Ok(TransactionState::Stage)
