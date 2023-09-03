@@ -1,10 +1,9 @@
-use std::process::exit;
 use std::rc::Rc;
 
 use alpm::{Package, Alpm};
 
-use crate::sync::utils::{get_package, get_local_package};
-use crate::utils::print_error;
+use super::{transaction::Error,
+    utils::{get_package, get_local_package}};
 
 pub struct DependencyResolver<'a> {
     resolved: Vec<&'a str>,
@@ -12,7 +11,7 @@ pub struct DependencyResolver<'a> {
     keys: Vec<Rc<str>>,
     ignored: &'a Vec<&'a str>,
     handle: &'a Alpm,
-    depth: i8,
+    depth: isize,
 } 
 
 impl <'a>DependencyResolver<'a> {
@@ -27,50 +26,49 @@ impl <'a>DependencyResolver<'a> {
         }
     }
 
-    fn check_depth(&mut self) {
-        if self.depth == 50 {
-            print_error("Recursion depth exceeded maximum.");
-            exit(2);
+    fn check_depth(&mut self) -> Result<(), Error> {
+        if self.depth == 50 { 
+            Err(Error::RecursionDepthExceeded(self.depth))?
         }
+
+        self.depth += 1;
+        Ok(())
     }
     
-    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> (Vec<Rc<str>>, Vec<Package<'a>>) {
-        let mut synchronize: Vec<&'a str> = Vec::new();
-        self.check_depth();
-
+    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Vec<Rc<str>>, Vec<Package<'a>>), Error> {
+        let mut synchronize: Vec<&'a str> = Vec::new(); 
+        
         for pkg in packages {
             if self.resolved.contains(&pkg) || self.ignored.contains(&pkg) {
                 continue;
             } 
 
-            if let Some(pkg) = get_package(&self.handle, pkg) {  
-                let deps = pkg.depends()
-                    .iter()
-                    .map(|p| p.name())
-                    .collect::<Vec<&str>>();
-
+            if let Some(pkg) = get_package(&self.handle, pkg) {   
                 self.resolved.push(pkg.name());
-                self.packages.push(pkg);
-                
+                self.packages.push(pkg);               
+                synchronize.extend(pkg.depends()
+                    .iter()
+                    .filter_map(|p| 
+                        match get_local_package(&self.handle, p.name()) {
+                            None => match get_package(&self.handle, p.name()) {  
+                                Some(dep) => Some(dep.name()), None => None,
+                            },
+                            Some(_) => None,
+                        }
+                    )
+                    .collect::<Vec<&str>>());
+
                 if self.depth > 0 {
                     self.keys.push(pkg.name().into());
-                }
-
-                for dep in deps {
-                    if let None = get_local_package(&self.handle, dep) {
-                        if let Some(dep) = get_package(&self.handle, dep) {  
-                            synchronize.push(dep.name());
-                        }
-                    }
                 }
             }             
         }
 
-        if synchronize.len() > 0 {
-            self.depth += 1;
+        if synchronize.len() > 0 { 
+            self.check_depth()?;
             self.enumerate(&synchronize)
         } else {
-            (self.keys, self.packages)
+           Ok((self.keys, self.packages))
         }
     }
 }

@@ -117,10 +117,11 @@ pub fn remove() {
     let mut cascade = false;
     let mut no_confirm = false;
     let mut db_only = false;
+    let mut recursive_count = 0;
 
     let mut args = Arguments::new().prefix("-R").ignore("--remove")
         .switch("-p", "--preview", &mut preview)
-        .switch("-s", "--recursive", &mut recursive)
+        .switch("-s", "--recursive", &mut recursive).count(&mut recursive_count)
         .switch("-c", "--cascade", &mut cascade)
         .switch_big("--db-only", &mut db_only)
         .switch_big("--noconfirm", &mut no_confirm);
@@ -139,7 +140,7 @@ pub fn remove() {
     let target = targets.remove(0);
     let inshandle = cache.instances().get(&target).unwrap();
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade), &cache, &mut logger)
+    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade, recursive_count < 2), &cache, &mut logger)
         .preview(preview)
         .database_only(db_only)
         .no_confirm(no_confirm);

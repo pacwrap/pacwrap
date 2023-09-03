@@ -30,6 +30,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub enum Error {
     NothingToDo,
+    RecursionDepthExceeded(isize),
     TargetUpstream(Rc<str>),
     TargetNotInstalled(Rc<str>),
     TargetNotAvailable(Rc<str>),
@@ -51,7 +52,7 @@ pub enum TransactionState {
 
 pub enum TransactionType {
     Upgrade(bool),
-    Remove(bool, bool),
+    Remove(bool, bool, bool),
 }
 
 #[derive(Copy, Clone)]
@@ -125,7 +126,7 @@ impl TransactionType {
     fn as_str(&self) -> &str {
         match self {
             Self::Upgrade(_) => "installation",
-            Self::Remove(_, _) => "removal"
+            Self::Remove(_,_,_) => "removal"
         }
     }
 
@@ -135,7 +136,7 @@ impl TransactionType {
                 TransactionMode::Foreign => "Synchronizing foreign database...",
                 TransactionMode::Local => "Synchronizing resident container..."
             }, 
-            Self::Remove(_, _) => "Preparing package removal..."
+            Self::Remove(_,_,_) => "Preparing package removal..."
         };
 
         println!("{} {}", style("->").bold().cyan(), message);
@@ -145,10 +146,10 @@ impl TransactionType {
         let instance = inshandle.vars().instance();
         let message = match self {
             Self::Upgrade(upgrade) => match upgrade { 
-                true => format!("Checking {} for updates...", instance),
-                false => format!("Transacting {}...", instance)
+                true => format!("Checking {instance} for updates..."),
+                false => format!("Transacting {instance}...")
             }
-            Self::Remove(_,_) => format!("Transacting {}...", instance)
+            Self::Remove(_,_,_) => format!("Transacting {instance}...")
         };
 
         println!("{} {}", style("::").bold().cyan(), style(message).bold());
@@ -158,6 +159,7 @@ impl TransactionType {
 impl Error {
     fn message(&self) {
        print_error(match self {
+            Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}.", style(u).bold()),
             Self::TargetUpstream(pkg) => format!("Target package {}: Installed in upstream container.", style(pkg).bold()),
             Self::TargetNotInstalled(pkg) => format!("Target package {}: Not installed.", style(pkg).bold()),
             Self::TargetNotAvailable(pkg) => format!("Target package {}: Not available in remote repositories.", style(pkg).bold()),
@@ -275,7 +277,7 @@ impl TransactionHandle {
         let queued = self.queue.iter()
             .map(|i| i.as_ref())
             .collect::<Vec<_>>();
-        let packages = DependencyResolver::new(&self.alpm, &ignored).enumerate(&queued);
+        let packages = DependencyResolver::new(&self.alpm, &ignored).enumerate(&queued)?;
 
         if packages.0.len() > 0 {
             self.deps = Some(packages.0);
@@ -292,7 +294,7 @@ impl TransactionHandle {
         Ok(())
     }
 
-    fn prepare_removal(&mut self, enumerate: bool, cascade: bool) -> Result<()> {
+    fn prepare_removal(&mut self, enumerate: bool, cascade: bool, explicit: bool) -> Result<()> {
         let ignored = match self.mode { 
             TransactionMode::Foreign => &self.ignore_dep,
             TransactionMode::Local => &self.ignore,
@@ -315,7 +317,7 @@ impl TransactionHandle {
             .map(|i| i.as_ref())
             .collect::<Vec<_>>(); 
 
-        for pkg in LocalDependencyResolver::new(&self.alpm, &ignored, enumerate, cascade).enumerate(&queued) { 
+        for pkg in LocalDependencyResolver::new(&self.alpm, &ignored, enumerate, cascade, explicit).enumerate(&queued)? { 
             self.alpm.trans_remove_pkg(pkg).unwrap(); 
         }
 
@@ -325,7 +327,7 @@ impl TransactionHandle {
     fn trans_ready(&self, trans_type: &TransactionType) -> Result<()> {
         if match trans_type {
             TransactionType::Upgrade(_) => self.alpm.trans_add().len(),
-            TransactionType::Remove(_,_) => self.alpm.trans_remove().len()
+            TransactionType::Remove(_,_,_) => self.alpm.trans_remove().len()
         } > 0 {
             Ok(())
         } else {
