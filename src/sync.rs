@@ -49,19 +49,19 @@ pub fn execute() {
     let mut no_deps = false;
     let mut dbonly = false;
     let mut y_count = 0;
-
-    let mut args = Arguments::new().prefix("-S")
-        .ignore("--sync").ignore("--fake-chroot")
-        .switch_big("--force-foreign", &mut force_database) 
-        .switch_big("--db-only", &mut dbonly)
-        .switch_big("--noconfirm", &mut no_confirm) 
-        .switch("-y", "--refresh", &mut refresh).count(&mut y_count)
-        .switch("-u", "--upgrade", &mut upgrade)
-        .switch("-s", "--search", &mut search)
-        .switch("-p", "--preview", &mut preview)
-        .switch("-o", "--target-only", &mut no_deps);
-
-    args = args.parse_arguments();
+    let args = Arguments::new()
+        .prefix("-S")
+        .ignore("--sync")
+        .ignore("--fake-chroot")
+        .switch_big("--force-foreign").map(&mut force_database).set(true).increment()
+        .switch_big("--db-only").map(&mut dbonly).set(true).increment()
+        .switch_big("--noconfirm").map(&mut no_confirm).set(true).increment()
+        .switch("-y", "--refresh").map(&mut refresh).set(true).count(&mut y_count).increment()
+        .switch("-u", "--upgrade").map(&mut upgrade).set(true).increment()
+        .switch("-s", "--search").map(&mut search).set(true).increment()
+        .switch("-p", "--preview").map(&mut preview).set(true).increment()
+        .switch("-o", "--target-only").map(&mut no_deps).set(true).increment()
+        .parse_arguments();
     let mut targets = args.targets().clone();
     let runtime = args.get_runtime().clone();
     let mut cache: InstanceCache = InstanceCache::new();
@@ -118,29 +118,27 @@ pub fn remove() {
     let mut no_confirm = false;
     let mut db_only = false;
     let mut recursive_count = 0;
-
-    let mut args = Arguments::new().prefix("-R").ignore("--remove")
-        .switch("-p", "--preview", &mut preview)
-        .switch("-s", "--recursive", &mut recursive).count(&mut recursive_count)
-        .switch("-c", "--cascade", &mut cascade)
-        .switch_big("--db-only", &mut db_only)
-        .switch_big("--noconfirm", &mut no_confirm);
-      
-    args = args.parse_arguments();
+    let args = Arguments::new()
+        .prefix("-R")
+        .ignore("--remove")
+        .switch("-p", "--preview").map(&mut preview).set(true).increment()
+        .switch("-s", "--recursive").map(&mut recursive).set(true).count(&mut recursive_count).increment()
+        .switch("-c", "--cascade").map(&mut cascade).set(true).increment()
+        .switch_big("--db-only").map(&mut db_only).set(true).increment()
+        .switch_big("--noconfirm").map(&mut no_confirm).set(true)
+        .parse_arguments()
+        .require_target(1);
     let mut targets = args.targets().clone();
     let runtime = args.get_runtime().clone();
     let mut cache: InstanceCache = InstanceCache::new();
-
-    if targets.len() > 0 {
-        cache.populate_from(&targets, true);
-    } else {
-        invalid();
-    }
+   
+    cache.populate_from(&targets, true);
 
     let target = targets.remove(0);
     let inshandle = cache.instances().get(&target).unwrap();
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-    let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade, recursive_count < 2), &cache, &mut logger)
+
+       let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade, recursive_count < 2), &cache, &mut logger)
         .preview(preview)
         .database_only(db_only)
         .no_confirm(no_confirm);
@@ -149,17 +147,14 @@ pub fn remove() {
     update.transact(inshandle);
 }
 
-
 pub fn query() {
     let mut quiet = false;
     let mut explicit = false;
-
-    let mut args = Arguments::new().prefix("-Q")
+    let args = Arguments::new().prefix("-Q")
         .ignore("--query")
-        .switch("-q", "--quiet", &mut quiet)
-        .switch("-e", "--explicit", &mut explicit);
-
-    args = args.parse_arguments();
+        .switch("-q", "--quiet").map(&mut quiet).set(true).increment()
+        .switch("-e", "--explicit").map(&mut explicit).set(true).increment()
+        .parse_arguments();
     let targets = args.get_runtime().clone();
 
     if targets.len() < 1 {

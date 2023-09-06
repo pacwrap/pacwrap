@@ -2,16 +2,17 @@ use std::rc::Rc;
 
 use alpm::PackageReason;
 
+use crate::utils::Arguments;
 use crate::config::{self, InstanceType};
 use crate::config::InstanceHandle;
 use crate::log::Logger;
 use crate::sync;
 use crate::utils::print_error;
-use crate::Arguments;
+
 use crate::config::{Instance, InsVars};
 use crate::utils::env_var;
 
-fn save_bash_configuration(ins: &str) {
+fn save_configuration(ins: &str) {
     let mut logger = Logger::new("pacwrap-compat").init().unwrap();
     let mut pkgs = Vec::new();
     let deps: Vec<Rc<str>> = env_var("PACWRAP_DEPS").split_whitespace().map(|a| a.into()).collect(); 
@@ -63,7 +64,7 @@ fn save_bash_configuration(ins: &str) {
     logger.log("configuration file written for {ins} via compatibility layer").unwrap();
 }
 
-fn bash_configuration(instance: &str) {
+fn print_configuration(instance: &str) {
     let ins = &config::provide_handle(instance);
     let depends = ins.metadata().dependencies();
     let pkgs = ins.metadata().explicit_packages();
@@ -84,23 +85,28 @@ fn bash_configuration(instance: &str) {
 }
 
 pub fn compat() {
-    let mut save = false;
-    let mut bash = false;
-    let mut test = false;
+    #[derive(Copy, Clone)]
+    enum Options {
+        Save,
+        Link,
+        None
+    }
 
+    let mut option: Options = Options::None;
     let args = Arguments::new()
         .prefix("-Axc")
-        .switch("-s", "--save", &mut save)
-        .switch("-l", "--link", &mut bash)
-        .switch("-t", "--test", &mut test) 
-        .parse_arguments();
+        .map(&mut option)
+        .switch("-s", "--save").set(Options::Save)
+        .switch("-l", "--link").set(Options::Link)
+        .parse_arguments()
+        .require_target(1);
     let mut runtime = args.get_runtime().clone();
-    args.require_target(1);
-
     let instance = runtime.remove(0);    
 
-    if save { save_bash_configuration(&instance); }
-    else if bash { bash_configuration(&instance); }
-    else { print_error(format!("Invalid switch sequence.")) }  
+    match option {
+        Options::Save => save_configuration(&instance),
+        Options::Link => print_configuration(&instance),
+        _ => print_error(format!("Invalid switch sequence.")), 
+    }
 }
 

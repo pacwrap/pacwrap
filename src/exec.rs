@@ -39,16 +39,14 @@ pub fn execute() {
     let mut cmd = false;
     let mut shell = false;
     let mut verbose = false;
-
     let args = Arguments::new()
         .prefix("-E").ignore("--exec")
-        .switch("-r", "--root", &mut root)
-        .switch("-v", "--verbose", &mut verbose)
-        .switch("-c", "--command", &mut cmd) 
-        .switch("-s", "--shell", &mut shell)
+        .switch("-r", "--root").map(&mut root).set(true).increment()
+        .switch("-v", "--verbose").map(&mut verbose).set(true).increment()
+        .switch("-c", "--command").map(&mut cmd).set(true).increment()
+        .switch("-s", "--shell").map(&mut shell).set(true).increment()
         .parse_arguments()
         .require_target(1);
-
     let mut runtime = args.get_runtime().clone();
     let handle = &config::provide_handle(&runtime.remove(0));
 

@@ -10,46 +10,54 @@ mod compat;
 mod sync;
 mod log;
 
-fn main() {
-    let mut sync = false;
-    let mut sync_chroot = false; 
-    let mut exec = false;
-    let mut version = false;
-    let mut compat = false;
-    let mut query = false;
-    let mut remove = false;
+#[derive(Clone, Copy)]
+enum Options {
+    Sync,
+    Remove,
+    Query,
+    Compat,
+    Interpose,
+    Exec,
+    BashCreate,
+    BashProc,
+    BashHelp,
+    BashUtils,
+    Version,
+    None,
+}
 
-    let mut bash_create = false;
-    let mut bash_help = false;
-    let mut bash_utils = false;
-    let mut bash_proc = false;
-    
-    Arguments::new() 
-        .switch("-Q", "--query", &mut query) 
-        .switch_big("--fake-chroot", &mut sync_chroot)
-        .switch("-S", "--sync", &mut sync)
-        .switch("-R", "--remove", &mut remove)
-        .switch("-E", "--exec", &mut exec)
-        .switch("-V", "--version", &mut version) 
-        .switch("-Axc", "--aux-compat", &mut compat)
-        .switch("-C", "--create", &mut bash_create)
-        .switch("-P", "--proc", &mut bash_proc)
-        .switch("-h", "--man", &mut bash_help)
-        .switch("-U", "--utils", &mut bash_utils)
+fn main() {
+    let mut option: Options = Options::None;
+
+    Arguments::new()
+        .map(&mut option)
+        .switch("-Q", "--query").set(Options::Query)
+        .switch_big("--fake-chroot").set(Options::Sync)
+        .switch("-S", "--sync").set(Options::Interpose)
+        .switch("-R", "--remove").set(Options::Remove)
+        .switch("-E", "--exec").set(Options::Exec)
+        .switch("-V", "--version").set(Options::Version)
+        .switch("-Axc", "--aux-compat").set(Options::Compat)
+        .switch("-C", "--create").set(Options::BashCreate)
+        .switch("-P", "--proc").set(Options::BashProc)
+        .switch("-h", "--man").set(Options::BashHelp)
+        .switch("-U", "--utils").set(Options::BashUtils)
         .parse_arguments();
 
-    if exec { exec::execute() }
-    else if sync_chroot { sync::execute(); } 
-    else if sync { interpose() }  
-    else if query { sync::query(); } 
-    else if remove { sync::remove(); }
-    else if compat { compat::compat(); }
-    else if version { print_version(); }
-    else if bash_utils { execute_pacwrap_bash("pacwrap-utils"); }
-    else if bash_create { execute_pacwrap_bash("pacwrap-create"); }
-    else if bash_proc { execute_pacwrap_bash("pacwrap-ps"); }
-    else if bash_help { execute_pacwrap_bash("pacwrap-man"); }
-    else { arguments::invalid(); } 
+    match option {
+        Options::Exec => exec::execute(),
+        Options::Sync => sync::execute(), 
+        Options::Interpose => interpose(),  
+        Options::Query => sync::query(), 
+        Options::Remove => sync::remove(),
+        Options::Compat => compat::compat(),
+        Options::Version => print_version(),
+        Options::BashUtils => execute_pacwrap_bash("pacwrap-utils"),
+        Options::BashCreate => execute_pacwrap_bash("pacwrap-create"),
+        Options::BashProc => execute_pacwrap_bash("pacwrap-ps"), 
+        Options::BashHelp => execute_pacwrap_bash("pacwrap-man"),
+        Options::None => arguments::invalid(),
+    }
 }
 
 fn print_version() {

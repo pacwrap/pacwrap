@@ -33,14 +33,14 @@ pub struct TransactionAggregator<'a> {
 }
 
 impl <'a>TransactionAggregator<'a> { 
-    pub fn new(t: TransactionType, icache: &'a InstanceCache, log: &'a mut Logger) -> Self {
+    pub fn new(t: TransactionType, inscache: &'a InstanceCache, log: &'a mut Logger) -> Self {
         Self {
             queried: Vec::new(),
             updated: Vec::new(),
             pkg_queue: HashMap::new(),
-            filesystem_state: Some(FilesystemStateSync::new(icache)),
+            filesystem_state: Some(FilesystemStateSync::new(inscache)),
             action: t, 
-            cache: icache,
+            cache: inscache,
             keyring: false,
             logger: log,
             flags: TransactionFlags::NONE
@@ -99,8 +99,10 @@ impl <'a>TransactionAggregator<'a> {
             return;
         }
 
-        self.fs_sync().unwrap().prepare_single();
-        self.fs_sync().unwrap().engage(&vec![inshandle.vars().instance().clone()]);
+        let fs_sync = self.fs_sync().unwrap();
+
+        fs_sync.prepare_single();
+        fs_sync.engage(&vec![inshandle.vars().instance().clone()]);
     }
 
     pub fn cache(&self) -> &'a InstanceCache { &self.cache }
@@ -175,4 +177,3 @@ impl <'a>TransactionAggregator<'a> {
         self.updated.push(updated);
     }
 }
-
