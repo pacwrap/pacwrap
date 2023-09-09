@@ -7,7 +7,6 @@ use crate::config::{self, InstanceHandle};
 
 use super::instance::InstanceType;
 
-
 pub struct InstanceCache {
     instances: HashMap<Rc<str>,InstanceHandle>,
     registered: Vec<Rc<str>>,
@@ -63,6 +62,7 @@ impl InstanceCache {
 
     fn map(&mut self, ins: &Rc<str>) -> bool {
         let mut register = true;
+
         if let None = self.instances.get(ins) {
             let config = config::provide_handle(ins);
            
@@ -75,7 +75,8 @@ impl InstanceCache {
 
             self.instances.insert(ins.clone(), config);
         }
-        return register;
+
+        register
     }
 
     pub fn registered(&self) -> &Vec<Rc<str>> { &self.registered }
