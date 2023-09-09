@@ -343,9 +343,6 @@ initialize_data_directory() {
 		 "$PACWRAP_CACHE_DIR/pkg" \
 		 "$PACWRAP_CONFIG_DIR/instance" \
 		 "$PACWRAP_CONFIG_DIR/pacman.d" \
-		 "$PACWRAP_CONFIG_DIR/pacman/sync" \
-		 "$PACWRAP_CONFIG_DIR/pacman/syncdb" \
-		 "$PACWRAP_CONFIG_DIR/pacman/template" \
 		 "$PACWRAP_CONFIG_DIR/bwrap"
 
 	local ins_string="\[options\]"

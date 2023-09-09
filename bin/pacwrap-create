@@ -188,14 +188,13 @@ init_struct () {
 		 "$INSTANCE_ROOT/etc" \
 		 "$INSTANCE_ROOT/var/lib/pacman" \
 		 "$INSTANCE_ROOT/etc/pacman.d/hooks" \
-		 "$INSTANCE_ROOT/usr/share/libalpm/hooks"
+		 "$INSTANCE_ROOT/usr/share/libalpm/hooks" \
+		 "$INSTANCE_ROOT/usr/share/ca-certificates"
+
+	ln -s ../usr/share/ca-certificates $INSTANCE_ROOT/etc/ca-certificates
 
 	([[ ! -d $INSTANCE_ROOT ]] || [[ ! -d $INSTANCE_HOME ]]) && 
 		log_error "Directory creation failed." 2
-
-	cp "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" "$INSTANCE_ROOT/etc/pacman.conf"
-	cp "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" "$(return_pacman_sync)"
-	cp "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" "$(return_pacman_syncdb)"
 
 	local pacman_hooks=('20-systemd-sysusers'
 			    '30-systemd-tmpfiles' 
@@ -222,21 +221,29 @@ init_struct () {
 \n\n[Action]
 \nDescription = Permissing certificate store...
 \nWhen = PostTransaction
-\nExec = /usr/bin/chmod -R 755 /etc/ca-certificates/
+\nExec = /usr/bin/chmod -R 755 /usr/share/ca-certificates
 _CONFIG
 ) > $INSTANCE_ROOT/usr/share/libalpm/hooks/42-trust-permission.hook
- 	fi
+	echo -e $(cat << _CONFIG
+[Trigger]
+\nOperation = Install
+\nOperation = Upgrade
+\nType = Path
+\nTarget = usr/share/ca-certificates/trust-source/*
+
+\n\n[Action]
+\nDescription = Symlinking certificate store...
+\nWhen = PostTransaction
+\nExec = /usr/bin/sh -c "if [[ ! -d /etc/ca-certificates/ ]]; then ln -s ../usr/share/ca-certificates/ /etc/ca-certificates; fi"
+_CONFIG
+) > $INSTANCE_ROOT/usr/share/libalpm/hooks/38-link-etc-cert.hook
+	fi
 
 	echo "$LANG ${LANG#*.}" > "$INSTANCE_ROOT/etc/locale.gen"
 	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
 	echo "user:x:1000:1000::/home/user:/bin/bash" >> "$INSTANCE_ROOT/etc/passwd"
 	echo $(dbus-uuidgen) > "$INSTANCE_ROOT/etc/machine-id"
 	echo 'PS1="'$INSTANCE'> "' > "$INSTANCE_HOME/.bashrc"
-
-	if [[ $C_TYPE == "DEP" ]] || [[ $C_TYPE == "BASE" ]]; then
-		cp "$INSTANCE_PACMAN_CFG_DIR/pacman.template.conf" "$(return_pacman_template)"
-		mkdir -p "$INSTANCE_LC_DIR/$INSTANCE"
-	fi
 
 	populate_deps
 	generate_config
@@ -266,7 +273,7 @@ init_chroot () {
 	--exclude=mnt"
 
 	[[ $DEPEND ]] && exclude_params+=" --exclude=usr"	
-	
+
 	log_to_file "Extracting bootstrap tarball"
 	echo -n $ARROW "Extracting bootstrap tarball"
 	tar xkf "$PACWRAP_CACHE_DIR/archlinux-bootstrap-x86_64.tar.gz" --strip-components=1 \
@@ -329,7 +336,7 @@ sync_base_packages () {
 	log "$ARROW Some housekeeping..." "Removing arch-install-scripts"	
 	$EXEC_SCRIPT -R -t $INSTANCE arch-install-scripts 2>/dev/null 1>>$VERBOSE
 	log "$BAR_GREEN Checking $INSTANCE for updates..." "Checking $INSTANCE for updates"
-	$EXEC_SCRIPT -Suyo --noconfirm
+	$EXEC_SCRIPT -Suyo -t $INSTANCE --noconfirm
 }
 
 sync_foreign_elements() {
