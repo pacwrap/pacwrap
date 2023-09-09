@@ -1,4 +1,5 @@
-use std::process::exit;
+use std::process::{exit, Command};
+use std::env;
 
 use alpm::{Alpm,  SigLevel, Usage, PackageReason};
 use console::style;
@@ -16,6 +17,7 @@ use crate::sync::{
 use crate::utils::{Arguments, 
     arguments::invalid, 
     test_root,
+    handle_process,
     print_warning,
     print_error,
     print_help_msg};
@@ -37,11 +39,13 @@ mod resolver;
 mod resolver_local;
 mod utils;
 
-pub fn execute() { 
-    validate_environment();
+pub fn synchronize() {
+    if let Err(_) = validate_environment() {
+        print_error("Execution without fakechroot in an unprivileged context is not supported.");
+        exit(1);
+    }
 
     let mut force_database = false;
-    let mut search = false;
     let mut refresh = false;
     let mut upgrade = false;
     let mut preview = false;
@@ -49,65 +53,65 @@ pub fn execute() {
     let mut no_deps = false;
     let mut dbonly = false;
     let mut y_count = 0;
+    let mut u_count = 0;
     let args = Arguments::new()
         .prefix("-S")
         .ignore("--sync")
         .ignore("--fake-chroot")
-        .switch_big("--force-foreign").map(&mut force_database).set(true).increment()
-        .switch_big("--db-only").map(&mut dbonly).set(true).increment()
-        .switch_big("--noconfirm").map(&mut no_confirm).set(true).increment()
-        .switch("-y", "--refresh").map(&mut refresh).set(true).count(&mut y_count).increment()
-        .switch("-u", "--upgrade").map(&mut upgrade).set(true).increment()
-        .switch("-s", "--search").map(&mut search).set(true).increment()
-        .switch("-p", "--preview").map(&mut preview).set(true).increment()
-        .switch("-o", "--target-only").map(&mut no_deps).set(true).increment()
+        .short("-y").long("--refresh").map(&mut refresh).set(true).count(&mut y_count).push()
+        .short("-u").long("--upgrade").map(&mut upgrade).set(true).count(&mut u_count).push()
+        .short("-p").long("--preview").map(&mut preview).set(true).push()
+        .short("-o").long("--target-only").map(&mut no_deps).set(true).push()
+        .long("--force-foreign").map(&mut force_database).set(true).push()
+        .long("--db-only").map(&mut dbonly).set(true).push()
+        .long("--noconfirm").map(&mut no_confirm).set(true).push() 
         .parse_arguments();
-    let mut targets = args.targets().clone();
+    let mut cache = InstanceCache::new();
+    let targets = args.targets().clone();
     let runtime = args.get_runtime().clone();
-    let mut cache: InstanceCache = InstanceCache::new();
-    let mut aux_cache: InstanceCache = InstanceCache::new();
 
     if targets.len() > 0 {
         cache.populate_from(&targets, true);
     } else {
         cache.populate();
     }
- 
-    if refresh && y_count == 4 {      
+
+    if y_count == 4 {      
         let mut l: FilesystemStateSync = FilesystemStateSync::new(&cache); 
         l.prepare(cache.registered().len());
         l.engage(&cache.registered());
         l.finish();
-    } else if search {
-        print_help_msg("Functionality is currently unimplemented.");
-    } else {
-        if refresh { 
+    } else if upgrade || targets.len() > 0 {
+        if refresh {
             synchronize_database(&cache, y_count == 2); 
         }
 
-        if upgrade || targets.len() > 0 {
-            let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-            let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Upgrade(upgrade), &cache, &mut logger)
-                .preview(preview)
-                .force_database(force_database)
-                .database_only(y_count > 2 || dbonly)
-                .no_confirm(no_confirm);
+        let transaction_type = TransactionType::Upgrade(upgrade, u_count > 1);
+        let mut logger = Logger::new("pacwrap-sync").init().unwrap();
+        let mut update = TransactionAggregator::new(transaction_type, &cache, &mut logger)
+            .preview(preview)
+            .force_database(force_database)
+            .database_only(y_count > 2 || dbonly)
+            .no_confirm(no_confirm);
            
-            if targets.len() > 0 { 
-                let target = targets.remove(0);
-                let inshandle = cache.instances().get(&target).unwrap();
-                update.queue(target, runtime);
-                if no_deps || ! upgrade {
-                    update.transact(inshandle);
-                } else {
-                    transaction::update(update, &cache, &mut aux_cache); 
-                }
+        if targets.len() > 0 { 
+            let target = targets.get(0).unwrap();
+            let inshandle = cache.instances().get(target).unwrap();
+	    
+            update.queue(target.clone(), runtime);
+
+            if no_deps || ! upgrade {
+                update.transact(inshandle);
             } else {
-                transaction::update(update, &cache, &mut aux_cache);
+                transaction::update(update, &cache, &mut InstanceCache::new()); 
             }
-        } else if ! refresh {
-            invalid();
+        } else {
+            transaction::update(update, &cache, &mut InstanceCache::new());
         }
+    } else if refresh {
+        synchronize_database(&cache, y_count == 2); 
+    } else {
+        invalid();
     }
 }
 
@@ -121,11 +125,11 @@ pub fn remove() {
     let args = Arguments::new()
         .prefix("-R")
         .ignore("--remove")
-        .switch("-p", "--preview").map(&mut preview).set(true).increment()
-        .switch("-s", "--recursive").map(&mut recursive).set(true).count(&mut recursive_count).increment()
-        .switch("-c", "--cascade").map(&mut cascade).set(true).increment()
-        .switch_big("--db-only").map(&mut db_only).set(true).increment()
-        .switch_big("--noconfirm").map(&mut no_confirm).set(true)
+        .short("-p").long("--preview").map(&mut preview).set(true).push()
+        .short("-s").long("--recursive").map(&mut recursive).set(true).count(&mut recursive_count).push()
+        .short("-c").long("--cascade").map(&mut cascade).set(true).push()
+        .long("--db-only").map(&mut db_only).set(true).push()
+        .long("--noconfirm").map(&mut no_confirm).set(true)
         .parse_arguments()
         .require_target(1);
     let mut targets = args.targets().clone();
@@ -136,9 +140,9 @@ pub fn remove() {
 
     let target = targets.remove(0);
     let inshandle = cache.instances().get(&target).unwrap();
+    let transaction_type = TransactionType::Remove(recursive, cascade, recursive_count < 2); 
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-
-       let mut update: TransactionAggregator = TransactionAggregator::new(TransactionType::Remove(recursive, cascade, recursive_count < 2), &cache, &mut logger)
+    let mut update = TransactionAggregator::new(transaction_type, &cache, &mut logger)
         .preview(preview)
         .database_only(db_only)
         .no_confirm(no_confirm);
@@ -152,62 +156,70 @@ pub fn query() {
     let mut explicit = false;
     let args = Arguments::new().prefix("-Q")
         .ignore("--query")
-        .switch("-q", "--quiet").map(&mut quiet).set(true).increment()
-        .switch("-e", "--explicit").map(&mut explicit).set(true).increment()
-        .parse_arguments();
-    let targets = args.get_runtime().clone();
-
-    if targets.len() < 1 {
-        print_help_msg("Target not specified.");
-    }
-    
-    query_database(targets.get(0).unwrap().as_ref(), explicit, quiet) 
-}
-
-fn query_database(instance: &str, explicit: bool, quiet: bool) {    
-    let instance_vars = InsVars::new(instance);
+        .short("-q").long("--quiet").map(&mut quiet).set(true).push()
+        .short("-e").long("--explicit").map(&mut explicit).set(true).push()
+        .assume_target()
+        .parse_arguments()
+        .require_target(1);
+    let targets = args.targets().clone();
+    let target = targets.get(0).unwrap().as_ref();
+    let instance_vars = InsVars::new(target);
 
     test_root(&instance_vars);
+    query_database(instance_vars, explicit, quiet) 
+}
 
-    let root = instance_vars.root().as_ref(); 
-    let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", instance_vars.root())).unwrap();
+fn query_database(vars: InsVars, explicit: bool, quiet: bool) {    
+    let root = vars.root().as_ref(); 
+    let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
 
     for pkg in handle.localdb().pkgs() {
-        if pkg.reason() != PackageReason::Explicit && explicit {
+        if explicit && pkg.reason() != PackageReason::Explicit {
             continue;
         }
 
-        if quiet {
-            println!("{} ", pkg.name());
-        } else {
-            println!("{} {}", pkg.name(), style(pkg.version()).green().bold()); 
+        match quiet {
+            true => println!("{} ", pkg.name()),
+            false => println!("{} {} ", pkg.name(), style(pkg.version()).green().bold()), 
         }
     } 
 }
 
-pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
-    let root = inshandle.vars().root().as_ref();  
-    test_root(&inshandle.vars());
-    let mut handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
-    handle.set_hookdirs(vec![format!("{}/etc/pacman.d/hooks/", root), format!("{}/usr/share/libalpm/hooks/", root)].iter()).unwrap();
-    handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
-    handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap();
-    handle.set_parallel_downloads(parallel_downloads());
-    handle.set_logfile(format!("{}/pacwrap.log", LOCATION.get_data())).unwrap();
-    handle.set_check_space(PACMAN_CONF.check_space);
-    handle = register_remote(handle); handle
+pub fn search() { 
+    print_help_msg("Functionality is currently unimplemented.");
 }
 
-fn instantiate_alpm_syncdb(inshandle: &InstanceHandle) -> Alpm { 
-    let root = inshandle.vars().root().as_ref();  
-    test_root(&inshandle.vars()); 
-    let mut handle = Alpm::new2(root, &format!("{}/pacman/", LOCATION.get_data())).unwrap();
+pub fn interpose() {
+    let arguments = env::args().skip(1).collect::<Vec<_>>(); 
+    let all_args = env::args().collect::<Vec<_>>();
+    let this_executable = all_args.first().unwrap();
+
+    handle_process(Command::new(this_executable)
+        .env("LD_PRELOAD", "/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
+        .arg("--fake-chroot")
+        .args(arguments)
+        .spawn());
+}
+
+pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
+    alpm_handle(inshandle, format!("{}/var/lib/pacman/", inshandle.vars().root()))
+}
+
+fn alpm_handle(inshandle: &InstanceHandle, db_path: String) -> Alpm { 
+    test_root(&inshandle.vars());
+
+    let root = inshandle.vars().root().as_ref();   
+    let mut handle = Alpm::new(root, &db_path).unwrap();
+
+    handle.set_hookdirs(vec![format!("{}/usr/share/libalpm/hooks/", root), format!("{}/etc/pacman.d/hooks/", root)].iter()).unwrap();
     handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
-    handle.set_progress_cb(ProgressCallback::new(), progress_event::progress_event);
-    handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap(); 
-    handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
-    handle.set_parallel_downloads(parallel_downloads());    
-    handle = register_remote(handle); handle
+    handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap();
+    handle.set_parallel_downloads(PACMAN_CONF.parallel_downloads.try_into().unwrap_or(1));
+    handle.set_logfile(format!("{}/pacwrap.log", LOCATION.get_data())).unwrap();
+    handle.add_noextract("etc/ca-certificates/*").unwrap();
+    handle.set_check_space(PACMAN_CONF.check_space);
+    handle = register_remote(handle); 
+    handle
 }
 
 fn register_remote(mut handle: Alpm) -> Alpm { 
@@ -230,10 +242,13 @@ fn register_remote(mut handle: Alpm) -> Alpm {
 fn synchronize_database(cache: &InstanceCache, force: bool) {
      match cache.containers_base().get(0) {
         Some(insname) => {
+            let db_path = format!("{}/pacman/", constants::LOCATION.get_data());
             let ins: &InstanceHandle = cache.instances().get(insname).unwrap();      
-            let mut handle = instantiate_alpm_syncdb(&ins);
-    
+            let mut handle = alpm_handle(&ins, db_path);
+
             println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
+            handle.set_progress_cb(ProgressCallback::new(), progress_event::progress_event); 
+            handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {
                 print_error(format!("Unable to initialize transaction: {}.",err.to_string()));
@@ -295,22 +310,15 @@ fn signature_level(sig: &String) -> SigLevel {
     SigLevel::empty()
 }
 
-fn parallel_downloads() -> u32 {
-    match PACMAN_CONF.parallel_downloads.try_into() { Ok(i) => i, Err(_) => 1 }
-}
-
-fn invalid_environment() {
-    print_error("Invalid environmental parameters.");
-    exit(1);
-}
-
-fn validate_environment() {
+fn validate_environment() -> Result<(),()> {
     match std::env::var("LD_PRELOAD") {
         Ok(var) => {
             if var != "/usr/lib/libfakeroot/fakechroot/libfakechroot.so" {
-                invalid_environment();
+                Err(())?
             }
+
+            Ok(())
         },
-        Err(_) => invalid_environment()
+        Err(_) => Err(())
     }
 }

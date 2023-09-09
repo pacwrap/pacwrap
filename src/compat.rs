@@ -1,16 +1,19 @@
+use std::{process::Command, env};
 use std::rc::Rc;
 
 use alpm::PackageReason;
 
-use crate::utils::Arguments;
-use crate::config::{self, InstanceType};
-use crate::config::InstanceHandle;
 use crate::log::Logger;
 use crate::sync;
-use crate::utils::print_error;
-
-use crate::config::{Instance, InsVars};
-use crate::utils::env_var;
+use crate::config::{self, 
+    Instance, 
+    InsVars, 
+    InstanceType, 
+    InstanceHandle};
+use crate::utils::{Arguments, 
+    print_error, 
+    handle_process, 
+    env_var};
 
 fn save_configuration(ins: &str) {
     let mut logger = Logger::new("pacwrap-compat").init().unwrap();
@@ -61,7 +64,7 @@ fn save_configuration(ins: &str) {
     alpm.release().unwrap();
     instance.metadata_mut().set(deps, pkgs);
     config::save_handle(&instance).ok(); 
-    logger.log("configuration file written for {ins} via compatibility layer").unwrap();
+    logger.log(format!("configuration file written for {ins} via compatibility layer")).unwrap();
 }
 
 fn print_configuration(instance: &str) {
@@ -96,11 +99,12 @@ pub fn compat() {
     let args = Arguments::new()
         .prefix("-Axc")
         .map(&mut option)
-        .switch("-s", "--save").set(Options::Save)
-        .switch("-l", "--link").set(Options::Link)
+        .short("-s").long("--save").set(Options::Save)
+        .short("-l").long("--link").set(Options::Link)
+        .assume_target()
         .parse_arguments()
         .require_target(1);
-    let mut runtime = args.get_runtime().clone();
+    let mut runtime = args.targets().clone();
     let instance = runtime.remove(0);    
 
     match option {
@@ -110,3 +114,9 @@ pub fn compat() {
     }
 }
 
+pub fn execute_bash(executable: &str) { 
+    handle_process(Command::new(format!("pacwrap-{executable}"))
+        .arg("")
+        .args(env::args().skip(1).collect::<Vec<_>>())
+        .spawn());
+}

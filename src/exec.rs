@@ -7,6 +7,7 @@ use std::path::Path;
 use std::vec::Vec;
 use std::os::unix::io::AsRawFd;
 
+use console::style;
 use nix::unistd::Pid;
 use nix::sys::signal::kill;
 use nix::sys::signal::Signal;
@@ -27,53 +28,80 @@ use crate::config::{self,
     InstanceHandle};
 use crate::utils::{TermControl, 
     Arguments, 
+    arguments,
     env_var, 
-    print_error, 
+    print_error,
+    print_help_error,
     print_warning};
 
 pub mod args;
 pub mod utils;
 
+#[derive(Copy, Clone, Debug)]
+enum Options {
+    Shell,
+    FakeRoot,
+    Command,
+    Container,
+    Verbose,
+    None
+}
+
 pub fn execute() {
-    let mut root = false;
-    let mut cmd = false;
-    let mut shell = false;
-    let mut verbose = false;
+    let mut mode = Options::Command;
+    let mut root = Options::Container;
+    let mut verbose = Options::None;
     let args = Arguments::new()
-        .prefix("-E").ignore("--exec")
-        .switch("-r", "--root").map(&mut root).set(true).increment()
-        .switch("-v", "--verbose").map(&mut verbose).set(true).increment()
-        .switch("-c", "--command").map(&mut cmd).set(true).increment()
-        .switch("-s", "--shell").map(&mut shell).set(true).increment()
+        .prefix("-E")
+        .ignore("--exec")
+        .short("-r").long("--root").map(&mut root).set(Options::FakeRoot).push()
+        .short("-v").long("--verbose").map(&mut verbose).set(Options::Verbose).push()
+        .short("-c").long("--command").map(&mut mode).set(Options::Command)
+        .short("-s").long("--shell").set(Options::Shell).push()
+        .assume_target()
         .parse_arguments()
         .require_target(1);
-    let mut runtime = args.get_runtime().clone();
-    let handle = &config::provide_handle(&runtime.remove(0));
+    let runtime = args.get_runtime().clone();
+    let handle = &config::provide_handle(args.targets().get(0).as_ref().unwrap());
 
-    if verbose { 
+    if let Options::Verbose = verbose { 
         handle.vars().debug(handle.config(), &runtime); 
     }
 
-    if root && cmd { 
-        execute_fakeroot_container(handle, runtime); 
-    } else if root && shell { 
-        execute_fakeroot_container(handle, vec!("bash".into())); 
-    } else if shell { 
-        execute_container(handle, vec!("bash".into()), shell, verbose); 
-    } else { 
-        execute_container(handle, runtime, false, verbose); 
-    } 
+    match root {
+        Options::FakeRoot => 
+            match mode {
+                Options::Shell => execute_fakeroot_container(handle, vec!("bash".into())),
+                Options::Command => execute_fakeroot_container(handle, runtime), 
+                _ => arguments::invalid()
+            }
+        Options::Container => 
+            match mode {
+                Options::Shell => execute_container(handle, vec!("bash".into()), mode, verbose),
+                Options::Command => execute_container(handle, runtime, mode, verbose),
+                _=> arguments::invalid()
+            }
+        _ => unreachable!()
+    }
 }
 
-fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: bool, verbose: bool) {
+fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: Options, verbose: Options) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
     let vars = ins.vars();
 
-    if shell { exec_args.env("TERM", "xterm"); }    
-    if ! cfg.allow_forking() { exec_args.push_env("--die-with-parent"); }
-    if ! cfg.retain_session() { exec_args.push_env("--new-session"); } else {
+    if let Options::Shell = shell { 
+        exec_args.env("TERM", "xterm"); 
+    }    
+    
+    if ! cfg.allow_forking() { 
+        exec_args.push_env("--die-with-parent"); 
+    }
+
+    if ! cfg.retain_session() { 
+        exec_args.push_env("--new-session"); 
+    } else {
         print_warning("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details."); 
     }
 
@@ -93,8 +121,14 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: bool,
 
     exec_args.env("PATH", "/usr/bin/:/bin");
     exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
-    
-    if verbose { println!("{:?} ",exec_args); }
+
+    if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
+        print_help_error(error); 
+    }
+
+    if let Options::Verbose = verbose { 
+        println!("{:?} ",exec_args); 
+    }
 
     let (reader, writer) = os_pipe::pipe().unwrap();
     let fd = writer.as_raw_fd();
@@ -129,8 +163,7 @@ fn read_info_json(mut reader: PipeReader, writer: PipeWriter) -> Value {
     }
 }
 
-
-fn signal_trap(pids: Vec<u64>, block: bool) {
+fn signal_trap(pids: Vec<i32>, block: bool) {
     let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
 
     thread::spawn(move || {
@@ -138,7 +171,7 @@ fn signal_trap(pids: Vec<u64>, block: bool) {
             if block { 
                 for pid in pids.iter() {
                     if Path::new(&format!("/proc/{}/", pid)).exists() { 
-                        kill(Pid::from_raw(*pid as i32), Signal::SIGKILL).unwrap(); 
+                        kill(Pid::from_raw(*pid), Signal::SIGKILL).unwrap(); 
                     }
                 }
             }
@@ -149,12 +182,11 @@ fn signal_trap(pids: Vec<u64>, block: bool) {
 fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<Child>, tc: TermControl) {  
     let bwrap_pid = value["child-pid"].as_u64().unwrap_or_default();
     let proc: &str = &format!("/proc/{}/", bwrap_pid);
-    let mut j: Vec<u64> = [bwrap_pid].to_vec();
-    
-    for job in jobs.iter_mut() { 
-        j.push(job.id() as u64); 
-    }
+    let mut j: Vec<i32> = jobs.iter_mut()
+        .map(|j| j.id() as i32)
+        .collect::<Vec<_>>();
 
+    j.push(bwrap_pid as i32);
     signal_trap(j, block.clone()); 
 
     match process.wait() {
@@ -209,19 +241,17 @@ fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &InsVars, args: &m
 fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut ExecutionArgs) {
     for p in per.iter() {
         match p.check() {
-        Ok(condition) => {
-            match condition {
+            Ok(condition) => match condition {
                 Some(b) => {
                     p.register(args);
+                    
                     if let Condition::SuccessWarn(warning) = b {
                         print_warning(format!("{}: {} ", p.module(), warning));
                     }
                 },
                 None => continue
-            }
-        },
-        Err(condition) => 
-            match condition {
+            },
+            Err(condition) => match condition {
                 PermError::Warn(error) => {
                     print_warning(format!("Failed to register permission {}: {} ", p.module(), error));
                 },
@@ -230,7 +260,7 @@ fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut ExecutionArgs
                     exit(1);
                 }
             }
-        }      
+        }    
     }
 }
 
@@ -247,7 +277,7 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
     match Command::new("xdg-dbus-proxy")
     .arg(dbus_session).arg(&*DBUS_SOCKET)
     .args(args.get_dbus()).spawn() {
-         Ok(mut child) => {
+        Ok(mut child) => {
             let mut increment: u8 = 0;
             
             args.robind(&*DBUS_SOCKET, &dbus_socket_path);
@@ -270,7 +300,7 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
             }
 
             child
-         },
+        },
         Err(_) => {
             print_error("Activation of xdg-dbus-proxy failed.");
             exit(2); 
@@ -313,10 +343,39 @@ fn clean_up_socket(path: &str) {
 
 fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>) {  
     crate::utils::test_root(ins.vars());
- 
+
+    if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
+        print_help_error(error); 
+    }
+
     match utils::fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
         Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0)),
         Err(_) => print_error("Failed to initialise bwrap."), 
     }
 }
 
+fn check_path(ins: &InstanceHandle, args: &Vec<Rc<str>>, path: Vec<&str>) -> Result<(), String> {
+    if args.len() == 0 {
+        Err(format!("Runtime parameters not specified."))?
+    }
+
+    let exec = args.get(0).unwrap().as_ref();
+    let root = ins.vars().root().as_ref();
+
+    for dir in path {
+        match Path::new(&format!("{}/{}",root,dir)).try_exists() {
+            Ok(_) => {
+                if Path::new(&format!("{}/{}/{}",root,dir,exec)).exists() {
+                    return Ok(())
+                }
+
+                if Path::new(&format!("{}/{}",root,exec)).exists() {
+                    return Ok(())
+                }
+            },
+            Err(error) => Err(&format!("Invalid {} variable '{}': {}", style("PATH").bold(), dir, error))?
+        }
+    }
+
+    Err(format!("'{}' not available container {}.", exec, style("PATH").bold()))
+}

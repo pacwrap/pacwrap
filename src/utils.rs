@@ -42,8 +42,14 @@ pub fn check_socket(socket: &String) -> bool {
     match UnixStream::connect(&Path::new(socket)) { Ok(_) => true, Err(_) => false, }
 }
 
-pub fn print_help_msg(args: &str) {
-    println!("pacwrap error: {} ", args);
+pub fn print_help_error(args: impl Into<String>) {
+    print_error(args.into());
+    println!("Try 'pacwrap -h' for more information on valid operational parameters.");
+    exit(1);
+}
+
+pub fn print_help_msg(args: impl Into<String>) {
+    println!("pacwrap error: {} ", args.into());
     println!("Try 'pacwrap -h' for more information on valid operational parameters.");
     exit(1);
 }
