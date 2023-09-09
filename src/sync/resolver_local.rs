@@ -1,14 +1,13 @@
+use std::collections::HashSet;
 
 use alpm::{Package, Alpm, PackageReason};
 
-use crate::sync::utils::get_local_package;
-
-use super::transaction::Error;
+use super::{transaction::Error, utils::get_local_package};
 
 pub struct LocalDependencyResolver<'a> {
-    resolved: Vec<&'a str>,
+    resolved: HashSet<&'a str>,
     packages: Vec<Package<'a>>,
-    ignored: &'a Vec<&'a str>,
+    ignored: &'a HashSet<&'a str>,
     handle: &'a Alpm,
     depth: isize,
     recursive: bool,
@@ -17,9 +16,9 @@ pub struct LocalDependencyResolver<'a> {
 } 
 
 impl <'a>LocalDependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a Vec<&'a str>, recurse: bool, cascade: bool, exp: bool) -> Self {
+    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<&'a str>, recurse: bool, cascade: bool, exp: bool) -> Self {
         Self {
-            resolved: Vec::new(),
+            resolved: HashSet::new(),
             packages: Vec::new(),
             ignored: ignorelist,
             depth: 0,
@@ -43,28 +42,37 @@ impl <'a>LocalDependencyResolver<'a> {
         let mut synchronize: Vec<&'a str> = Vec::new();
         
         for pkg in packages {
-            if self.resolved.contains(&pkg) || self.ignored.contains(&pkg) {
+            if let Some(_) = self.resolved.get(pkg) {
                 continue;
             }
 
-            if let Some(pkg) = get_local_package(&self.handle, pkg) {   
-                let req_by = pkg.required_by();
-                let required = req_by.iter().collect::<Vec<&str>>();
+            if let Some(_) = self.ignored.get(pkg) {
+                continue;
+            }
 
-                if required.iter().filter_map(|p|
-                    match self.resolved.contains(&p) {
-                        false => Some(()), true => None
-                    }).collect::<Vec<_>>().len() > 0 {
-                    continue;
-                }
-
+            if let Some(pkg) = get_local_package(&self.handle, pkg) {    
                 if self.explicit && self.depth > 0
                 && pkg.reason() == PackageReason::Explicit {
                     continue;
                 }
 
-                self.resolved.push(pkg.name());
+                if pkg.required_by()
+                    .iter()
+                    .filter_map(|p|
+                    match self.resolved.get(p) {
+                        None => Some(()), Some(_) => None
+                    })
+                    .count() > 0 {
+                    continue;
+                }
+
                 self.packages.push(pkg);
+                self.resolved.insert(pkg.name());
+                
+                if ! self.recursive {
+                    continue;
+                }
+
                 synchronize.extend(pkg.depends()
                     .iter()
                     .filter_map(|p| 
@@ -78,10 +86,10 @@ impl <'a>LocalDependencyResolver<'a> {
                 }
 
                 for package in self.handle.localdb().pkgs() { 
-                    if package.depends().iter().filter_map(|d| 
-                        match self.resolved.contains(&d.name()) {
-                            true => Some(()), false => None
-                        }).collect::<Vec<_>>().len() > 0 {
+                    if package.depends()
+                        .iter()
+                        .filter_map(|d| self.resolved.get(d.name()))
+                        .count() > 0 {
                         synchronize.push(package.name());
                     }
                 }

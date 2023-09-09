@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, collections::HashSet};
 
 use alpm::{Package, Alpm};
 
@@ -6,18 +6,18 @@ use super::{transaction::Error,
     utils::{get_package, get_local_package}};
 
 pub struct DependencyResolver<'a> {
-    resolved: Vec<&'a str>,
+    resolved: HashSet<&'a str>,
     packages: Vec<Package<'a>>,
     keys: Vec<Rc<str>>,
-    ignored: &'a Vec<&'a str>,
+    ignored: &'a HashSet<&'a str>,
     handle: &'a Alpm,
     depth: isize,
 } 
 
 impl <'a>DependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a Vec<&'a str>) -> Self {
+    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<&'a str>) -> Self {
         Self {
-            resolved: Vec::new(),
+            resolved: HashSet::new(),
             packages: Vec::new(),
             keys: Vec::new(),
             ignored: ignorelist,
@@ -39,13 +39,17 @@ impl <'a>DependencyResolver<'a> {
         let mut synchronize: Vec<&'a str> = Vec::new(); 
         
         for pkg in packages {
-            if self.resolved.contains(&pkg) || self.ignored.contains(&pkg) {
+            if let Some(_) = self.resolved.get(pkg) {
                 continue;
-            } 
+            }
+
+            if let Some(_) = self.ignored.get(pkg) {
+                continue;
+            }
 
             if let Some(pkg) = get_package(&self.handle, pkg) {   
-                self.resolved.push(pkg.name());
-                self.packages.push(pkg);               
+                self.packages.push(pkg);
+                self.resolved.insert(pkg.name());
                 synchronize.extend(pkg.depends()
                     .iter()
                     .filter_map(|p| 

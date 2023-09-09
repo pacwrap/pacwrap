@@ -52,9 +52,9 @@ impl Transaction for Stage {
         handle.ignore();
 
         match ag.action() {
-            TransactionType::Upgrade(upgrade) => {  
+            TransactionType::Upgrade(upgrade, downgrade) => {  
                 if *upgrade {
-                    handle.alpm().sync_sysupgrade(false).unwrap();
+                    handle.alpm().sync_sysupgrade(*downgrade).unwrap();
                 }
 
                 handle.prepare_add(ag.flags())?;

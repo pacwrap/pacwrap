@@ -34,7 +34,7 @@ impl Transaction for Prepare {
                     }
                 }
 
-                if let TransactionType::Upgrade(upgrade) = ag.action() {
+                if let TransactionType::Upgrade(upgrade, _) = ag.action() {
                     if ! upgrade && handle.queue.len() == 0 {
                         Err(Error::NothingToDo)?
                     }
@@ -66,7 +66,7 @@ impl Transaction for Prepare {
                             .filter(|a| inshandle.metadata()
                                 .dependencies()
                                 .contains(a))
-                                .collect::<Vec<_>>().len() > 0 {
+                                .count() > 0 {
                                     return Ok(TransactionState::StageForeign)
                             }
 

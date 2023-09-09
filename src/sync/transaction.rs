@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use bitflags::bitflags;
@@ -51,7 +52,7 @@ pub enum TransactionState {
 }
 
 pub enum TransactionType {
-    Upgrade(bool),
+    Upgrade(bool, bool),
     Remove(bool, bool, bool),
 }
 
@@ -82,8 +83,8 @@ bitflags! {
 }
 
 pub struct TransactionHandle {
-    ignore: Vec<Rc<str>>, 
-    ignore_dep: Vec<Rc<str>>,
+    ignore: HashSet<Rc<str>>, 
+    ignore_dep: HashSet<Rc<str>>,
     deps: Option<Vec<Rc<str>>>,
     queue: Vec<Rc<str>>,
     mode: TransactionMode,
@@ -125,14 +126,14 @@ impl TransactionState {
 impl TransactionType {
     fn as_str(&self) -> &str {
         match self {
-            Self::Upgrade(_) => "installation",
+            Self::Upgrade(_,_) => "installation",
             Self::Remove(_,_,_) => "removal"
         }
     }
 
     fn action_message(&self, state: TransactionMode) {
         let message = match self {
-            Self::Upgrade(_) => match state {
+            Self::Upgrade(_,_) => match state {
                 TransactionMode::Foreign => "Synchronizing foreign database...",
                 TransactionMode::Local => "Synchronizing resident container..."
             }, 
@@ -145,7 +146,7 @@ impl TransactionType {
     fn begin_message(&self, inshandle: &InstanceHandle) {
         let instance = inshandle.vars().instance();
         let message = match self {
-            Self::Upgrade(upgrade) => match upgrade { 
+            Self::Upgrade(upgrade, _) => match upgrade { 
                 true => format!("Checking {instance} for updates..."),
                 false => format!("Transacting {instance}...")
             }
@@ -162,7 +163,7 @@ impl Error {
             Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}.", style(u).bold()),
             Self::TargetUpstream(pkg) => format!("Target package {}: Installed in upstream container.", style(pkg).bold()),
             Self::TargetNotInstalled(pkg) => format!("Target package {}: Not installed.", style(pkg).bold()),
-            Self::TargetNotAvailable(pkg) => format!("Target package {}: Not available in remote repositories.", style(pkg).bold()),
+            Self::TargetNotAvailable(pkg) => format!("Target package {}: Not available in sync databases.", style(pkg).bold()),
             Self::InitializationFailure(msg) => format!("Failure to initialize transaction: {msg}"),
             Self::PreparationFailure(msg) => format!("Failure to prepare transaction: {msg}"),
             Self::TransactionFailure(msg) => format!("Failure to commit transaction: {msg}"),
@@ -174,8 +175,8 @@ impl Error {
 impl TransactionHandle { 
     pub fn new(al: Alpm, q: Vec<Rc<str>>) -> Self {
         Self {
-            ignore: Vec::new(),
-            ignore_dep: Vec::new(),
+            ignore: HashSet::new(),
+            ignore_dep: HashSet::new(),
             deps: None,
             mode: TransactionMode::Local,
             queue: q,
@@ -190,7 +191,7 @@ impl TransactionHandle {
         };
 
         for pkg in self.alpm.localdb().pkgs() {            
-            if ignored.contains(&pkg.name().into()) {
+            if let Some(_) = ignored.get(pkg.name().into()) {
                 continue;
             }
 
@@ -273,7 +274,7 @@ impl TransactionHandle {
 
         let ignored = ignored.iter()
             .map(|i| i.as_ref())
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
         let queued = self.queue.iter()
             .map(|i| i.as_ref())
             .collect::<Vec<_>>();
@@ -284,8 +285,10 @@ impl TransactionHandle {
         }
 
         for pkg in packages.1 {
-            if ! self.ignore.contains(&pkg.name().into()) && self.mode.bool() {
-                continue;
+            if let None = self.ignore.get(pkg.name().into()) {
+                if let TransactionMode::Foreign = self.mode {
+                    continue;
+                }
             }
 
             self.alpm.trans_add_pkg(pkg).unwrap();        
@@ -312,7 +315,7 @@ impl TransactionHandle {
 
         let ignored = ignored.iter()
             .map(|i| i.as_ref())
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
         let queued = self.queue.iter()
             .map(|i| i.as_ref())
             .collect::<Vec<_>>(); 
@@ -326,7 +329,7 @@ impl TransactionHandle {
 
     fn trans_ready(&self, trans_type: &TransactionType) -> Result<()> {
         if match trans_type {
-            TransactionType::Upgrade(_) => self.alpm.trans_add().len(),
+            TransactionType::Upgrade(_,_) => self.alpm.trans_add().len(),
             TransactionType::Remove(_,_,_) => self.alpm.trans_remove().len()
         } > 0 {
             Ok(())
