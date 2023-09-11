@@ -177,9 +177,9 @@ impl <'a>FilesystemStateSync<'a> {
         self.pool().unwrap().spawn(move ||{
             let state = filesystem_state(ds, map);
 
-            link_filesystem(&state, &root);
             delete_files(&state, &ds_res, &root);
             delete_directories(&state, &ds_res, &root);
+            link_filesystem(&state, &root);
             tx.send((dep, state)).unwrap(); 
         })
     }
@@ -309,9 +309,13 @@ fn delete_files(state: &FilesystemState, state_res: &FilesystemState, root: &str
 }
 
 fn delete_directories(state: &FilesystemState, state_res: &FilesystemState, root: &str) { 
+    let (tx, rx) = mpsc::sync_channel(0);
+    let tx_clone: mpsc::SyncSender<()> = tx.clone();
+
     state_res.files.par_iter().for_each(move |file| { 
         if let None = state.files.get(file.0) {  
-           let dest: &str = &format!("{}{}", root, file.0);
+            let _ = tx_clone;
+            let dest: &str = &format!("{}{}", root, file.0);
             let path = Path::new(dest); 
 
             if path.exists() && file.1.1 { 
@@ -321,6 +325,9 @@ fn delete_directories(state: &FilesystemState, state_res: &FilesystemState, root
             }
         }
     });
+
+    drop(tx);
+    rx.try_iter();
 }
 
 fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {   
@@ -376,12 +383,12 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {
 pub fn create_hard_link(src: &str, dest: &str) -> Result<(), String> {   
     let src_path = Path::new(&src); 
     let dest_path = Path::new(&dest); 
-    
-    if ! dest_path.exists() {
-        if ! src_path.exists() {
-            Err(format!("Source file '{}': entity not found.", &dest))?
-        }
 
+    if ! src_path.exists() {
+        Err(format!("Source file '{}': entity not found.", &src))?
+    }
+
+    if ! dest_path.exists() {
         if let Some(path) = dest_path.parent() {
             if ! path.exists() {
                 let result = create_directory(&path);
@@ -394,15 +401,11 @@ pub fn create_hard_link(src: &str, dest: &str) -> Result<(), String> {
 
         hard_link(src_path, dest_path)
    } else {
-        if ! src_path.exists() {
-            Err(format!("Source file '{}': entity not found.", &dest))?
-        }
-
         let meta_dest = fs::metadata(&dest_path).unwrap();
         let meta_src = fs::metadata(&src_path).unwrap(); 
 
         if meta_src.ino() != meta_dest.ino() {
-             let result = remove_file(dest_path);
+            let result = remove_file(dest_path);
 
             match result {
                 Err(_) => result, 
