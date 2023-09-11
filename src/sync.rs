@@ -19,8 +19,7 @@ use crate::utils::{Arguments,
     test_root,
     handle_process,
     print_warning,
-    print_error,
-    print_help_msg};
+    print_error};
 use crate::config::{InsVars,
     InstanceHandle,
     cache::InstanceCache};
@@ -183,10 +182,6 @@ fn query_database(vars: InsVars, explicit: bool, quiet: bool) {
             false => println!("{} {} ", pkg.name(), style(pkg.version()).green().bold()), 
         }
     } 
-}
-
-pub fn search() { 
-    print_help_msg("Functionality is currently unimplemented.");
 }
 
 pub fn interpose() {

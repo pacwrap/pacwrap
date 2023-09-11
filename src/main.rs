@@ -21,7 +21,6 @@ enum Options {
     BashHelp,
     BashUtils,
     Version,
-    Search,
     None,
 }
 
@@ -32,7 +31,6 @@ fn main() {
         .map(&mut option)
         .short("-Q").long("--query").set(Options::Query)
         .long("--fake-chroot").set(Options::Sync)
-        .short("-Ss").long("--search").set(Options::Search)
         .short("-S").long("--sync").set(Options::Interpose)
         .short("-R").long("--remove").set(Options::Remove)
         .short("-E").long("--exec").set(Options::Exec)
@@ -47,7 +45,6 @@ fn main() {
     match option {
         Options::Exec => exec::execute(),
         Options::Sync => sync::synchronize(),
-        Options::Search => sync::search(),
         Options::Interpose => sync::interpose(), 
         Options::Query => sync::query(),
         Options::Remove => sync::remove(),
