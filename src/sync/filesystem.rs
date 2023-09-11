@@ -394,15 +394,15 @@ pub fn create_hard_link(src: &str, dest: &str) -> Result<(), String> {
 
         hard_link(src_path, dest_path)
    } else {
+        if ! src_path.exists() {
+            Err(format!("Source file '{}': entity not found.", &dest))?
+        }
+
         let meta_dest = fs::metadata(&dest_path).unwrap();
         let meta_src = fs::metadata(&src_path).unwrap(); 
 
         if meta_src.ino() != meta_dest.ino() {
-            if ! src_path.exists() {
-                Err(format!("Source file '{}': entity not found.", &dest))?
-            }
-
-            let result = remove_file(dest_path);
+             let result = remove_file(dest_path);
 
             match result {
                 Err(_) => result, 
