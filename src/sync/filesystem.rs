@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, Metadata};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
@@ -249,8 +249,10 @@ fn filesystem_state(mut state: FilesystemState, map: Vec<(Arc<str>,FilesystemSta
                     }
 
                     let metadata = entry.metadata().unwrap(); 
+                    let is_dir = metadata.is_dir();
+                    let is_symlink = metadata.is_symlink();
                     
-                    state.files.insert(src_tr, (src,metadata.is_dir(),metadata.is_symlink()));
+                    state.files.insert(src_tr, (src,is_dir,is_symlink));
                 }
              } else {
                 state.files.extend(ins_state.1.files);
@@ -342,24 +344,15 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {
             }
         }
 
-        let result = remove_soft_link(dest_path); 
+        remove_soft_link(dest_path)?;
 
-        match result {
-            Err(_) => result,
-            Ok(_) => {
-                if let Some(path) = dest_path.parent() {
-                    if ! path.exists() { 
-                        let result = create_directory(&path);
-
-                        if let Err(_) = result {
-                            result?
-                        } 
-                    }
-                }
-
-                soft_link(&src_path, dest_path)
+        if let Some(path) = dest_path.parent() {
+            if ! path.exists() { 
+                create_directory(&path)?;
             }
         }
+
+        soft_link(&src_path, dest_path)
     } else { 
         if let Ok(attr_dest) = fs::read_link(dest_path) {
             let attr = fs::read_link(src).unwrap();
@@ -368,12 +361,8 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {
                 return Ok(());
             }
             
-            let result = remove_soft_link(dest_path);
-
-            match result {
-                Err(_) => result, 
-                Ok(_) => soft_link(&attr, dest_path)
-            }?
+            remove_soft_link(dest_path)?;
+            soft_link(&attr, dest_path)?;
         }
    
         Ok(())
@@ -391,29 +380,28 @@ pub fn create_hard_link(src: &str, dest: &str) -> Result<(), String> {
     if ! dest_path.exists() {
         if let Some(path) = dest_path.parent() {
             if ! path.exists() {
-                let result = create_directory(&path);
-                
-                if let Err(_) = result {
-                    result?
-                }
+                create_directory(&path)?;    
             }
         }
 
         hard_link(src_path, dest_path)
    } else {
-        let meta_dest = fs::metadata(&dest_path).unwrap();
-        let meta_src = fs::metadata(&src_path).unwrap(); 
+        let meta_dest = metadata(&dest_path)?;
+        let meta_src = metadata(&src_path)?; 
 
         if meta_src.ino() != meta_dest.ino() {
-            let result = remove_file(dest_path);
-
-            match result {
-                Err(_) => result, 
-                Ok(_) => hard_link(src_path, dest_path)
-            }?
+            remove_file(dest_path)?;
+            hard_link(src_path, dest_path)?;
         }
 
         Ok(())
+    }
+}
+
+fn metadata(path: &Path) -> Result<Metadata,String> {
+    match fs::metadata(path) {
+        Ok(meta) => Ok(meta),
+        Err(err) => Err(format!("Failed to obtain metadata for '{}': {}", path.to_str().unwrap(), err.kind())),
     }
 }
 
