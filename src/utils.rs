@@ -15,6 +15,7 @@ pub use termcontrol::TermControl;
 pub mod termcontrol;
 pub mod arguments;
 pub mod prompt;
+pub mod byteunit;
 
 pub fn test_root(instance: &InsVars) {
     if ! Path::new(instance.root().as_ref()).exists() || ! Path::new(&instance.home().as_ref()).exists() {  

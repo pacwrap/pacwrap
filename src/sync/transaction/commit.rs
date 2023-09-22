@@ -7,10 +7,10 @@ use alpm::{Alpm,
 use crate::{sync::{
     query_event::{self, QueryCallback},
     progress_event::{self, ProgressCallback},
-    utils::format_unit, 
     dl_event::{DownloadCallback, self}}, 
     exec::utils::execute_in_container, 
-    utils::{print_error, print_warning}};
+    utils::{print_error, print_warning, 
+        byteunit::{SI, ToByteUnit}}};
 
 use crate::utils::prompt::prompt;
 use crate::config::InstanceHandle;
@@ -112,7 +112,7 @@ fn summary(handle: &Alpm) {
     let mut download: i64 = 0;
     let mut files_to_download: usize = 0; 
     let mut pkglist: String = String::new();
-    let mut current_line_len:usize = 0;
+    let mut current_line_len: usize = 0;
     let remove = if handle.trans_remove().len() > 0 { true } else { false };
     let packages = if remove { handle.trans_remove() } else { handle.trans_add() };
     let total_str = if remove { "Total Removed Size" } else { "Total Installed Size" };
@@ -138,7 +138,7 @@ fn summary(handle: &Alpm) {
         }
 
         current_line_len += string_len;
-        installed_size_old += pkg.isize();             
+        installed_size_old += pkg.isize(); 
         installed_size += pkg_sync.isize();
         
         if download_size > 0 {
@@ -150,17 +150,17 @@ fn summary(handle: &Alpm) {
     }
 
     print!("{pkglist}\n\n");
-    println!("{}: {}", style(total_str).bold(), format_unit(installed_size));  
+    println!("{}: {}", style(total_str).bold(), installed_size.to_byteunit(SI));  
 
     let net = installed_size-installed_size_old;
 
     if net != 0 {
-        println!("{}: {}", style("Net Upgrade Size").bold(), format_unit(net)); 
+        println!("{}: {}", style("Net Upgrade Size").bold(), net.to_byteunit(SI)); 
     }
 
     if download > 0 {
-        println!("{}: {}", style("Total Download Size").bold(), format_unit(download));
-        handle.set_dl_cb(DownloadCallback::new(download.try_into().unwrap(), files_to_download), dl_event::download_event);
+        println!("{}: {}", style("Total Download Size").bold(), download.to_byteunit(SI));
+        handle.set_dl_cb(DownloadCallback::new(download as u64, files_to_download), dl_event::download_event);
     }
 
     println!();
