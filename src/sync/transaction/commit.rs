@@ -3,14 +3,14 @@ use alpm::{Alpm,
     CommitResult, 
     FileConflictType, 
     PrepareResult};
+use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
 use crate::{sync::{
     query_event::{self, QueryCallback},
     progress_event::{self, ProgressCallback},
     dl_event::{DownloadCallback, self}}, 
     exec::utils::execute_in_container, 
-    utils::{print_error, print_warning, 
-        byteunit::{SI, ToByteUnit}}};
+    utils::{print_error, print_warning}};
 
 use crate::utils::prompt::prompt;
 use crate::config::InstanceHandle;
