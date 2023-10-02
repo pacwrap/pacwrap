@@ -364,13 +364,11 @@ fn check_path(ins: &InstanceHandle, args: &Vec<Rc<str>>, path: Vec<&str>) -> Res
 
     for dir in path {
         match Path::new(&format!("{}/{}",root,dir)).try_exists() {
-            Ok(_) => {
-                if Path::new(&format!("{}/{}/{}",root,dir,exec)).exists() {
-                    return Ok(())
-                }
+            Ok(_) => { 
+                let exists = dest_exists(root, dir, exec, 0)?; 
 
-                if Path::new(&format!("{}/{}",root,exec)).exists() {
-                    return Ok(())
+                if exists {
+                    return Ok(());
                 }
             },
             Err(error) => Err(&format!("Invalid {} variable '{}': {}", style("PATH").bold(), dir, error))?
@@ -378,4 +376,37 @@ fn check_path(ins: &InstanceHandle, args: &Vec<Rc<str>>, path: Vec<&str>) -> Res
     }
 
     Err(format!("'{}' not available container {}.", exec, style("PATH").bold()))
+}
+
+fn dest_exists(root: &str, dir: &str, exec: &str, mut recursion: u8) -> Result<bool,String> {
+    let path = format!("{}{}/{}", root, dir, exec);
+    let path = Path::new(&path);
+    let path_direct = format!("{}/{}", root, exec);
+    let path_direct = Path::new(&path_direct);
+
+    if recursion == 40 {
+        Err(format!("'{}': Symbolic link recursion depth maximum of {} exceeded.", exec, style(recursion).bold()))?
+    }
+
+    recursion += 1;
+
+    if path.is_symlink() {
+        if let Ok(path) = path.read_link() {
+            if let Some(path) = path.as_os_str().to_str() {
+                return dest_exists(root, dir, path, recursion);
+            }
+        }
+    } else if path.exists() {
+        return Ok(true) 
+    } else if path_direct.is_symlink() {
+        if let Ok(path) = path_direct.read_link() {
+            if let Some(path) = path.as_os_str().to_str() {
+                return dest_exists(root, dir, path, recursion);
+            } 
+        }
+    } else if path_direct.exists() {
+        return Ok(true)
+    }
+
+    Ok(false)
 }
