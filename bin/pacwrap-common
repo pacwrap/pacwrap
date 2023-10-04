@@ -46,7 +46,7 @@ VER="v0.9.19 "
 
 MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap"
-CREATE_SCRIPT="pacwrap-create"
+CREATE_SCRIPT="pacwrap"
 UTILS_SCRIPT="pacwrap-utils"
 SYNC_SCRIPT="pacwrap"
 PS_SCRIPT="pacwrap-ps"

@@ -353,7 +353,7 @@ replicate_instance() {
 	
 	local depend=
 	local type=$(return_type)
-	local params="-Cn"
+	local params="c"
 
 	[[ $SWITCH == *v* ]] && params+="v"
 	[[ $type != BASE ]] && depend=$(return_dependency)
@@ -371,12 +371,13 @@ replicate_instance() {
 			return;;
 	esac
 
-	export CONCURRENCY_LIMIT=${INSTANCE_CONFIG[$instance,$CONF_CONCURRENT_LIMIT]} \
-	       ENV_VARS="${INSTANCE_CONFIG[$instance,$CONF_ENV]}" \
-	       MOUNT="${INSTANCE_CONFIG[$instance,$CONF_MOUNT]}" \
-	       PERMISSIONS="${INSTANCE_CONFIG[$instance,$CONF_PERMS]}" \
-	       PERMISSIONS_DBUS="${INSTANCE_CONFIG[$instance,$CONF_DBUS]}" \
-	       DEPEND=$depend; $CREATE_SCRIPT $params $instance $(return_packages)
+	local depend_params
+
+	for dep in $(return_dependencies); do
+		depend_params+="-t $dep "
+	done
+
+	$CREATE_SCRIPT -Syut$params --noconfirm $instance $depend_params $(return_packages)
 
 	if [[ $? == 0 ]]; then 
 		printf " %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					
