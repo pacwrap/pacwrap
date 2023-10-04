@@ -25,7 +25,7 @@ use crate::config::{self,
     Permission, 
     Dbus, 
     permission::*, 
-    InstanceHandle};
+    InstanceHandle, InstanceType};
 use crate::utils::{TermControl, 
     Arguments, 
     arguments,
@@ -63,6 +63,11 @@ pub fn execute() {
         .require_target(1);
     let runtime = args.get_runtime().clone();
     let handle = &config::provide_handle(args.targets().get(0).as_ref().unwrap());
+
+    if let InstanceType::DEP = handle.metadata().container_type() {
+        print_error("Execution in dependencies is not supported.");
+        exit(1);
+    }
 
     if let Options::Verbose = verbose { 
         handle.vars().debug(handle.config(), &runtime); 
