@@ -2,6 +2,7 @@
 
 use std::fmt::Display;
 use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::vec::Vec;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +11,7 @@ use crate::config::filesystem::{Filesystem, root::ROOT, home::HOME};
 use crate::config::dbus::Dbus;
 use crate::config::vars::InsVars;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Instance {
     #[serde(flatten)]  
     metadata: InstanceMetadata,
@@ -27,6 +28,7 @@ impl Instance {
     }
 }
 
+#[derive(Clone)]
 pub struct InstanceHandle {
     instance: Instance,
     vars: InsVars,
@@ -61,7 +63,7 @@ impl InstanceHandle {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct InstanceRuntime {
     #[serde(default)]  
     enable_userns: bool, 
@@ -102,7 +104,7 @@ impl InstanceRuntime {
     pub fn retain_session(&self) -> &bool { &self.retain_session }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum InstanceType {
     LINK,
     BASE,
@@ -143,7 +145,7 @@ impl Default for InstanceType {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct InstanceMetadata {
     #[serde(default)]  
     container_type: InstanceType, 
@@ -151,6 +153,8 @@ pub struct InstanceMetadata {
     dependencies: Vec<Rc<str>>,    
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     explicit_packages: Vec<Rc<str>>,
+    #[serde(default = "time_as_seconds")]
+    meta_version: u64,
 }
 
 impl InstanceMetadata {
@@ -159,15 +163,24 @@ impl InstanceMetadata {
             container_type: ctype,
             dependencies: deps,
             explicit_packages: pkg, 
+            meta_version: time_as_seconds(),
         }
     }
 
     pub fn set(&mut self, dep: Vec<Rc<str>>, pkg: Vec<Rc<str>>) {
-          self.dependencies=dep;
-          self.explicit_packages=pkg;
+            self.dependencies=dep;
+            self.explicit_packages=pkg;
+            self.meta_version = time_as_seconds(); 
     }
 
     pub fn container_type(&self) -> &InstanceType { &self.container_type }
     pub fn dependencies(&self) -> &Vec<Rc<str>> { &self.dependencies }
     pub fn explicit_packages(&self) -> &Vec<Rc<str>> { &self.explicit_packages }
+}
+
+fn time_as_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }

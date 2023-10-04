@@ -1,5 +1,7 @@
 use crate::exec::args::ExecutionArgs;
 
+use dyn_clone::{DynClone, clone_trait_object};
+
 pub mod none;
 mod display;
 mod pulseaudio;
@@ -21,8 +23,10 @@ pub enum PermError {
 }
 
 #[typetag::serde(tag = "permission")]
-pub trait Permission {
+pub trait Permission: DynClone {
     fn check(&self) -> Result<Option<Condition>, PermError>;
     fn register(&self, args: &mut ExecutionArgs);
     fn module(&self) -> &str;
 }
+
+clone_trait_object!(Permission);

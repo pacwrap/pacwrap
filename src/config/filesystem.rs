@@ -1,6 +1,8 @@
 use crate::exec::args::ExecutionArgs;
 use crate::config::InsVars;
 
+use dyn_clone::{DynClone, clone_trait_object};
+
 pub mod home;
 pub mod root;
 mod to_home;
@@ -25,10 +27,12 @@ impl Error {
 }
 
 #[typetag::serde(tag = "mount")]
-pub trait Filesystem {
+pub trait Filesystem: DynClone {
     fn check(&self, vars: &InsVars) -> Result<(), Error>;
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars);
 }
+
+clone_trait_object!(Filesystem);
 
 fn default_permission() -> String {
     "ro".into()
