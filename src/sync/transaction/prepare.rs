@@ -74,7 +74,6 @@ impl Transaction for Prepare {
                         }
                     }
 
-                ag.sync_filesystem(inshandle);
                 Ok(TransactionState::StageForeign)
             }
             _ => unreachable!()

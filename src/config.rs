@@ -21,6 +21,7 @@ pub mod permission;
 pub mod dbus;
 pub mod cache;
 pub mod instance;
+pub mod init;
 
 pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {   
     let mut f = match File::create(Path::new(ins.vars().config_path().as_ref())) {

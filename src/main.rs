@@ -25,6 +25,8 @@ enum Options {
 }
 
 fn main() {
+    config::init::init();
+
     let mut option: Options = Options::None;
 
     Arguments::new()

@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::process::exit;
 use std::rc::Rc;
 
+use crate::exec::utils::execute_in_container;
 use crate::log::Logger;
 use crate::sync::{self,
-    filesystem::FilesystemStateSync};
+    filesystem::FileSystemStateSync};
 use crate::config::{InstanceHandle, 
     InstanceType::ROOT,
     cache::InstanceCache};
@@ -25,7 +26,7 @@ pub struct TransactionAggregator<'a> {
     updated: Vec<Rc<str>>,
     pkg_queue: HashMap<Rc<str>, Vec<Rc<str>>>,
     action: TransactionType,
-    filesystem_state: Option<FilesystemStateSync<'a>>,
+    filesystem_state: Option<FileSystemStateSync<'a>>,
     cache: &'a InstanceCache,
     keyring: bool,
     logger: &'a mut Logger,
@@ -38,7 +39,7 @@ impl <'a>TransactionAggregator<'a> {
             queried: Vec::new(),
             updated: Vec::new(),
             pkg_queue: HashMap::new(),
-            filesystem_state: Some(FilesystemStateSync::new(inscache)),
+            filesystem_state: Some(FileSystemStateSync::new(inscache)),
             action: t, 
             cache: inscache,
             keyring: false,
@@ -94,6 +95,12 @@ impl <'a>TransactionAggregator<'a> {
         }
     }
 
+    pub fn keyring_update(&mut self, inshandle: &InstanceHandle) {
+        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"));
+        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"));
+        self.keyring = true;
+    }
+
     pub fn sync_filesystem(&mut self, inshandle: &InstanceHandle) { 
         if let ROOT = inshandle.metadata().container_type() {
             return;
@@ -126,7 +133,7 @@ impl <'a>TransactionAggregator<'a> {
         self
     }
 
-    pub fn fs_sync(&mut self) -> Result<&mut FilesystemStateSync<'a>, Error> { 
+    pub fn fs_sync(&mut self) -> Result<&mut FileSystemStateSync<'a>, Error> { 
         match self.filesystem_state.as_mut() {
             Some(linker) => Ok(linker),
             None => Err(Error::LinkerUninitialised),
@@ -138,6 +145,14 @@ impl <'a>TransactionAggregator<'a> {
             self.flags = self.flags | TransactionFlags::PREVIEW;
         }
         
+        self
+    }
+
+    pub fn create(mut self, no_confirm: bool) -> Self {
+        if no_confirm {
+            self.flags = self.flags | TransactionFlags::CREATE; 
+        }
+
         self
     }
 
@@ -167,10 +182,6 @@ impl <'a>TransactionAggregator<'a> {
 
     pub fn queue(&mut self, ins: Rc<str>, install: Vec<Rc<str>>) {
         self.pkg_queue.insert(ins, install);
-    }
-
-    pub fn set_keyring_synced(&mut self) {
-        self.keyring = true;
     }
 
     pub fn set_updated(&mut self, updated: Rc<str>) {

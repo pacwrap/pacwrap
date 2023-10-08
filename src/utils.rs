@@ -15,10 +15,9 @@ pub use termcontrol::TermControl;
 pub mod termcontrol;
 pub mod arguments;
 pub mod prompt;
-pub mod byteunit;
 
 pub fn test_root(instance: &InsVars) {
-    if ! Path::new(instance.root().as_ref()).exists() || ! Path::new(&instance.home().as_ref()).exists() {  
+    if ! Path::new(instance.root().as_ref()).exists() {  
         print_error(format!("Target container {}: not found.", instance.instance()));
         exit(2);
     }
@@ -62,4 +61,6 @@ pub fn handle_process(result: Result<Child, Error>) {
     }
 }
 
-fn wait_on_process(mut child: Child) { child.wait().ok(); }
+fn wait_on_process(mut child: Child) { 
+    child.wait().ok(); 
+}

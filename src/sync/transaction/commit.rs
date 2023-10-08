@@ -10,7 +10,8 @@ use crate::{sync::{
     progress_event::{self, ProgressCallback},
     dl_event::{DownloadCallback, self}}, 
     exec::utils::execute_in_container, 
-    utils::{print_error, print_warning}};
+    utils::{print_error, print_warning}, 
+    config::InstanceType};
 
 use crate::utils::prompt::prompt;
 use crate::config::InstanceHandle;
@@ -19,7 +20,8 @@ use super::{Transaction,
     TransactionHandle, 
     TransactionAggregator,
     TransactionFlags,
-    Result, Error};
+    Result, 
+    Error};
 
 pub struct Commit {
     state: TransactionState,
@@ -80,10 +82,16 @@ impl Transaction for Commit {
         }
 
         if self.keyring {
-            keyring_update(ag, inshandle);
+            ag.keyring_update(inshandle);        
+        }
+
+        if let TransactionState::Commit(_) = self.state {
+            ag.sync_filesystem(inshandle);
+            execute_ldconfig(inshandle);
         }
 
         handle.mark_depends();
+        handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
         ag.set_updated(instance.clone());
         ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
         state_transition(&self.state, handle)
@@ -100,10 +108,12 @@ fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle
     })
 }
 
-fn keyring_update(ag: &mut TransactionAggregator, inshandle: &InstanceHandle) {
-    execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"));
-    execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"));
-    ag.set_keyring_synced();
+fn execute_ldconfig(inshandle: &InstanceHandle) {
+    if let InstanceType::DEP = inshandle.metadata().container_type() {
+        return;
+    }
+
+    execute_in_container(inshandle, vec!("/usr/bin/ldconfig"));
 }
 
 fn summary(handle: &Alpm) { 

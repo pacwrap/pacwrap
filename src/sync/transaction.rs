@@ -5,6 +5,7 @@ use bitflags::bitflags;
 use console::style;
 use alpm::{Alpm, PackageReason};
 
+use crate::config;
 use crate::sync::{
     resolver_local::LocalDependencyResolver,
     resolver::DependencyResolver,
@@ -75,10 +76,11 @@ pub trait Transaction {
 bitflags! {
     pub struct TransactionFlags: u8 {
         const NONE = 0;
-        const PREVIEW = 0b0001;
-        const NO_CONFIRM =  0b0010;
-        const FORCE_DATABASE = 0b0100;
-        const DATABASE_ONLY = 0b1000;
+        const PREVIEW = 0b00001;
+        const NO_CONFIRM =  0b00010;
+        const FORCE_DATABASE = 0b00100;
+        const DATABASE_ONLY = 0b01000;
+        const CREATE = 0b10000;
     }
 }
 
@@ -327,6 +329,32 @@ impl TransactionHandle {
         Ok(())
     }
 
+    fn apply_configuration(&self, instance: &InstanceHandle, create: bool) {
+        let depends = instance.metadata().dependencies();
+        let pkgs = self.alpm.localdb()
+            .pkgs()
+            .iter()
+            .filter_map(|p| {
+                if p.reason() == PackageReason::Explicit
+                && ! p.name().starts_with("pacwrap-")
+                && ! self.ignore.contains(p.name()) {
+                    Some(p.name().into())
+                } else {
+                    None
+                }
+            })
+        .collect::<Vec<_>>();
+
+        if &pkgs != instance.metadata().explicit_packages() || create {
+            let mut instance = instance.clone();
+            let depends = depends.clone();
+
+            instance.metadata_mut().set(depends, pkgs);
+            config::save_handle(&instance).ok();  
+            drop(instance);
+        }
+    }
+
     fn trans_ready(&self, trans_type: &TransactionType) -> Result<()> {
         if match trans_type {
             TransactionType::Upgrade(_,_) => self.alpm.trans_add().len(),
@@ -364,11 +392,11 @@ impl TransactionHandle {
     fn alpm(&mut self) -> &Alpm { &self.alpm }
 }
 
-pub fn update<'a>(mut update: TransactionAggregator<'a>, cache: &'a InstanceCache, aux_cache: &'a mut InstanceCache) {
+pub fn update<'a>(mut update: TransactionAggregator<'a>, cache: &'a InstanceCache, aux_cache: &'a mut InstanceCache, sync_fs: bool) {
     update.transaction(&cache.containers_base());
     update.transaction(&cache.containers_dep());
 
-    if update.updated().len() > 0 {
+    if sync_fs || update.updated().len() > 0 {
         aux_cache.populate(); 
 
         if aux_cache.containers_root().len() > 0 {

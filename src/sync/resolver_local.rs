@@ -4,6 +4,7 @@ use alpm::{Package, Alpm, PackageReason};
 
 use super::{transaction::Error, utils::get_local_package};
 
+#[allow(dead_code)]
 pub struct LocalDependencyResolver<'a> {
     resolved: HashSet<&'a str>,
     packages: Vec<Package<'a>>,
@@ -51,19 +52,22 @@ impl <'a>LocalDependencyResolver<'a> {
             }
 
             if let Some(pkg) = get_local_package(&self.handle, pkg) {    
-                if self.explicit && self.depth > 0
-                && pkg.reason() == PackageReason::Explicit {
-                    continue;
-                }
-
-                if pkg.required_by()
-                    .iter()
-                    .filter_map(|p|
-                    match self.resolved.get(p) {
-                        None => Some(()), Some(_) => None
-                    })
-                    .count() > 0 {
-                    continue;
+                if self.depth > 0 {
+                    //TODO: Implement proper explicit package handling
+                    if ! self.cascading
+                    && pkg.reason() == PackageReason::Explicit {
+                        continue;
+                    }
+ 
+                    if pkg.required_by()
+                        .iter()
+                        .filter_map(|p|
+                        match self.resolved.get(p) {
+                            None => Some(()), Some(_) => None
+                        })
+                        .count() > 0 {
+                        continue;
+                    }
                 }
 
                 self.packages.push(pkg);
@@ -75,10 +79,7 @@ impl <'a>LocalDependencyResolver<'a> {
 
                 synchronize.extend(pkg.depends()
                     .iter()
-                    .filter_map(|p| 
-                    match get_local_package(&self.handle, p.name()) { 
-                        Some(pkg) => Some(pkg.name()), None => None, 
-                    })
+                    .map(|pkg| pkg.name())
                     .collect::<Vec<&str>>());
 
                 if ! self.cascading {

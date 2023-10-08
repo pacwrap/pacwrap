@@ -13,12 +13,8 @@ pub struct InsVars {
     config: Rc<str>,
     instance: Rc<str>,
     home_mount: Rc<str>,
-    pub pacman_sync: Rc<str>,
     pub pacman_cache: Rc<str>,
     pub pacman_gnupg: Rc<str>,
-    pub pacman_mirrorlist: Rc<str>, 
-    sync: Rc<str>,
-    syncdb: Rc<str> 
 }
 
 impl InsVars {
@@ -29,11 +25,7 @@ impl InsVars {
             home: format!("{}/home/{}", LOCATION.get_data(), ins).into(),
             root: format!("{}/root/{}", LOCATION.get_data(), ins).into(),
             pacman_gnupg: format!("{}/pacman/gnupg", LOCATION.get_data()).into(),
-            pacman_sync: format!("{}/pacman/sync", LOCATION.get_data()).into(),
             pacman_cache: format!("{}/pkg", LOCATION.get_cache()).into(),
-            pacman_mirrorlist: format!("{}/pacman.d/mirrorlist", LOCATION.get_config()).into(),
-            sync: format!("{}/pacman/sync/pacman.{}.conf", LOCATION.get_config(), ins).into(),
-            syncdb: format!("{}/pacman/syncdb/pacman.{}.conf", LOCATION.get_config(), ins).into(), 
             config: format!("{}/instance/{}.yml", LOCATION.get_config(), ins).into(), 
             home_mount: format!("/home/{}", &ins).into(),   
             user: ins.clone(),
@@ -64,12 +56,8 @@ impl InsVars {
         println!("INSTANCE_ROOT: {}", self.root);   
         println!("INSTANCE_HOME: {}", self.home);
         println!("INSTANCE_HOME_MOUNT: {}", self.home_mount);
-        println!("INSTANCE_SYNC: {}", self.sync);
-        println!("INSTANCE_SYNCDB: {}", self.syncdb);
     }
 
-    pub fn sync(&self) -> &Rc<str> { &self.sync }
-    pub fn syncdb(&self) -> &Rc<str> { &self.syncdb }
     pub fn config_path(&self) -> &Rc<str> { &self.config }
     pub fn root(&self) -> &Arc<str> { &self.root }
     pub fn home(&self) -> &Rc<str> { &self.home }
