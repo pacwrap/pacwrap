@@ -2,7 +2,7 @@
 
 [package]
 name = "pacwrap"
-version = "0.2.11"
+version = "0.3.0"
 edition = "2021"
 
 [dependencies]
@@ -28,6 +28,8 @@ walkdir = "2.3.3"
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 time = { version = "0.3.28", features = ["formatting", "macros", "local-offset", "parsing"] }
 bitflags = "2.4.0"
+simplebyteunit = "0.2.1"
+dyn-clone = "1.0.14"
 
 [profile.release]
 lto = "thin"
