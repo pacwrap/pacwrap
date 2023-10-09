@@ -1,0 +1,9 @@
+[Trigger] 
+Operation = Install 
+Type = Package 
+Target = pacwrap-base-dist
+
+[Action] 
+Description = Configuring base container..
+When = PostTransaction 
+Exec = /usr/bin/pacwrap-dist

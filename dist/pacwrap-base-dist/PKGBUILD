@@ -1,0 +1,35 @@
+# Maintainer: Xavier R.M. (sapphirus at azorium dot net)
+
+pkgname=('pacwrap-base-dist')
+pkgver=0.3.1
+pkgrel=3
+pkgdesc=""
+arch=('any')
+url="https://pacwrap.sapphirus.org/"
+license=('GPLv3-only')
+conflicts=('pacwrap-base-dist')
+depends=('fakeroot' 'fakechroot')
+
+source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
+sha512sums=('1506e1fd29baf29e1147c7989e5ff0f7f9da7d1bbf0c0d51db24d9d4bc632f74937496187a6245603d38d49c7f16d854c810008f18d74f255ad8fdfe7ea633bd')
+
+package() {
+  	cd "${srcdir}"
+
+	local pacman_hooks=('20-systemd-sysusers'
+			    '30-systemd-tmpfiles' 
+			    '30-systemd-daemon-reload'
+			    '30-systemd-sysctl'
+			    '30-systemd-catalog'
+			    '30-systemd-update'
+		    	    '30-systemd-udev-reload'
+			    '30-systemd-hwdb'
+		    	    'dbus-reload')
+	
+	mkdir -p "$pkgdir/etc/pacman.d/hooks/"
+	for pacman_hook in ${pacman_hooks[@]}; do
+		ln -s /dev/null "$pkgdir/etc/pacman.d/hooks/$pacman_hook.hook"; done
+   	install -Dm 644 "dist_src/0-pacwrap-dist.hook" "${pkgdir}/usr/share/libalpm/hooks/0-pacwrap-dist.hook"
+   	install -Dm 644 "dist_src/42-trust-permission.hook" "${pkgdir}/usr/share/libalpm/hooks/42-trust-permission.hook"
+   	install -Dm 755 "dist_src/pacwrap-dist" "${pkgdir}/usr/bin/pacwrap-dist"
+}

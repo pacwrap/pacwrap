@@ -1,0 +1,4 @@
+#!/bin/bash
+echo 'user:x:1000:1000::/:/usr/bin/nologin' >> /etc/passwd
+rm /usr/share/libalpm/hooks/0-pacwrap-dist.hook /usr/bin/pacwrap-dist
+echo "Completed setup."
