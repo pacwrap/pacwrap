@@ -19,12 +19,12 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 user() {
-	if [[ ! -z "$(cat /etc/passwd | grep user)" ]]; then
+	if [[ "$(cat /etc/passwd | grep 1000:1000)" ]]; then
 		return
 	fi
 
+	echo "Creating dummy user.."
 	echo 'user:x:1000:1000::/:/usr/bin/nologin' >> /etc/passwd
-	echo "Created dummy user."
 }
 
 locale() {
@@ -35,7 +35,6 @@ locale() {
 	echo "Initializing locale.."	
 	echo "$LANG ${LANG#*.}" >> "$INSTANCE_ROOT/etc/locale.gen"
 	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
-	echo "Generating locale."
 	locale-gen
 }
 
@@ -47,7 +46,7 @@ dist() {
 	locale
 	user
 	cleanup
-	echo "Completed distribution configuration."
+	echo "Distribution configuration completed."
 }
 
 dist
