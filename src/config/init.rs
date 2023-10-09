@@ -49,7 +49,7 @@ impl DirectoryLayout {
 
 fn data_layout() -> DirectoryLayout {
     DirectoryLayout {
-        dirs: vec!("/root", "/home", "/store", "/pacman/gnupg", "/pacman/sync"),
+        dirs: vec!("/root", "/home", "/state", "/pacman/gnupg", "/pacman/sync"),
         root: LOCATION.get_data(),
     }
 }

@@ -1,4 +1,53 @@
 #!/bin/bash
-echo 'user:x:1000:1000::/:/usr/bin/nologin' >> /etc/passwd
-rm /usr/share/libalpm/hooks/0-pacwrap-dist.hook /usr/bin/pacwrap-dist
-echo "Completed setup."
+#
+#  Pacwrap - distribution script
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+user() {
+	if [[ ! -z "$(cat /etc/passwd | grep user)" ]]; then
+		return
+	fi
+
+	echo 'user:x:1000:1000::/:/usr/bin/nologin' >> /etc/passwd
+	echo "Created dummy user."
+}
+
+locale() {
+	if [[ -z "$LANG" ]] || [[ -f "/etc/locale.conf" ]]; then
+		return
+	fi
+
+	echo "Initializing locale.."	
+	echo "$LANG ${LANG#*.}" >> "$INSTANCE_ROOT/etc/locale.gen"
+	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
+	echo "Generating locale."
+	locale-gen
+}
+
+cleanup() {
+	rm /usr/share/libalpm/hooks/0-pacwrap-dist.hook /usr/bin/pacwrap-dist
+}
+
+dist() {
+	locale
+	user
+	cleanup
+	echo "Completed distribution configuration."
+}
+
+dist

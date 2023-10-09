@@ -236,7 +236,7 @@ impl <'a>FileSystemStateSync<'a> {
             return st.clone()
         }
 
-        let path = format!("{}/store/{}.dat", LOCATION.get_data(), instance);
+        let path = format!("{}/state/{}.dat", LOCATION.get_data(), instance);
         let file = match File::open(&path) { 
             Ok(file) => file,
             Err(err) => {
@@ -270,7 +270,7 @@ impl <'a>FileSystemStateSync<'a> {
     }
 
     fn write(&mut self, tx: Sender<()>, ds: FileSystemState, dep: Arc<str>) {
-        let path: &str = &format!("{}/store/{}.dat", LOCATION.get_data(), dep);
+        let path: &str = &format!("{}/state/{}.dat", LOCATION.get_data(), dep);
         let output = match File::create(path) {
             Ok(file) => file,
             Err(err) => {
@@ -497,9 +497,7 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
             }
  
             if let FileType::Directory = file.1.0 { 
-                if let Err(error) = remove_directory(path) {
-                    print_warning(error);
-                }
+                remove_directory(path).ok();
             }
         }
     });

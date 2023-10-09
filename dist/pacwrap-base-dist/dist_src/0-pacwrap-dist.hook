@@ -1,5 +1,6 @@
 [Trigger] 
 Operation = Install 
+Operation = Upgrade 
 Type = Package 
 Target = pacwrap-base-dist
 
