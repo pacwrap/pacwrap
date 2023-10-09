@@ -342,7 +342,7 @@ impl <'a>FileSystemStateSync<'a> {
     }
 
     pub fn prepare_single(&mut self) {
-        println!("{} {}",style("->").bold().cyan(), style(format!("Synchronizing container filesystem...")));     
+        println!("{} {}",style("->").bold().cyan(), style(format!("Synchronizing container state...")));     
 
         if let None = self.pool {
             self.pool = Some(ThreadPoolBuilder::new()
@@ -462,15 +462,17 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
 
             if ! path.exists() {
                 if let FileType::SymLink = file.1.0 {
-                    if let Err(error) = remove_file(path) {
+                    if let Err(error) = remove_symlink(path) {
                         print_warning(error);
                     }
                 }
                 return;
             }
 
-            if let Err(error) = remove_file(path) {
-                print_warning(error);
+            if let FileType::HardLink = file.1.0 {
+                if let Err(error) = remove_file(path) { 
+                    print_warning(error); 
+                }
             }
         }     
     });
@@ -524,7 +526,7 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {
     } else if dest_path.exists() {
         remove_file(dest_path)
     } else {
-        remove_soft_link(dest_path) 
+        remove_symlink(dest_path) 
     }?;
 
     if let Some(path) = dest_path.parent() {
@@ -547,12 +549,12 @@ pub fn create_hard_link(src: &str, dest: &str) -> Result<(), String> {
     if ! dest_path.exists() {
         if let Some(path) = dest_path.parent() {
             if ! path.exists() {
-                remove_soft_link(&path)?;
+                remove_symlink(&path)?;
                 create_directory(&path)?;    
             }
         }
 
-        remove_soft_link(dest_path)?;
+        remove_symlink(dest_path)?;
         hard_link(src_path, dest_path)
     } else {
         let meta_dest = metadata(&dest_path)?;
@@ -663,7 +665,7 @@ fn remove_file(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn remove_soft_link(path: &Path) -> Result<(),String> {
+fn remove_symlink(path: &Path) -> Result<(),String> {
     if let Ok(_) = fs::read_link(path) {
         if let Err(err) = fs::remove_file(path) {         
             Err(format!("Failed to delete symlink '{}': {}", path.to_str().unwrap(), err.kind()))?

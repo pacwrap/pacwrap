@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "pacwrap"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "alpm",
  "bitflags 2.4.0",
