@@ -43,11 +43,13 @@ impl Filesystem for TO_HOME {
         for m in self.filesystem.iter() { 
             if m.path.len() == 0 {
                 Err(Error::new("TO_HOME", format!("Filesystem paths are undeclared."), false))?
-            } 
+            }
+
             if let Err(e) = check_mount(&m.permission, &m.path[0]) {
                 return Err(e);
             }
         }
+
         Ok(())
     }
 
@@ -63,19 +65,20 @@ impl Filesystem for TO_HOME {
 }
 
 fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, path: &Vec<String>) {
-        let src = &path[0];
-        let mut dest: &String = src; 
+    let src = &path[0];
+    let mut dest: &String = src; 
 
-        if path.len() > 1 { dest = &path[1]; }
+    if path.len() > 1 {
+            dest = &path[1];
+    }
   
-        let path_src = format!("{}/{}", *HOME, path[0]);
-        let path_dest = format!("{}/{}", vars.home_mount(), dest);
+    let path_src = format!("{}/{}", *HOME, path[0]);
+    let path_dest = format!("{}/{}", vars.home_mount(), dest);
 
-        match permission {
-            p if p == "rw" => args.bind(path_src, path_dest), 
-            &_ => args.robind(path_src, path_dest)
-        }
-
+    match permission == "rw" {
+        false => args.robind(path_src, path_dest),
+        true => args.bind(path_src, path_dest),
+    }
 }
 
 fn check_mount(permission: &String, path: &String) -> Result<(), Error> {
@@ -87,6 +90,7 @@ fn check_mount(permission: &String, path: &String) -> Result<(), Error> {
 
     if ! Path::new(&format!("{}/{}", *HOME, &path)).exists() {
         Err(Error::new("TO_HOME", format!("~/{} not found.", path), true))?
-    } 
+    }
+
     Ok(())
 }

@@ -31,13 +31,13 @@ impl Filesystem for SYSFS {
 }
 
 fn is_default_path(path: &Vec<String>) -> bool {
-    if path == &default_path() { return true; } false
+    path == &default_path()
 }
 
 fn default_path() -> Vec<String> {
-    let vec: Vec<String> = ["block".into(), 
-                            "bus".into(), 
-                            "class".into(), 
-                            "dev".into(), 
-                            "devices".into()].to_vec(); vec
+    vec!("block".into(), 
+        "bus".into(), 
+        "class".into(), 
+        "dev".into(), 
+        "devices".into())
 }

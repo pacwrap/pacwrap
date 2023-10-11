@@ -39,5 +39,5 @@ fn default_permission() -> String {
 }
 
 fn is_default_permission(var: &String) -> bool {
-    if var == "ro" { return true; } false
+    var == "ro"
 }

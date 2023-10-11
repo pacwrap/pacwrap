@@ -41,11 +41,13 @@ impl Filesystem for TO_ROOT {
         for m in self.filesystem.iter() { 
             if m.path.len() == 0 {
                 Err(Error::new("TO_ROOT", format!("Filesystem paths are undeclared."), false))?
-            } 
+            }
+
             if let Err(e) = check_mount(&m.permission, &m.path[0]) {
                 return Err(e);
             }
         }
+
         Ok(())
     }
 
@@ -64,11 +66,13 @@ fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, path: &Vec<String
     let src = &path[0];
     let mut dest: &String = src; 
 
-    if path.len() > 1 { dest = &path[1]; }
+    if path.len() > 1 { 
+        dest = &path[1]; 
+    }
   
-    match permission {
-        p if p == "rw" => args.bind(src, dest), 
-        &_ =>  args.robind(src, dest)
+    match permission == "rw" {
+        false => args.robind(src, dest),
+        true => args.bind(src, dest),
     }
 }
 
