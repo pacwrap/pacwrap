@@ -28,12 +28,18 @@ user() {
 }
 
 locale() {
-	if [[ -z "$LANG" ]] || [[ -f "/etc/locale.conf" ]]; then
+	if [[ -f "/etc/locale.conf" ]]; then
 		return
 	fi
 
-	echo "Initializing locale.."	
-	echo "$LANG ${LANG#*.}" >> "$INSTANCE_ROOT/etc/locale.gen"
+	echo "Initializing locales.."	
+	
+	if [[ $LANG == "en_US.UTF-8" ]] || [[ -z $LANG ]]; then
+		echo -e "\nen_US.UTF-8" >> "$INSTANCE_ROOT/etc/locale.gen"	
+	else
+		echo -e "\nen_US.UTF-8 UTF-8\n$LANG ${LANG#*.}" >> "$INSTANCE_ROOT/etc/locale.gen"	
+	fi
+
 	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
 	locale-gen
 }

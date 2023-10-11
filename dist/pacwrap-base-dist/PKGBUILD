@@ -2,7 +2,7 @@
 
 pkgname=('pacwrap-base-dist')
 pkgver=0.3.2
-pkgrel=1
+pkgrel=2
 pkgdesc=""
 arch=('any')
 url="https://pacwrap.sapphirus.org/"
@@ -11,7 +11,7 @@ conflicts=('pacwrap-base-dist')
 depends=('fakeroot' 'fakechroot')
 
 source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
-sha512sums=('6eac63277879ad77b0eb18a8b284630dd8f212a37b36634924cb2d6e602c5281874ab7f0302773d11b3b97ae159df3fa10ced2f187d18b848c0f6e122981605c')
+sha512sums=('53226312533e2935caf23d9102e277e441f0165f394752a022c27dd2ede6fffad9a2e1a0005468d7fd94e0da0a51c10675f43bc4292c4864ece9c88dbd539f69')
 
 package() {
   	cd "${srcdir}"
