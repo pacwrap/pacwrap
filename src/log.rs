@@ -20,12 +20,12 @@ pub enum LoggerError {
 
 pub struct Logger {
     file: Option<File>,
-    module: Arc<str>,
+    module: &'static str,
     offset: UtcOffset,
 }
 
 impl Logger {
-    pub fn new(module_name: impl Into<Arc<str>>) -> Self { 
+    pub fn new(module_name: &'static str) -> Self { 
        /*
         * In order to deal with the potentiality of a race condition occurring 
         * between libalpm and the time crate, we cache the offset during the 
@@ -39,7 +39,7 @@ impl Logger {
 
         Self { 
             file:  None,
-            module: module_name.into(),
+            module: module_name,
             offset: ofs,
         }
     }
@@ -66,7 +66,7 @@ impl Logger {
         Ok(self)
     }
 
-    pub fn log(&mut self, msg: impl Into<Arc<str>> + std::fmt::Display) -> Result<(),LoggerError> { 
+    pub fn log(&mut self, msg: impl Into<String> + std::fmt::Display) -> Result<(),LoggerError> { 
        /*
         * We then attempt to update it here.
         *
