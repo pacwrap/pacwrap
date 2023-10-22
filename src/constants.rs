@@ -33,7 +33,6 @@ lazy_static! {
     pub static ref ARROW_CYAN: &'static str = arrow_cyan();  
     pub static ref ARROW_RED: &'static str = arrow_red(); 
     pub static ref ARROW_GREEN: &'static str = arrow_green(); 
-
 }
 
 pub struct LocationVars {

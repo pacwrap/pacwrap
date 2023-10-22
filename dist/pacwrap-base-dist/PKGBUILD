@@ -1,8 +1,8 @@
 # Maintainer: Xavier R.M. (sapphirus at azorium dot net)
 
 pkgname=('pacwrap-base-dist')
-pkgver=0.3.2
-pkgrel=2
+pkgver=0.4.0
+pkgrel=1
 pkgdesc=""
 arch=('any')
 url="https://pacwrap.sapphirus.org/"
