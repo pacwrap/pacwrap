@@ -42,9 +42,6 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-VER="v0.9.19 "
-
-MAN_SCRIPT="pacwrap-man"
 EXEC_SCRIPT="pacwrap"
 CREATE_SCRIPT="pacwrap"
 UTILS_SCRIPT="pacwrap-utils"
@@ -59,12 +56,6 @@ CONF_TYPE=0
 CONF_DEPS=1
 CONF_SYNCDB=2
 CONF_PKGS=3
-CONF_CONCURRENT_LIMIT=4
-CONF_MOUNT=5
-CONF_PERMS=6
-CONF_ENV=7
-CONF_DBUS=8
-CONF_SCRIPT=9
 
 [[ ! $PACWRAP_DATA_DIR ]] && PACWRAP_DATA_DIR="$HOME/.local/share/pacwrap"
 [[ ! $PACWRAP_CACHE_DIR ]] && PACWRAP_CACHE_DIR="$HOME/.cache/pacwrap"
@@ -94,10 +85,7 @@ INSTANCE_PACMAN_MIRRORLIST="$PACWRAP_CONFIG_DIR/pacman.d/mirrorlist"
 INSTANCE_PACMAN_CACHE="$PACWRAP_CACHE_DIR/pkg"
 INSTANCE_PACMAN_CFG_DIR="$PACWRAP_CONFIG_DIR/pacman"
 
-init() {
-	[[ $EXEC_NAME != "pacwrap" ]] && 
-		test_runtime
-	
+init() {	
 	[[ $SWITCH == *n* ]] && SWITCH_NO_CONFIRM=1
 	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
 	[[ $SWITCH == *V* ]] ||
@@ -108,7 +96,6 @@ init() {
 		log_error "pacwrap is locked: $LOCK_FILE$RESET" 2
 
 	script_init
-	test_datadir
 }
 
 load_configuration_all() {
@@ -125,8 +112,7 @@ load_configuration() {
 }
 
 manual_script() {
-	VER_DISPLAY=$EXEC_NAME
-	source $MAN_SCRIPT
+	pacwrap -V
 	exit
 }
 
@@ -140,9 +126,8 @@ populate_container_array() {
 }
 
 source_configuration() {
-	eval $(pacwrap -Axcl $instance)
+	eval $(pacwrap --compat --load $instance)
 }
-
 
 reset_configuration_params() {
 	TYPE=; DEPS=; 	
@@ -151,12 +136,6 @@ reset_configuration_params() {
 
 populate_configuration() {
 	INSTANCE_CONFIG[$instance,2]=$SYNC_PACMANDB
-}
-
-return_mount() {
-	if [[ ! ${INSTANCE_CONFIG[$instance,$CONF_MOUNT]} ]]; then
-		echo "ROOT;HOME;"; return; fi
-	echo ${INSTANCE_CONFIG[$instance,$CONF_MOUNT]}
 }
 
 return_sync_pacmandb() {
@@ -289,10 +268,6 @@ get_foreign_packages() {
 	echo ${dbsyncpkgs[@]}
 }
 
-localized_text() {
-	eval "echo \$$1_EN"
-}
-
 query_confirm_yN () {
 	if [[ $SWITCH_NO_CONFIRM ]]; then		
 		echo 1	
@@ -322,81 +297,12 @@ query_confirm_Yn () {
 	echo 1
 }
 
-test_datadir() {
-	([[ ! -d "$PACWRAP_DATA_DIR" ]] ||
-	[[ ! -d "$PACWRAP_CACHE_DIR" ]] ||
-	[[ ! -d "$PACWRAP_CONFIG_DIR" ]]) && 
-		initialize_data_directory
-
-	([[ ! -d "$PACWRAP_DATA_DIR" ]] ||
-	[[ ! -d "$PACWRAP_CACHE_DIR" ]] ||
-	[[ ! -d "$PACWRAP_CONFIG_DIR" ]]) &&
-		log_error "Data directories not found." 2
-}
-
 initialize_data_directory() {
-	mkdir -p "$PACWRAP_DATA_DIR/root" \
-		 "$PACWRAP_DATA_DIR/home" \
-		 "$PACWRAP_DATA_DIR/hlds" \
-		 "$PACWRAP_DATA_DIR/pacman/sync" \
-		 "$PACWRAP_DATA_DIR/pacman/gnupg" \
-		 "$PACWRAP_CACHE_DIR/pkg" \
-		 "$PACWRAP_CONFIG_DIR/instance" \
-		 "$PACWRAP_CONFIG_DIR/pacman.d" \
-		 "$PACWRAP_CONFIG_DIR/bwrap"
-
-	local ins_string="\[options\]"
-	local template="\n\n###IGNOREPKG###\n"
-	
-	([[ ! -f "$INSTANCE_PACMAN_MIRRORLIST" ]] || [[ $SWITCH == *in* ]]) && cp /etc/pacman.d/mirrorlist "$INSTANCE_PACMAN_MIRRORLIST"
-	[[ ! -f "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" ]] && echo -e $(pacman_conf) > "$INSTANCE_PACMAN_CFG_DIR/pacman.conf"
-
-	sed -z "s,$ins_string,$ins_string$template,g" < "$INSTANCE_PACMAN_CFG_DIR/pacman.conf" > "$INSTANCE_PACMAN_CFG_DIR/pacman.template.conf"
-}
-
-pacman_conf() {
-echo $(cat << _CONFIG
-[options]\nHoldPkg     = pacman glibc\nArchitecture = auto
-\nLogFile     = /tmp/pacman.log
-\nNoExtract = etc/pacman.conf etc/pacman.d/mirrorlist
-\n\nColor\n#ParallelDownloads = 5
-\n\nSigLevel    = Required DatabaseOptional\nLocalFileSigLevel = Optional
-\n\n[core]\nInclude = /etc/pacman.d/mirrorlist
-\n\n[extra]\nInclude = /etc/pacman.d/mirrorlist
-\n\n#[multilib]\n#Include = /etc/pacman.d/mirrorlist
-_CONFIG
-)
+	return
 }
 
 generate_config() {
-	PACWRAP_PKGS="$@" PACWRAP_DEPS="$(return_dependencies)" PACWRAP_TYPE="$(return_type)" pacwrap -Axcs $instance
-}
-
-test_runtime() {
-	[[ $(id -u) -lt 1000 ]] && log_error "$EXEC_NAME cannot be executed within a privileged context." 1
-
-	if [[ ! $(type -P bwrap) ]] || [[ ! $(type -P zstd ) ]] || 
-	   [[ ! $(type -P fakechroot) ]] || [[ ! $(type -P fakeroot) ]] || 
-	   [[ ! $(type -P pacman-key gpg) ]]; then
-		cat << _WARN 
-$BOLD${RED}error:$RESET Requisite dependencies are missing. 
-Please make sure that the following binaries are present in \$PATH:
-
- ${BOLD}bwrap$RESET, ${BOLD}fakechroot${BOLD}, ${BOLD}fakeroot$RESET, ${BOLD}zstd$RESET, ${BOLD}pacman-key$RESET or ${BOLD}gpg$RESET.
-
-_WARN
-		exit 2
-	fi
-}
-
-function distro_warn() {
-	source /etc/os-release
-	[[ ! $ID == "arch" ]] && cat << _WARN
-$BOLD${RED}WARNING:$RESET You are running pacwrap on an unsupported distribution of Linux or Unix.
-
-Support is not guaranteed. Use at your ${BOLD}OWN$RESET risk.
-
-_WARN
+	PACWRAP_PKGS="$@" PACWRAP_DEPS="$(return_dependencies)" PACWRAP_TYPE="$(return_type)" pacwrap --compat --save $instance
 }
 
 log_invalid_arguments() {

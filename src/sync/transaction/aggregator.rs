@@ -282,7 +282,7 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
             Operand::Short('o') | Operand::Long("target-only") => target_only = true,
             Operand::Short('f') | Operand::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
             Operand::Short('p') | Operand::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW,
-            Operand::Short('c') | Operand::Long("create") => action_flags = action_flags | TransactionFlags::CREATE,
+            Operand::Short('c') | Operand::Long("create") => action_flags = action_flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE,
             Operand::Short('b') | Operand::Long("base") => base = true,
             Operand::Long("db-only") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
             Operand::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
