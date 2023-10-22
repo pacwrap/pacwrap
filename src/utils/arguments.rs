@@ -105,10 +105,10 @@ impl<'a> Arguments<'a> {
         self.cur = index;
     }
 
-    pub fn invalid_operand(&self) {
+    pub fn invalid_operand(&self) -> String {
         match self.operands.get(self.cur) {
-            Some(oper) => print_help_error(&format!("Invalid option -- '{}'", oper)),
-            None => print_help_error(&format!("Operation not specified.")),
+            Some(oper) => format!("Invalid option -- '{}'", oper),
+            None => format!("Operation not specified."),
         }
     }
 

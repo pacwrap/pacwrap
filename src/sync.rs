@@ -63,19 +63,24 @@ pub fn synchronize(mut args: Arguments) {
         TransactionType::Upgrade(u > 0, y > 0, y > 1)
     };
 
-    if let Some(instype) = create_type(&mut args) {
-        if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
-            if ! upgrade {
-                print_help_error("--upgrade/-u not supplied with --create/-c.");
-            } else if ! refresh {
-                print_help_error("--refresh/-y not supplied with --create/-c.");
+    match create_type(&mut args) {
+        Ok(option) => if let Some(instype) = option {
+            if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
+                if ! upgrade {
+                    print_help_error("--upgrade/-u not supplied with --create/-c.");
+                } else if ! refresh {
+                    print_help_error("--refresh/-y not supplied with --create/-c.");
+                }
             }
-        }
 
-        create(instype, args.targets());
+            create(instype, args.targets());
+        },
+        Err(error) => print_help_error(error),
     }
 
-    aggregator::upgrade(action, &mut args, &mut cache, &mut logger).aggregate(&mut InstanceCache::new());
+    match aggregator::upgrade(action, &mut args, &mut cache, &mut logger) {
+        Ok(ag) => ag.aggregate(&mut InstanceCache::new()), Err(e) => print_help_error(e)
+    }
 }
 
 pub fn remove(mut args: Arguments) {
@@ -96,10 +101,12 @@ pub fn remove(mut args: Arguments) {
         TransactionType::Remove(recursive > 0 , cascade, recursive > 1) 
     };
     
-    aggregator::remove(action, &mut args, &mut cache, &mut logger).aggregate(&mut InstanceCache::new());
+    match aggregator::remove(action, &mut args, &mut cache, &mut logger) {
+        Ok(ag) => ag.aggregate(&mut InstanceCache::new()), Err(e) => print_help_error(e),
+    }
 }
 
-fn create_type(args: &mut Arguments) -> Option<InstanceType> {
+fn create_type<'a>(args: &mut Arguments) -> Result<Option<InstanceType>, &'a str> {
     let mut instype = None;
     let mut create = false;
 
@@ -108,14 +115,28 @@ fn create_type(args: &mut Arguments) -> Option<InstanceType> {
     while let Some(arg) = args.next() {
         match arg {
             Operand::Short('c') | Operand::Long("create") => create = true, 
-            Operand::Short('b') | Operand::Long("base") => instype = Some(InstanceType::BASE),
-            Operand::Short('d') | Operand::Long("slice") => instype = Some(InstanceType::DEP),
-            Operand::Short('r') | Operand::Long("root") => instype = Some(InstanceType::ROOT),
+            Operand::Short('b') | Operand::Long("base") => match instype { 
+                None => instype =  Some(InstanceType::BASE),
+                Some(_) => Err("Multiple container types cannot be assigned to a container.")?,
+            },
+            Operand::Short('d') | Operand::Long("slice") => match instype {
+                None => instype = Some(InstanceType::DEP),
+                Some(_) => Err("Multiple container types cannot be assigned to a container.")?,
+            },
+            Operand::Short('r') | Operand::Long("root") => match instype {
+                None => instype = Some(InstanceType::ROOT),
+                Some(_) => Err("Multiple container types cannot be assigned to a container.")?,
+            },
             _ => continue,
         } 
     }
 
-    if create { instype } else { None }
+    match create { 
+        true => match instype {
+            None => Err("Instance type not specified"), Some(_) => Ok(instype),
+        },
+        false => Ok(None) 
+    }
 }
 
 pub fn create(instype: InstanceType, mut targets: Vec<&str>) {
@@ -199,7 +220,7 @@ pub fn query(mut arguments: Arguments) {
             Operand::Short('e') | Operand::Long("explicit") => explicit = true,
             Operand::Short('q') | Operand::Long("quiet") => quiet = true,
             Operand::LongPos("target", t) | Operand::ShortPos(_, t) => target = t,
-            _ => arguments.invalid_operand(),
+            _ => print_help_error(arguments.invalid_operand()),
         }
     }
 

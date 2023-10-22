@@ -28,7 +28,6 @@ fn main() {
         Operand::Short('h') | Operand::Long("help") => manual::help(arguments),
         Operand::Short('V') | Operand::Long("version") => manual::print_version(arguments),
         Operand::Long("compat") => compat::compat(arguments), 
-        Operand::None => print_help_error("Operation not specified."),
-        _ => arguments.invalid_operand(),
+        _ => print_help_error(arguments.invalid_operand()),
     }
 }

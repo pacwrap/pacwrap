@@ -10,6 +10,7 @@ use crate::config::{self,
     InsVars, 
     InstanceType, 
     InstanceHandle};
+use crate::utils::print_help_error;
 use crate::utils::{arguments::{Arguments, Operand}, 
     handle_process, 
     env_var};
@@ -90,7 +91,7 @@ pub fn compat(mut args: Arguments) {
     match args.next().unwrap_or_default() {
         Operand::Short('s') | Operand::Long("save") => save_configuration(args.target()),
         Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()), 
-        _ => args.invalid_operand()
+        _ => print_help_error(args.invalid_operand())
     }
 }
 

@@ -359,6 +359,7 @@ replicate_instance() {
 	[[ $type != BASE ]] && depend=$(return_dependency)
 
 	case $type in
+		ROOT) params+="r";;
 		BASE)	params+="b";;	
 		DEP)	params+="d";;	
 		LINK)	ln -s "$INSTANCE_ROOT_DIR/$depend" "$INSTANCE_ROOT_DIR/$instance"

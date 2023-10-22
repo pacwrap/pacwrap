@@ -11,8 +11,7 @@ use crate::sync::{self,
 use crate::config::{InstanceHandle, 
     InstanceType::ROOT,
     cache::InstanceCache};
-use crate::utils::{Arguments, print_help_error};
-use crate::utils::arguments::Operand;
+use crate::utils::{arguments::Operand, Arguments};
 use super::{
     Transaction,
     TransactionHandle,
@@ -190,7 +189,7 @@ impl <'a>TransactionAggregator<'a> {
     }
 }
 
-pub fn remove<'a>(action_type: TransactionType, args: &'a mut Arguments, inscache: &'a mut InstanceCache, log: &'a mut Logger) -> TransactionAggregator<'a> { 
+pub fn remove<'a>(action_type: TransactionType, args: &'a mut Arguments, inscache: &'a mut InstanceCache, log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
@@ -199,7 +198,7 @@ pub fn remove<'a>(action_type: TransactionType, args: &'a mut Arguments, inscach
     args.set_index(1);
 
     if let Operand::None = args.next().unwrap_or_default() {
-        print_help_error("Operation not specified.");
+        Err("Operation not specified.")?
     }
 
     while let Some(arg) = args.next() {
@@ -228,12 +227,12 @@ pub fn remove<'a>(action_type: TransactionType, args: &'a mut Arguments, inscach
                     None => { queue.insert(current_target.into(), vec!(package.into())); },
                 }
             },
-            _ => args.invalid_operand(),
+            _ => Err(args.invalid_operand())?,
         }
     }
         
     if current_target == "" {
-        print_help_error("Target not specified");
+        Err("Target not specified")?
     }
 
     let current_target = Some(current_target);
@@ -244,7 +243,7 @@ pub fn remove<'a>(action_type: TransactionType, args: &'a mut Arguments, inscach
         inscache.populate();
     }
  
-    TransactionAggregator {
+    Ok(TransactionAggregator {
         queried: Vec::new(),
         updated: Vec::new(),
         pkg_queue: queue,
@@ -255,10 +254,10 @@ pub fn remove<'a>(action_type: TransactionType, args: &'a mut Arguments, inscach
         logger: log,
         flags:  action_flags,
         target: current_target,
-    }
+    })
 }
 
-pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscache: &'a mut InstanceCache, log: &'a mut Logger) -> TransactionAggregator<'a> { 
+pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscache: &'a mut InstanceCache, log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
@@ -269,7 +268,7 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
     args.set_index(2);
 
     if let Operand::None = args.next().unwrap_or_default() {
-        print_help_error("Operation not specified.");
+        Err("Operation not specified.")?
     }
 
     while let Some(arg) = args.next() {
@@ -307,15 +306,14 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
                     },
                 }
             },
-            Operand::None => println!("none"),
-            _ => args.invalid_operand(),
+            _ => Err(args.invalid_operand())?,
         }
     }
 
     let current_target = match target_only {
         true => {
             if current_target == "" {
-                print_help_error("Target not specified");
+                Err("Target not specified")?
             }
 
             Some(current_target)
@@ -329,7 +327,7 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
         inscache.populate();
     }
  
-    TransactionAggregator {
+    Ok(TransactionAggregator {
         queried: Vec::new(),
         updated: Vec::new(),
         pkg_queue: queue,
@@ -340,5 +338,5 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
         logger: log,
         flags:  action_flags,
         target: current_target,
-    }
+    })
 }
