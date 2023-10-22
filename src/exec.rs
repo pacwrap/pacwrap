@@ -6,7 +6,6 @@ use std::path::Path;
 use std::vec::Vec;
 use std::os::unix::io::AsRawFd;
 
-use console::style;
 use nix::unistd::Pid;
 use nix::sys::signal::kill;
 use nix::sys::signal::Signal;
@@ -17,7 +16,7 @@ use command_fds::{CommandFdExt, FdMapping};
 use serde_json::{Value, json};
 
 use crate::exec::args::ExecutionArgs;
-use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET};
+use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET, RESET, BOLD};
 use crate::config::{self, 
     InsVars, 
     Filesystem, 
@@ -407,11 +406,11 @@ fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result
                     return Ok(());
                 }
             },
-            Err(error) => Err(&format!("Invalid {} variable '{}': {}", style("PATH").bold(), dir, error))?
+            Err(error) => Err(&format!("Invalid {}PATH{} variable '{}': {}", *BOLD, *RESET, dir, error))?
         }
     }
 
-    Err(format!("'{}' not available container {}.", exec, style("PATH").bold()))
+    Err(format!("'{exec}' not available in container {}PATH{}.", *BOLD, *RESET))
 }
 
 fn dest_exists(root: &str, dir: &str, exec: &str, mut recursion: u8) -> Result<bool,String> {
@@ -421,7 +420,7 @@ fn dest_exists(root: &str, dir: &str, exec: &str, mut recursion: u8) -> Result<b
     let path_direct = Path::new(&path_direct);
 
     if recursion == 40 {
-        Err(format!("'{}': Symbolic link recursion depth maximum of {} exceeded.", exec, style(recursion).bold()))?
+        Err(format!("'{exec}': Symbolic link recursion depth maximum of {}{recursion}{} exceeded.", *BOLD, *RESET))?
     }
 
     recursion += 1;

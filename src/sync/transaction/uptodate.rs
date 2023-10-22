@@ -1,6 +1,4 @@
-use console::style;
-
-use crate::config::InstanceHandle;
+use crate::{config::InstanceHandle, constants::ARROW_GREEN};
 use super::{Transaction, 
     TransactionState, 
     TransactionHandle, 
@@ -16,7 +14,7 @@ impl Transaction for UpToDate {
 
     fn engage(&self, _: &mut TransactionAggregator, _: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
-        println!("{} {} is up-to-date!", style("->").bold().green(), instance); 
+        println!("{} {instance} is up-to-date!", *ARROW_GREEN); 
         Ok(TransactionState::Complete)
     }
 }

@@ -2,10 +2,10 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use bitflags::bitflags;
-use console::style;
 use alpm::{Alpm, PackageReason};
 
 use crate::config;
+use crate::constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED};
 use crate::sync::{
     resolver_local::LocalDependencyResolver,
     resolver::DependencyResolver,
@@ -142,7 +142,7 @@ impl TransactionType {
             Self::Remove(_,_,_) => "Preparing package removal..."
         };
 
-        println!("{} {}", style("->").bold().cyan(), message);
+        println!("{} {}", *ARROW_CYAN, message);
     }
 
     fn begin_message(&self, inshandle: &InstanceHandle) {
@@ -155,17 +155,17 @@ impl TransactionType {
             Self::Remove(_,_,_) => format!("Transacting {instance}...")
         };
 
-        println!("{} {}", style("::").bold().cyan(), style(message).bold());
+        println!("{} {}{message}{}", *BAR_CYAN, *BOLD, *RESET);
     }
 }
 
 impl Error {
     fn message(&self) {
        print_error(match self {
-            Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}.", style(u).bold()),
-            Self::TargetUpstream(pkg) => format!("Target package {}: Installed in upstream container.", style(pkg).bold()),
-            Self::TargetNotInstalled(pkg) => format!("Target package {}: Not installed.", style(pkg).bold()),
-            Self::TargetNotAvailable(pkg) => format!("Target package {}: Not available in sync databases.", style(pkg).bold()),
+            Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
+            Self::TargetUpstream(pkg) => format!("Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
+            Self::TargetNotInstalled(pkg) => format!("Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
+            Self::TargetNotAvailable(pkg) => format!("Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
             Self::InitializationFailure(msg) => format!("Failure to initialize transaction: {msg}"),
             Self::PreparationFailure(msg) => format!("Failure to prepare transaction: {msg}"),
             Self::TransactionFailure(msg) => format!("Failure to commit transaction: {msg}"),
@@ -378,7 +378,7 @@ impl TransactionHandle {
 
     fn release_on_fail(self, error: Error) {
         error.message();
-        println!("{} Transaction failed.",style("->").bold().red());
+        println!("{} Transaction failed.", *ARROW_RED);
         drop(self);
     }
 

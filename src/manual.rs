@@ -1,10 +1,7 @@
-use std::env::var;
-
-use console::style;
 use indexmap::IndexSet;
 use lazy_static::lazy_static;
 
-use crate::utils::{Arguments, arguments::Operand, print_help_error};
+use crate::utils::{Arguments, arguments::Operand, print_help_error, is_color_terminal, is_truecolor_terminal};
 
 lazy_static! {
     static ref HELP_ALL: Vec<HelpTopic> = 
@@ -26,7 +23,9 @@ pub fn help(mut args: Arguments) {
 }
 
 fn ascertain_help<'a>(args: &mut Arguments) -> (IndexSet<&'a HelpTopic>, &'a HelpLayout) {
-    let mut layout = &HelpLayout::Console;
+    let mut layout = match is_color_terminal() {
+        true => &HelpLayout::Console, false => &HelpLayout::Dumb,
+    };
     let mut topic: Vec<&HelpTopic> = vec!(&HelpTopic::Default);
     let mut more = false;
 
@@ -37,8 +36,9 @@ fn ascertain_help<'a>(args: &mut Arguments) -> (IndexSet<&'a HelpTopic>, &'a Hel
                 | Operand::Short('f')
                 | Operand::Short('h') => continue,
             Operand::Short('m') | Operand::Long("more") => more = true,
-            Operand::LongPos("format", "markdown") | Operand::ShortPos('f', "markdown") => layout = &HelpLayout::Markdown(false),
-            Operand::LongPos("format", "man") | Operand::ShortPos('f', "man") => layout = &HelpLayout::Markdown(true),
+            Operand::LongPos("format", "dumb") | Operand::ShortPos('f', "dumb") => layout = &HelpLayout::Dumb, 
+            Operand::LongPos("format", "markdown") | Operand::ShortPos('f', "markdown") => layout = &HelpLayout::Markdown,
+            Operand::LongPos("format", "man") | Operand::ShortPos('f', "man") => layout = &HelpLayout::Man,
             Operand::LongPos("format", "console") | Operand::ShortPos('f', "console") => layout = &HelpLayout::Console,
             Operand::ShortPos('h', "sync")
                 | Operand::ShortPos('h', "S")
@@ -89,21 +89,6 @@ fn minimal(args: &mut Arguments) -> bool {
     }
 }
 
-fn is_color_terminal() -> bool {
-    match var("COLORTERM") {
-        Ok(value) => {
-            let value = value.to_lowercase();
-
-            if value == "truecolor" || value == "24bit" {
-                true
-            } else {
-                false
-            }
-        }
-        Err(_) => false,
-    }
-}
-
 #[derive(Eq, PartialEq, Hash)]
 enum HelpTopic {
     Sync,
@@ -116,44 +101,60 @@ enum HelpTopic {
     Version
 }
 
-enum HelpLayout {
-    Markdown(bool),
+enum HelpLayout { 
+    Man,
+    Dumb,
+    Markdown,
     Console
 }
 
 impl HelpLayout {
-    fn head(&self, text: &str) -> String {
+    fn head(&self) -> &str {
         match self {
-            Self::Console => style(text)
-                .bold()
-                .to_string(),
-            Self::Markdown(_) => format!("# {text}"),
+            Self::Console => "[1m",
+            Self::Markdown | Self::Man => "# ",
+            Self::Dumb => "",
         }
     }
 
-    fn sub_head(&self, text: &str) -> String {
+    fn sub(&self) -> &str {
         match self {
-            Self::Console => format!("   {}", style(text)
-                .bold()
-                .white()),
-            Self::Markdown(_) => format!("**{text}**"),
+            Self::Console => "   [37;1m",
+            Self::Markdown | Self::Man => "**",
+            Self::Dumb => "   ",
         }
     }
 
-    fn bold(&self, text: &str) -> String {
+    #[allow(dead_code)]
+    fn reset(&self) -> &str {
         match self {
-            Self::Console => style(text)
-                .bold()
-                .white()
-                .to_string(),
-            Self::Markdown(_) => format!("**{text}**"),
+            Self::Console => "[0m",
+            Self::Markdown => "",
+            Self::Man | Self::Dumb => ""
+        }
+    }
+
+    fn reset_bold(&self) -> &str {
+        match self {
+            Self::Console => "[0m",
+            Self::Markdown => "**",
+            Self::Man | Self::Dumb => ""
+        }
+    }
+
+    fn bold(&self) -> &str {
+        match self {
+            Self::Console => "[37;1m",
+            Self::Markdown | Self::Man => "**",
+            Self::Dumb => "",
         }
     }
 
     fn sub_text(&self) -> &str {
         match self {
-            Self::Console => "      ",
-            Self::Markdown(man) => if *man { ": "} else { " " },
+            Self::Console | Self::Dumb => "      ",
+            Self::Markdown => " ",
+            Self::Man => ": ",
         }
     }
 }
@@ -174,138 +175,147 @@ impl HelpTopic {
 }
 
 fn default(layout: &HelpLayout) {
-    let header = layout.head("NAME");
-    let synopsis = layout.head("Synopsis");
+    let head = layout.head();
+    let sub = layout.sub();
     let sub_text = layout.sub_text();
-    let operations = layout.head("OPERATIONS");
-    let sync = layout.sub_head("-S, --sync");
-    let utils = layout.sub_head("-U, --utils");
-    let process = layout.sub_head("-P, --process");
-    let execute = layout.sub_head("-E, --execute");
-    let help = layout.sub_head("-h, --help=OPTION");
-    let version = layout.sub_head("-V, --version");
-    let stdout = layout.bold("STDOUT");
-    let op = layout.bold("ARGS");
-    let targets = layout.bold("TARGET(S)");
-    let args = layout.bold("ARGUMENTS");
+    let bold = layout.bold();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
+    println!("{head}NAME{reset_bold}
 {sub_text}pacwrap - Command-line application which facilitates the creation, management, and execution of unprivileged, 
 {sub_text}Sandboxed containers with bubblewrap and libalpm.
 
-{synopsis}
-{sub_text}pacwrap [{op}] [{targets}] [{args}]	
+{head}SYNOPSIS{reset_bold}
+{sub_text}pacwrap [{bold}OPERATIONS{reset_bold}] [{bold}ARGuMENTS{reset_bold}] [{bold}TARGET(S){reset_bold}]	
 
-{operations}
+{head}OPERATIONS{reset_bold}
 
-{sync}
+{sub}-S, --sync{reset_bold}
 {sub_text}Synchronize package databases and update packages in target containers. 
 
-{utils}
+{sub}-U, --utils{reset_bold}
 {sub_text}Invoke miscellaneous utilities to manage containers.
 
-{process}
+{sub}-P, --process{reset_bold}
 {sub_text}Manage and show status of running container processes.
 
-{execute}
+{sub}-E, --execute{reset_bold}
 {sub_text}Executes application in target container using bubblewrap.
 
-{help}
-{sub_text}Invoke a printout of this manual to {stdout}. Specify an option verbatim for further information.
+{sub}-h, --help{reset_bold}
+{sub_text}Invoke a printout of this manual to {bold}stdout{reset_bold}. Specify an option verbatim for further information.
 
-{version}
-{sub_text}Display version and copyright information in {stdout}.\n");
+{sub}-V, --version{reset_bold}
+{sub_text}Display version and copyright information in {bold}STDOUT{reset_bold}.\n");
 }
 
 fn execute(layout: &HelpLayout) {
-    let header = layout.head("EXECUTE OPTIONS");
-    let shell = layout.sub_head("-s, --shell");
-    let root = layout.sub_head("-r, --root");
+    let head = layout.head();
+    let sub = layout.sub();
     let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
+    println!("{head}EXECUTE{reset_bold}
 
-{root}
+{sub}-r, --root{reset_bold}
 {sub_text}Execute operation with fakeroot and fakechroot. Facilitates a command with faked privileges.
 	
-{shell}
+{sub}-s, --shell{reset_bold}
 {sub_text}Invoke a bash shell\n");
 }
 
 fn meta(layout: &HelpLayout) {
-    let header = layout.head("HELP");
-    let sub_text = layout.sub_text();  
-    let more = layout.sub_head("-m, --more");
-    let all = layout.sub_head("-a, --all, --help=all"); 
-    let layout = layout.sub_head("-f, --format=FORMAT"); 
- 
+    let head = layout.head();
+    let sub = layout.sub();
+    let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
+    println!("{head}HELP{reset_bold}
 
-{more}
+{sub}-m, --more{reset_bold}
 {sub_text}When specifying a topic to display, show the default topic in addition to specified options.
 
-{layout}
+{sub}-f, --format=FORMAT{reset_bold}
 {sub_text}Change output format of help in STDOUT. Format options include: 'console', 'markdown', and 'man'. 
 {sub_text}This option is for the express purposes of generating documentation at build time, and has little utility
 {sub_text}outside the context of package maintenance. --format=man presently requires go-md2man to parse output.
 
-{all}
+{sub}-a, --all, --help=all{reset_bold}
 {sub_text}Display all help topics.\n");
 }
 
 fn sync(layout: &HelpLayout) {
-    let header = layout.head("SYNCHRONIZATION");
+    let head = layout.head();
+    let sub = layout.sub();
     let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
-{sub_text}-TODO-
-");
+    println!("{head}SYNCHRONIZATION{reset_bold}
+{sub}-y, --refresh{reset_bold}
+{sub_text}Synchronize remote database. Specify up to 2 times to force a refresh.
+
+{sub}-u, --upgrade{reset_bold}
+{sub_text}Execute aggregate upgrade routine on all or specified containers.
+
+{sub}-f, --filesystem{reset_bold}
+{sub_text}Force execution of filesystem synchronization coroutines on all or specified containers.
+
+{sub}--dbonly{reset_bold}
+{sub_text}Transact on resident containers with a database-only transaction.
+
+{sub}--force-foreign{reset_bold}
+{sub_text}Force synchronization of foreign packages on resident container.
+
+{sub}--dbonly{reset_bold}
+{sub_text}Override confirmation prompts and confirm all operations.\n");
 }
 
 fn process(layout: &HelpLayout) {
-    let header = layout.head("PROCESSS");
+    let head = layout.head();
     let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
+    println!("{head}PROCESS{reset_bold}
 {sub_text}-TODO-\n");
 }
 
 fn utils(layout: &HelpLayout) {
-    let header = layout.head("UTILITIES");
+    let head = layout.head();
     let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
+    println!("{head}UTILITIES{reset_bold}
 {sub_text}-TODO-\n");
 }
 
 fn version(layout: &HelpLayout) {
-    let note = layout.sub_head("NOTICE");
-    let header = layout.head("VERSION");  
+    let head = layout.head();
+    let sub = layout.sub();
+    let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
     let name = env!("CARGO_PKG_NAME");
     let suffix = match option_env!("GIT_HEAD") {
         Some(suf) => format!("-{suf}"), None => String::new(),
     }; 
-    let version = layout.sub_head("-v, --version, --version=min"); 
     let version_num = env!("CARGO_PKG_VERSION");
-    let sub_text = layout.sub_text();
 
-    println!("{header}
+    println!("{head}VERSION{reset_bold}
 
-{note}
+{sub}NOTICE{reset_bold}
 {sub_text}This documentation pertains to version string '{name} {version_num}{suffix}'
 {sub_text}Please seek relevant documentation if '{name} -v' mismatches with the above.
 
-{version}
+{sub}-v, --version, --version=min{reset_bold}
 {sub_text}Sends version information to STDOUT with colourful ASCII art. 
 {sub_text}The 'min' option provides a minimalistic output as is provided to non-colour terms.\n");
 }
 
 fn copyright(layout: &HelpLayout) {
-    let header = layout.head("COPYRIGHT");
+    let head = layout.head();
     let sub_text = layout.sub_text();
+    let reset_bold = layout.reset_bold();
 
-    println!("{header}
+    println!("{head}COPYRIGHT{reset_bold}
 {sub_text}Copyright (C) 2023 - Xavier R.M.
 
 {sub_text}This program may be freely redistributed under
@@ -319,7 +329,7 @@ pub fn print_version(mut args: Arguments) {
         Some(suf) => format!("-{suf}"), None => String::new(),
     }; 
 
-    if ! minimal(&mut args) && is_color_terminal() {
+    if ! minimal(&mut args) && is_truecolor_terminal() {
         println!("\n               [0m[38;2;8;7;6m [0m[38;2;35;31;23mR[0m[38;2;62;56;41mP[0m[38;2;90;81;58mA[0m[38;2;117;105;76mA[0m[38;2;146;131;94mC[0m[38;2;174;156;111mW[0m[38;2;204;182;130mW[0m[38;2;225;200;142mR[0m[38;2;196;173;120mR[0m[38;2;149;130;91mA[0m[38;2;101;88;62mA[0m[38;2;53;46;33mP[0m[38;2;10;8;6m                 [0m
         [0m[38;2;14;12;10m [0m[38;2;40;36;26mR[0m[38;2;67;60;43mA[0m[38;2;93;83;60mP[0m[38;2;120;107;77mP[0m[38;2;147;132;95mP[0m[38;2;175;157;112mA[0m[38;2;201;180;129mC[0m[38;2;225;202;144mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;205;144mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;221;195;135mC[0m[38;2;180;158;110mA[0m[38;2;134;118;82mP[0m[38;2;86;76;53mA[0m[38;2;38;34;24mR[0m[38;2;3;3;2m            [0m
 [0m[38;2;9;8;6m [0m[38;2;38;34;25mR[0m[38;2;66;59;43mA[0m[38;2;94;84;60mP[0m[38;2;123;109;79mP[0m[38;2;151;135;97mP[0m[38;2;180;161;114mA[0m[38;2;209;190;115mC[0m[38;2;234;216;110m#[0m[38;2;238;221;100m#[0m[38;2;238;222;99m#[0m[38;2;237;219;106m#[0m[38;2;234;214;123m#[0m[38;2;230;207;143mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;205;144mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;211;186;129mC[0m[38;2;165;145;101mA[0m[38;2;117;103;72mP[0m[38;2;69;61;43mA[0m[38;2;22;19;14mR       [0m

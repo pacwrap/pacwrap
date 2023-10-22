@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, self, Receiver};
 
+use dialoguer::console::Term;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use indexmap::IndexMap;
@@ -14,10 +15,9 @@ use indicatif::{ProgressBar, ProgressStyle, ProgressDrawTarget};
 use serde::{Serialize, Deserialize, Deserializer, Serializer, de::Visitor};
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
-use console::{Term, style};
 
 use crate::config::{InstanceHandle, InstanceCache, InstanceType::*};
-use crate::constants::LOCATION;
+use crate::constants::{LOCATION, RESET, BOLD, ARROW_CYAN, BAR_GREEN};
 use crate::utils::{print_warning, print_error};
 
 #[derive(Debug)]
@@ -260,7 +260,7 @@ impl <'a>FileSystemStateSync<'a> {
                 let state = FileSystemState::new();
 
                 if let ciborium::de::Error::Semantic(_, error) = err {
-                    print_error(format!("Deserialization failure occurred with '{}.dat': {}", style(instance).bold(), error)); 
+                    print_error(format!("Deserialization failure occurred with '{}{instance}{}.dat': {error}", *BOLD, *RESET)); 
                 }
 
                 self.state_map_prev.insert(instance.clone(), state.clone()); 
@@ -281,7 +281,7 @@ impl <'a>FileSystemStateSync<'a> {
 
         self.pool().unwrap().spawn(move ||{ 
             if let Err(err) = ciborium::into_writer(&ds, output) {
-                print_error(format!("Serialization failure occurred with '{}.dat': {}", style(dep).bold(), err.to_string())); 
+                print_error(format!("Serialization failure occurred with '{}{dep}{}.dat': {}", *BOLD, *RESET, err.to_string())); 
             }
 
             drop(tx);
@@ -342,7 +342,7 @@ impl <'a>FileSystemStateSync<'a> {
     }
 
     pub fn prepare_single(&mut self) {
-        println!("{} {}",style("->").bold().cyan(), style(format!("Synchronizing container state...")));     
+        println!("{} Synchronizing container state...", *ARROW_CYAN);     
 
         if let None = self.pool {
             self.pool = Some(ThreadPoolBuilder::new()
@@ -354,7 +354,7 @@ impl <'a>FileSystemStateSync<'a> {
     }
 
     pub fn prepare(&mut self, length: usize) {
-        println!("{} {} ",style("::").bold().green(), style("Synchronizing container filesystems...").bold());  
+        println!("{} {}Synchronizing container filesystems...{} ",*BAR_GREEN, *BOLD, *RESET);  
 
         self.pool = Some(ThreadPoolBuilder::new()
             .thread_name(|f| { format!("PW-LINKER-{}", f) })

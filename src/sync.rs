@@ -4,12 +4,11 @@ use std::process::{exit, Command};
 use std::env;
 
 use alpm::{Alpm,  SigLevel, Usage, PackageReason};
-use console::style;
 use lazy_static::lazy_static;
 use pacmanconf;
 
 use crate::config::{Instance, InstanceType, self};
-use crate::constants::{self, LOCATION};
+use crate::constants::{self, LOCATION, BAR_GREEN, RESET, BOLD, ARROW_GREEN, BOLD_GREEN, ARROW_RED};
 use crate::log::Logger;
 use crate::sync::{
     dl_event::DownloadCallback,
@@ -136,7 +135,7 @@ pub fn create(instype: InstanceType, mut targets: Vec<&str>) {
 }
 
 fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
-    println!("{} {}", style("::").bold().green(), style(format!("Instantiating container {}...", ins)).bold());
+    println!("{} {}Instantiating container {ins}{}", *BAR_GREEN, *BOLD, *RESET);
 
     let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
     let mut logger = Logger::new("pacwrap").init().unwrap();
@@ -187,7 +186,7 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
     config::save_handle(&instance).ok(); 
     logger.log(format!("Configuration file created for {ins}")).unwrap();
     drop(instance);
-    println!("{} Instantiation complete.", style("->").bold().green());
+    println!("{} Instantiation complete.", *ARROW_GREEN);
 }
 
 pub fn query(mut arguments: Arguments) {
@@ -222,7 +221,7 @@ pub fn query(mut arguments: Arguments) {
 
         match quiet {
             true => println!("{} ", pkg.name()),
-            false => println!("{} {} ", pkg.name(), style(pkg.version()).green().bold()), 
+            false => println!("{} {}{}{} ", pkg.name(), *BOLD_GREEN, pkg.version(), *RESET), 
         }
     } 
 }
@@ -291,13 +290,13 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             let ins: &InstanceHandle = cache.instances().get(insname).unwrap();      
             let mut handle = alpm_handle(&ins, db_path);
 
-            println!("{} {} ",style("::").bold().green(), style("Synchronising package databases...").bold()); 
+            println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
             handle.set_progress_cb(ProgressCallback::new(), progress_event::progress_event); 
             handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {
                 print_error(format!("Unable to initialize transaction: {}.",err.to_string()));
-                println!("{} Transaction failed.",style("->").bold().red());
+                println!("{} Transaction failed.", *ARROW_RED);
                 std::process::exit(1);
             }
            

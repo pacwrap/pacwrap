@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use alpm::{AnyDownloadEvent, DownloadEvent};
+use dialoguer::console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use console::Term;
 use lazy_static::lazy_static;
 
 use super::utils::whitespace;

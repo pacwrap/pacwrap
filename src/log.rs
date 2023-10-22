@@ -1,6 +1,6 @@
 use std::{path::Path,
     fs::{OpenOptions, File}, 
-    io::{Write, Error}, sync::Arc};
+    io::{Write, Error}};
 
 use time::{OffsetDateTime, 
     format_description::FormatItem,
@@ -15,7 +15,7 @@ const UTC_OFFSET: &[FormatItem<'static>] = format_description!("[offset_hour]");
 pub enum LoggerError {
     ParentNotFound,
     Uninitialized,
-    GenericIOError(Arc<str>, Error)
+    GenericIOError(&'static str, Error)
 }
 
 pub struct Logger {
@@ -45,7 +45,7 @@ impl Logger {
     }
 
     pub fn init(mut self) -> Result<Self, LoggerError> {
-        let path = Path::new(LOG_LOCATION.as_ref());
+        let path = Path::new(*LOG_LOCATION);
         
         if ! path.parent().unwrap().exists() {
             Err(LoggerError::ParentNotFound)?

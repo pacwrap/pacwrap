@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use alpm::Progress;
+use dialoguer::console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use console::{Term, style};
+
+use crate::constants::{BOLD, RESET};
 
 use super::utils::whitespace;
 
@@ -51,7 +53,7 @@ pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: 
             let whitespace = whitespace(total.to_string().len(), pos.to_string().len()); 
             
             pb.set_style(this.style.clone());
-            pb.set_message(format!("({}{}/{}) {}", whitespace, style(pos).bold().white(), style(total).bold().white(), progress_name)); 
+            pb.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *BOLD, *RESET, *BOLD, *RESET)); 
             pb.set_position(percent as u64); 
 
             if percent == 100 {

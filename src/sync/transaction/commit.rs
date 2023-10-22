@@ -1,8 +1,8 @@
-use console::{style, Term};
 use alpm::{Alpm, 
     CommitResult, 
     FileConflictType, 
     PrepareResult};
+use dialoguer::console::Term;
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
 use crate::{sync::{
@@ -11,7 +11,7 @@ use crate::{sync::{
     dl_event::{DownloadCallback, self}}, 
     exec::utils::execute_in_container, 
     utils::{print_error, print_warning}, 
-    config::InstanceType};
+    config::InstanceType, constants::{RESET, BOLD, BOLD_WHITE, DIM}};
 
 use crate::utils::prompt::prompt;
 use crate::config::InstanceHandle;
@@ -68,7 +68,7 @@ impl Transaction for Commit {
                 let action = ag.action().as_str();
                 let query = format!("Proceed with {action}?");
 
-                if let Err(_) = prompt("::", format!("{}", style(query).bold()), true) {
+                if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
                     return state_transition(&self.state, handle);
                 }
             }
@@ -131,13 +131,13 @@ fn summary(handle: &Alpm) {
     let preface_newline = " ".repeat(preface.len()); 
     let line_delimiter = size.1 as usize - preface.len();
    
-    print!("\n{}", style(format!("{preface}")).bold());
+    print!("\n{}{preface}{}", *BOLD, *RESET);
 
     for pkg_sync in packages { 
         let pkg = match handle.localdb().pkg(pkg_sync.name()) {
             Ok(pkg) => pkg, Err(_) => pkg_sync,
         };
-        let output = format!("{}-{} ", pkg.name(), style(pkg_sync.version()).dim()); 
+        let output = format!("{}-{}{}{} ", pkg.name(), *DIM, pkg_sync.version(), *RESET); 
         let download_size = pkg_sync.download_size();
         let string_len = pkg.name().len() + pkg_sync.version().len() + 2;
 
@@ -160,16 +160,16 @@ fn summary(handle: &Alpm) {
     }
 
     print!("{pkglist}\n\n");
-    println!("{}: {}", style(total_str).bold(), installed_size.to_byteunit(SI));  
+    println!("{}{total_str}{}: {}", *BOLD, *RESET, installed_size.to_byteunit(SI));  
 
     let net = installed_size-installed_size_old;
 
     if net != 0 {
-        println!("{}: {}", style("Net Upgrade Size").bold(), net.to_byteunit(SI)); 
+        println!("{}Net Upgrade Size{}: {}", *BOLD, *RESET, net.to_byteunit(SI)); 
     }
 
     if download > 0 {
-        println!("{}: {}", style("Total Download Size").bold(), download.to_byteunit(SI));
+        println!("{}Total Download Size{}: {}", *BOLD, *RESET, download.to_byteunit(SI));
         handle.set_dl_cb(DownloadCallback::new(download as u64, files_to_download), dl_event::download_event);
     }
 
@@ -188,12 +188,12 @@ fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Result<(
                     },
                     FileConflictType::Target => {
                         let file = conflict.file();
-                        let target = style(conflict.target()).bold().white();
+                        let target = format!("{}{}{}",*BOLD_WHITE, conflict.target(), *RESET);
                         if let Some(conflicting) = conflict.conflicting_target() { 
-                            let conflicting = style(conflicting).bold().white();
-                            print_warning(format!("{}: '{}' is owned by {}", target, file, conflicting)); 
+                            let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
+                            print_warning(format!("{conflicting}: '{target}' is owned by {file}")); 
                         } else {
-                            print_warning(format!("{}: '{}' is owned by foreign target", target, file));
+                            print_warning(format!("{target}: '{file}' is owned by foreign target"));
                         }
                     },
                 }
@@ -203,7 +203,7 @@ fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Result<(
         },
         CommitResult::PkgInvalid(p) => {
             for pkg in p.iter() {
-                let pkg = style(pkg).bold().white();  
+                let pkg = format!("{}{pkg}{}", *BOLD_WHITE, *RESET);
                 print_error(format!("Invalid package: {}", pkg)); 
             }
         },
@@ -217,17 +217,17 @@ fn erroneous_preparation<'a>(error:  (PrepareResult<'a>, alpm::Error)) -> Result
     match error.0 {
         PrepareResult::PkgInvalidArch(list) => {
         for package in list.iter() {
-                print_error(format!("Invalid architecture {} for {}", style(package.arch().unwrap()).bold(), style(package.name()).bold()));
+                print_error(format!("Invalid architecture {}{}{} for {}{}{}", *BOLD, package.arch().unwrap(), *RESET, *BOLD, package.name(), *RESET));
             }
         },
         PrepareResult::UnsatisfiedDeps(list) => {
             for missing in list.iter() {
-                print_error(format!("Unsatisifed dependency {} for target {}", style(missing.depend()).bold(), style(missing.target()).bold()));
+                print_error(format!("Unsatisifed dependency {}{}{} for target {}{}{}", *BOLD, missing.depend(), *RESET, *BOLD, missing.target(), *RESET));
             }
         },
         PrepareResult::ConflictingDeps(list) => {
             for conflict in list.iter() {
-                print_error(format!("Conflict between {} and {}: {}", style(conflict.package1()).bold(), style(conflict.package2()).bold(), conflict.reason()));
+                print_error(format!("Conflict between {}{}{} and {}{}{}: {}", *BOLD, conflict.package1(), *RESET, *BOLD, conflict.package2(), *RESET, conflict.reason()));
             }
         },
         _ => (),

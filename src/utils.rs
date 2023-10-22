@@ -5,8 +5,9 @@ use std::env::var;
 use std::os::unix::net::UnixStream;
 use std::fmt::Display;
 
-use console::style;
+use nix::unistd::isatty;
 
+use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
 use crate::config::vars::InsVars;
 
 pub use arguments::Arguments;
@@ -24,11 +25,11 @@ pub fn test_root(instance: &InsVars) {
 }
 
 pub fn print_warning(message: impl Into<String> + Display) {
-    eprintln!("{} {}", style("warning:").bold().yellow(), &message);
+    eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET,  &message);
 } 
 
 pub fn print_error(message: impl Into<String> + Display) {
-    eprintln!("{} {}", style("error:").bold().red(), &message);
+    eprintln!("{}error:{} {}", *BOLD_RED, *RESET, &message);
 } 
 
 pub fn env_var(env: &str) -> String {
@@ -60,6 +61,29 @@ pub fn handle_process(result: Result<Child, Error>) {
         Ok(child) => wait_on_process(child),
         Err(_) => print_error("Failed to spawn child process."),
     }
+}
+
+pub fn is_color_terminal() -> bool {
+    let is_dumb = match var("TERM") {
+        Ok(value) => value.to_lowercase() != "dumb",
+        Err(_) => false,
+    };
+
+    is_dumb && isatty(0).is_ok() && isatty(1).is_ok()
+}
+
+
+pub fn is_truecolor_terminal() -> bool {
+    let colorterm = match var("COLORTERM") {
+        Ok(value) => {
+            let value = value.to_lowercase();
+
+            value == "truecolor" || value == "24bit"
+        }
+        Err(_) => false,
+    };
+
+    is_color_terminal() && colorterm
 }
 
 fn wait_on_process(mut child: Child) { 

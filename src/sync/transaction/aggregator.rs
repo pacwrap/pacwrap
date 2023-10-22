@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::process::exit;
 use std::rc::Rc;
 
-use console::style;
-
+use crate::constants::ARROW_GREEN;
 use crate::config::InstanceType;
 use crate::exec::utils::execute_in_container;
 use crate::log::Logger;
@@ -87,7 +86,7 @@ impl <'a>TransactionAggregator<'a> {
             self.transaction(self.cache.containers_root());
         }
 
-        println!("{} Transaction complete.",style("->").bold().green());
+        println!("{} Transaction complete.", *ARROW_GREEN);
     }
 
     pub fn transaction(&mut self, containers: &Vec<Rc<str>>) {

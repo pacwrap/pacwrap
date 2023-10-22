@@ -1,7 +1,4 @@
-#![allow(dead_code)]
-
-use console::{style, Style};
-use dialoguer::{theme::ColorfulTheme, Input};
+use dialoguer::{theme::ColorfulTheme, Input, console::{style, Style}};
 
 pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool)  -> Result<(),()> {
     if let Ok(value) = create_prompt(prompt.into(), prefix, 
