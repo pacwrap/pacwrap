@@ -215,7 +215,7 @@ desktop_entry() {
 			check_file "Desktop entry" "$desktop_entry_local" 1
 			check_file "Container desktop entry" "$desktop_entry"
 
-			sed -z "s/Exec=/Exec=pacwrap $instance \-E /g" < "$desktop_entry" > "$desktop_entry_local"
+			sed -z "s/Exec=/Exec=pacwrap \-E $instance /g" < "$desktop_entry" > "$desktop_entry_local"
 
 			log "$ARROW_GREEN Created desktop entry for $BOLD$application$RESET derived from container $BOLD$instance$RESET."
 	esac
