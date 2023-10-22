@@ -377,7 +377,7 @@ replicate_instance() {
 		depend_params+="-t $dep "
 	done
 
-	$CREATE_SCRIPT -Syu$params -t $instance $depend_params $(return_packages) --noconfirm
+	$CREATE_SCRIPT -Syu$params -t $instance $(return_packages) $depend_params --noconfirm
 
 	if [[ $? == 0 ]]; then 
 		printf " %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					

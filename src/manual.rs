@@ -1,6 +1,11 @@
 use indexmap::IndexSet;
 use lazy_static::lazy_static;
-use crate::utils::{Arguments, arguments::Operand, print_help_error, is_color_terminal, is_truecolor_terminal};
+
+use crate::utils::{Arguments, 
+    arguments::Operand,
+    print_help_error, 
+    is_color_terminal, 
+    is_truecolor_terminal};
 
 lazy_static! {
     static ref HELP_ALL: Vec<HelpTopic> = 
@@ -380,7 +385,7 @@ pub fn print_version(mut args: Arguments) {
         println!("{name} v{version}-{suffix}-{release} ({timestamp})
 Copyright (C) 2023 Xavier R.M.
 
-Website: https://git.sapphirus.org/pacwrap
+Website: https://pacwrap.sapphirus.org/
 Github: https://github.com/sapphirusberyl/pacwrap
 
 This program may be freely redistributed under
