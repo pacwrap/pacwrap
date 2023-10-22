@@ -48,6 +48,7 @@ pub fn print_help_error(args: impl Into<String>) {
     exit(1);
 }
 
+#[allow(dead_code)]
 pub fn print_help_msg(args: impl Into<String>) {
     println!("pacwrap error: {} ", args.into());
     println!("Try 'pacwrap -h' for more information on valid operational parameters.");

@@ -1,5 +1,4 @@
-use utils::arguments::{self, Arguments};
-
+use utils::{arguments::{Arguments, Operand}, print_help_error};
 
 mod config;
 mod exec;
@@ -8,52 +7,28 @@ mod utils;
 mod compat;
 mod sync;
 mod log;
-
-#[derive(Clone, Copy)]
-enum Options {
-    Sync,
-    Remove,
-    Query,
-    Compat,
-    Interpose,
-    Exec,
-    BashProc,
-    BashHelp,
-    BashUtils,
-    Version,
-    None,
-}
+mod manual;
 
 fn main() {
-    config::init::init();
+    let mut arguments = Arguments::new().parse();
+    let param = arguments.next().unwrap_or_default();
 
-    let mut option: Options = Options::None;
+    match param {
+        Operand::Short('S') | Operand::Long("sync") => (), _ => config::init::init(),
+    }
 
-    Arguments::new()
-        .map(&mut option)
-        .short("-Q").long("--query").set(Options::Query)
-        .long("--fake-chroot").set(Options::Sync)
-        .short("-S").long("--sync").set(Options::Interpose)
-        .short("-R").long("--remove").set(Options::Remove)
-        .short("-E").long("--exec").set(Options::Exec)
-        .short("-V").long("--version").set(Options::Version)
-        .short("-Axc").long("--aux-compat").set(Options::Compat)
-        .short("-P").long("--proc").set(Options::BashProc)
-        .short("-H").long("--help").set(Options::BashHelp)
-        .short("-U").long("--utils").set(Options::BashUtils)
-        .parse_arguments();
-
-    match option {
-        Options::Exec => exec::execute(),
-        Options::Sync => sync::synchronize(),
-        Options::Interpose => sync::interpose(), 
-        Options::Query => sync::query(),
-        Options::Remove => sync::remove(),
-        Options::Compat => compat::compat(),
-        Options::Version => arguments::print_version(),
-        Options::BashUtils => compat::execute_bash("utils"),
-        Options::BashProc => compat::execute_bash("ps"), 
-        Options::BashHelp => compat::execute_bash("man"),
-        Options::None => arguments::invalid(),
+    match param {
+        Operand::Short('E') | Operand::Long("exec") => exec::execute(&mut arguments),
+        Operand::Short('Q') | Operand::Long("query") => sync::query(arguments),
+        Operand::Short('R') | Operand::Long("remove") => sync::remove(arguments),
+        Operand::Short('A') | Operand::Long("aux-compat") => compat::compat(arguments),
+        Operand::Long("fake-chroot") => sync::synchronize(arguments),
+        Operand::Short('S') | Operand::Long("sync") => sync::interpose(),  
+        Operand::Short('U') | Operand::Long("utils") => compat::execute_bash("utils"),
+        Operand::Short('P') | Operand::Long("proc") => compat::execute_bash("ps"), 
+        Operand::Short('h') | Operand::Long("help") => manual::help(arguments),
+        Operand::Short('V') | Operand::Long("version") => manual::print_version(arguments),
+        Operand::None => print_help_error("Operation not specified."),
+        _ => arguments.invalid_operand(),
     }
 }

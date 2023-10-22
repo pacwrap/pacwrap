@@ -1,101 +1,73 @@
-use std::env;
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::fmt::Display;
 
-use crate::utils;
+use std::{env, process::exit};
+use super::print_help_error;
 
-use super::print_help_msg;
-
-pub struct Arguments<'a, T> {
-    prefix: String,
-    runtime: Vec<Rc<str>>,
-    targets: Vec<Rc<str>>,
-    ignored: HashSet<Rc<str>>,
-    flags: HashMap<Rc<str>, (i8, i8)>,
-    amalgamation: HashMap<Rc<str>, (i8, i8)>,
-    value_map: HashMap<i8, &'a mut T>,
-    count_map: HashMap<i8, &'a mut i32>,
-    count: HashMap<i8, i32>,
-    values: HashMap<i8, T>,
-    assume_target: bool,
-    set_index: i8,
-    index: i8,
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub enum Operand<'a> {
+    Short(char),
+    ShortPos(char, &'a str),
+    Long(&'a str),
+    LongPos(&'a str, &'a str),
+    Value(&'a str),
+    None
 }
 
-impl<'a, T> Arguments<'a, T> where T: Copy {
+#[derive(Clone, Debug)]
+pub struct Arguments<'a> {
+    values: Vec<&'a str>,
+    operands: Vec<Operand<'a>>,
+    idx: usize,
+    cur: usize,
+}
+
+impl<'a> Arguments<'a> {
     pub fn new() -> Self {
         Self {
-            targets: Vec::new(),
-            prefix: String::new(), 
-            runtime: Vec::new(),
-            flags: HashMap::new(),
-            amalgamation: HashMap::new(),
-            value_map: HashMap::new(),
-            count_map: HashMap::new(),
-            count: HashMap::new(),
-            values: HashMap::new(),
-            ignored: HashSet::new(),
-            assume_target: false,
-            set_index: 0,
-            index: 0,
+            values: Vec::new(),
+            operands: Vec::new(),
+            idx: 0,
+            cur: 0,
         }
     }
 
-    pub fn parse_arguments(mut self) -> Arguments<'a, T> { 
+    pub fn parse(mut self) -> Arguments<'a> {
         for string in env::args().skip(1) {
-            let string: Rc<str> = string.into(); 
+            match string { 
+                string if string.starts_with("--") => {
+                    let string = string.leak();
+                    
+                    if string.contains('=') {
+                        let value: Vec<&'a str> = string.split_at(2).1.split('=').collect();
 
-            if let Some(_) = self.ignored.get(&string) {
-                continue;
-            }
-
-            match string {
-                string if self.flags.get(&string).is_some() => {
-                    let key = self.flags.get(&string).unwrap(); 
-
-                    if let Some(result) = self.values.remove(&key.1) {
-                        if let Some(bool) = self.value_map.remove(&key.0) {
-                            *bool = result;
-                        }
-                    }
-
-                    if let Some(count) = self.count_map.get_mut(&key.0) {
-                        **count = **count + 1;
-                    }
-                },   
-                string if string.starts_with(self.get_prefix()) => {      
-                    for amalgam in self.amalgamation.iter() { 
-                        for char in string.chars() { 
-                            if char != amalgam.0.chars().collect::<Vec<_>>()[0] || char == '-' {
-                                if char == 't' {
-                                    self.assume_target = true;
-                                }
-
-                                continue;
-                            }
-
-                            if let Some(result) = self.values.remove(&amalgam.1.1) { 
-                                if let Some(bool) = self.value_map.remove(&amalgam.1.0) {
-                                    *bool = result;
-                                }
-                            }
-                            
-                            if let Some(count) = self.count_map.get_mut(&amalgam.1.0) { 
-                                **count = **count + 1;
-                            }
-                        }
-                    }
-                },
-                string if string.starts_with("-t") || string.starts_with("--target") => {
-                    self.assume_target = true;
-                }, 
-                _ => { 
-                    if self.assume_target {
-                        self.targets.push(string);
-                        self.assume_target = false;
+                        self.operands.extend([Operand::Long(value[0]), Operand::LongPos(value[0], value[1])]); 
                     } else {
-                        self.runtime.push(string);
+                        self.operands.push(Operand::Long(string.split_at(2).1));
                     }
+
+                    self.values.push(string);
+                },
+                string if string.starts_with("-") => if string.len() > 1 {
+                    let string = string.leak();
+
+                    for operand in string.split_at(1).1.chars() {
+                        self.operands.push(Operand::Short(operand));
+                    }
+
+                    self.values.push(string);
+                },
+                _ => {
+                    let string = string.leak();
+ 
+                    self.operands.push(match self.operands.last() {
+                        Some(last) => match last {
+                            Operand::Short(c) => Operand::ShortPos(*c, string),
+                            Operand::Long(s) => Operand::LongPos(*s, string),
+                            _ => Operand::Value(string),
+                        },
+                        None => Operand::Value(string),
+                    });
+                    self.values.push(string);
                 }
             }
         }
@@ -103,97 +75,85 @@ impl<'a, T> Arguments<'a, T> where T: Copy {
         self
     }
 
-    pub fn prefix(mut self, prfx: &str) -> Self {
-        self.prefix.push_str(prfx.into());
-        self
-    }
+    pub fn targets(&mut self) -> Vec<&'a str> {
+        let mut targets = Vec::new();
 
-    #[allow(dead_code)]
-    pub fn validate(self, expected: usize) -> Self { 
-        if self.runtime.len() > expected {
-            invalid();
+        for op in self.into_iter() {
+            if let Operand::ShortPos('t', name) | Operand::LongPos("target", name) = op { 
+                targets.push(name); 
+            }
+        }
+         
+        targets
+    }
+    
+    pub fn target(&mut self) -> &'a str {
+        for op in self.into_iter() {
+            if let Operand::ShortPos(_, name) 
+            | Operand::LongPos(_, name) 
+            | Operand::Value(name) = op {
+                return name;
+            }
         }
 
-        self
+        print_help_error("Target not specified.");
+        exit(1)
+    }    
+
+    pub fn set_index(&mut self, index: usize) {
+        self.idx = index;
+        self.cur = index;
     }
 
-    pub fn require_target(self, expected: usize) -> Self { 
-        if self.targets.len() < expected {
-            let noun = if expected > 1 { "Targets" } else { "Target" };
-
-            utils::print_help_msg(format!("{noun} not specified.")); 
+    pub fn invalid_operand(&self) {
+        match self.operands.get(self.cur) {
+            Some(oper) => print_help_error(&format!("Invalid option -- '{}'", oper)),
+            None => print_help_error(&format!("Operation not specified.")),
         }
-
-        self
     }
 
-    pub fn set(mut self, value: T) -> Self {
-        self.values.insert(self.set_index, value); 
-        self.set_index += 1; 
-        self
+    pub fn values(&self) -> &Vec<&'a str> {
+        &self.values
     }
-
-    pub fn push(mut self) -> Self {
-        self.index += 1;
-        self
-    }
-
-    pub fn assume_target(mut self) -> Self {
-        self.assume_target = true;
-        self
-    }
-
-    pub fn ignore(mut self, switch: &str) -> Self {
-        self.ignored.insert(switch.into());
-        self.ignored.insert(switch.split_at(1).1.into());
-        self
-    }
-
-    pub fn long<'b>(mut self, switch: &str) -> Self { 
-        self.flags.insert(switch.into(), (self.index, self.set_index)); 
-        self
-    }
-
-    pub fn map<'b>(mut self, conditional: &'a mut T) -> Self { 
-        self.value_map.insert(self.index, conditional);
-        self
-    }
-
-    pub fn short<'b>(mut self, switch: &str) -> Self { 
-        self.flags.insert(switch.into(), (self.index, self.set_index));
-        self.amalgamation.insert(switch.split_at(1).1.into(), (self.index, self.set_index));
-        self
-    }
-
-    pub fn count<'b>(mut self, count: &'a mut i32) -> Self {  
-        self.count_map.insert(self.index, count);
-        self.count.insert(self.index, 0);
-        self
-    }
-
-    pub fn targets(&self) -> &Vec<Rc<str>> { &self.targets }
-    pub fn get_runtime(&self) -> &Vec<Rc<str>> { &self.runtime }
-    pub fn get_prefix(&self) -> &String { &self.prefix }
 }
 
-pub fn print_version() {
-    let info=concat!("Copyright (C) 2023 Xavier R.M.\n\n",
-                     "Website: https://git.sapphirus.org/pacwrap\n",
-                     "Github: https://github.com/sapphirusberyl/pacwrap\n\n",
-                     "This program may be freely redistributed under\n",
-                     "the terms of the GNU General Public License v3.\n");
+impl <'a>Iterator for Arguments<'a> {
+    type Item = Operand<'a>;
 
-    println!("{} {}\n{info}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+    fn next(&mut self) -> Option<Self::Item> {
+        self.cur = self.idx;
+
+        if self.cur < self.operands.len() {
+            self.idx += 1;
+            Some(self.operands.as_slice()[self.cur])
+        } else {        
+            self.set_index(0);
+            None
+        }
+    }
 }
 
-pub fn invalid() {
-    let mut ar = String::new();
-    for arg in env::args().skip(1).collect::<Vec<_>>().iter() {
-        if arg == "--fake-chroot" {
-            continue;
+impl <'a>Default for &Operand<'a> {
+    fn default() -> Self {
+        &Operand::None
+    }
+}
+
+impl <'a>Default for Operand<'a> {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl <'a>Display for Operand<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>)  -> std::fmt::Result {
+        match self {
+            Operand::Long(str) => write!(fmt, "--{}", str),
+            Operand::LongPos(str, eq) => write!(fmt, "--{} {}", str, eq),
+            Operand::Short(char) => write!(fmt, "-{}", char),
+            Operand::ShortPos(str, eq) => write!(fmt, "-{} {}", str, eq),
+            Operand::Value(str) => write!(fmt, "{}", str),
+            Operand::None => write!(fmt, "None"),
         }
-        ar.push_str(&format!("{} ", &arg));
-    } 
-    ar.truncate(ar.len()-1);
-    print_help_msg(&format!("Invalid arguments -- '{}'", ar));
+    }
 }

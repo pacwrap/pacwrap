@@ -34,7 +34,7 @@ impl Transaction for Prepare {
                     }
                 }
 
-                if let TransactionType::Upgrade(upgrade, _) = ag.action() {
+                if let TransactionType::Upgrade(upgrade,_,_) = ag.action() {
                     if ! upgrade && handle.queue.len() == 0 {
                         Err(Error::NothingToDo)?
                     }

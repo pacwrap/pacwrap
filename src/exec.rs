@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::{thread, time::Duration};
 use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
@@ -27,8 +26,7 @@ use crate::config::{self,
     permission::*, 
     InstanceHandle, InstanceType};
 use crate::utils::{TermControl, 
-    Arguments, 
-    arguments,
+    arguments::{Arguments, Operand},
     env_var, 
     print_error,
     print_help_error,
@@ -37,66 +35,94 @@ use crate::utils::{TermControl,
 pub mod args;
 pub mod utils;
 
-#[derive(Copy, Clone, Debug)]
-enum Options {
-    Shell,
-    FakeRoot,
-    Command,
-    Container,
-    Verbose,
-    None
+enum ExecParams<'a> {
+    Root(bool, bool, Vec<&'a str>,  InstanceHandle),
+    Container(bool, bool, Vec<&'a str>, InstanceHandle),
 }
 
-pub fn execute() {
-    let mut mode = Options::Command;
-    let mut root = Options::Container;
-    let mut verbose = Options::None;
-    let args = Arguments::new()
-        .prefix("-E")
-        .ignore("--exec")
-        .short("-r").long("--root").map(&mut root).set(Options::FakeRoot).push()
-        .short("-v").long("--verbose").map(&mut verbose).set(Options::Verbose).push()
-        .short("-c").long("--command").map(&mut mode).set(Options::Command)
-        .short("-s").long("--shell").set(Options::Shell).push()
-        .assume_target()
-        .parse_arguments()
-        .require_target(1);
-    let runtime = args.get_runtime().clone();
-    let handle = &config::provide_handle(args.targets().get(0).as_ref().unwrap());
+/*
+ * Open an issue or possibly submit a PR if this module's argument parser 
+ * is conflicting with an application you use.
+ */
 
-    if let InstanceType::DEP = handle.metadata().container_type() {
-        print_error("Execution in dependencies is not supported.");
-        exit(1);
-    }
+impl <'a>From<&'a mut Arguments<'a>> for ExecParams<'a> {
+    fn from(args: &'a mut Arguments) -> Self {
+        let runtime = args.values()
+            .iter()
+            .filter_map(|f| {
+                let str = *f;
 
-    if let Options::Verbose = verbose { 
-        handle.vars().debug(handle.config(), &runtime); 
-    }
+                match str {
+                    string if string.starts_with("-E") 
+                        | string.eq("--exec") 
+                        | string.eq("--target")  
+                        | string.eq("--verbose")
+                        | string.eq("--shell") 
+                        | string.eq("--root") 
+                        | string.eq("--fake-chroot") => None,
+                    _ => Some(str),
+                }
+            })
+            .skip(1)
+            .collect(); 
+        let mut verbose = false;
+        let mut shell = false;
+        let mut root = false;
+        let mut container = None;
 
-    match root {
-        Options::FakeRoot => 
-            match mode {
-                Options::Shell => execute_fakeroot_container(handle, vec!("bash".into())),
-                Options::Command => execute_fakeroot_container(handle, runtime), 
-                _ => arguments::invalid()
+        while let Some(arg) = args.next() {
+            match arg {
+                Operand::Short('r') | Operand::Long("root") => root = true,
+                Operand::Short('s') | Operand::Long("shell") => shell = true,
+                Operand::Short('v') | Operand::Long("verbose") => verbose = true,
+                Operand::ShortPos('E', str) 
+                    | Operand::ShortPos('s', str)
+                    | Operand::ShortPos('r', str)
+                    | Operand::ShortPos('v', str)
+                    | Operand::LongPos("target", str)
+                    | Operand::Value(str) => if let None = container { 
+                        container = Some(str); 
+                    },
+                _ => continue,
             }
-        Options::Container => 
-            match mode {
-                Options::Shell => execute_container(handle, vec!("bash".into()), mode, verbose),
-                Options::Command => execute_container(handle, runtime, mode, verbose),
-                _=> arguments::invalid()
-            }
-        _ => unreachable!()
+        }
+
+        let handle = match container {
+            Some(container) => config::provide_handle(container),
+            None => {
+                print_help_error("Target not specified.");
+                exit(1);
+            },
+        };
+
+        if let InstanceType::DEP = handle.metadata().container_type() {
+            print_error("Execution in dependencies is not supported.");
+            exit(1);
+        }
+
+        match root {
+            true => Self::Root(verbose, shell, runtime, handle),
+            false => Self::Container(verbose, shell, runtime, handle),
+        }
     }
 }
 
-fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: Options, verbose: Options) {
+pub fn execute<'a>(args: &'a mut Arguments<'a>) {
+    match args.into() {
+        ExecParams::Root(verbose, true, _, handle) => execute_fakeroot_container(&handle, vec!("bash"), verbose),
+        ExecParams::Root(verbose,  false, args, handle) => execute_fakeroot_container(&handle, args, verbose),
+        ExecParams::Container(verbose, true, _, handle) => execute_container(&handle, vec!("bash"), true, verbose),
+        ExecParams::Container(verbose, false, args, handle) => execute_container(&handle, args, false, verbose),
+    }
+}
+
+fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, verbose: bool) {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
     let vars = ins.vars();
 
-    if let Options::Shell = shell { 
+    if shell { 
         exec_args.env("TERM", "xterm"); 
     }    
     
@@ -127,12 +153,13 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: Optio
     exec_args.env("PATH", "/usr/bin/:/bin");
     exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
 
-    if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
-        print_help_error(error); 
+    if verbose { 
+        ins.vars().debug(ins.config(), &arguments); 
+        println!("{:?} ",exec_args); 
     }
 
-    if let Options::Verbose = verbose { 
-        println!("{:?} ",exec_args); 
+    if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
+        print_help_error(error); 
     }
 
     let (reader, writer) = os_pipe::pipe().unwrap();
@@ -149,7 +176,7 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>, shell: Optio
         .arg("--clearenv")
         .args(exec_args.get_env()).arg("--info-fd")
         .arg(fd.to_string())
-        .args(arguments.iter().map(|a| a.as_ref()).collect::<Vec<&str>>())
+        .args(arguments)
         .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
@@ -346,8 +373,12 @@ fn clean_up_socket(path: &str) {
     }
 }
 
-fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>) {  
+fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbose: bool) {  
     crate::utils::test_root(ins.vars());
+
+    if verbose { 
+        ins.vars().debug(ins.config(), &arguments); 
+    }
 
     if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
         print_help_error(error); 
@@ -359,7 +390,7 @@ fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<Rc<str>>) {
     }
 }
 
-fn check_path(ins: &InstanceHandle, args: &Vec<Rc<str>>, path: Vec<&str>) -> Result<(), String> {
+fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<(), String> {
     if args.len() == 0 {
         Err(format!("Runtime parameters not specified."))?
     }

@@ -427,8 +427,7 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
         }
 
         let metadata = match entry.metadata() {
-            Ok(meta) => meta,
-            Err(_) => continue
+            Ok(meta) => meta, Err(_) => continue
         };
 
         state.files.insert(src_tr, (FileType::from(metadata), src));

@@ -10,8 +10,7 @@ use crate::config::{self,
     InsVars, 
     InstanceType, 
     InstanceHandle};
-use crate::utils::{Arguments, 
-    print_error, 
+use crate::utils::{arguments::{Arguments, Operand}, 
     handle_process, 
     env_var};
 
@@ -87,30 +86,11 @@ fn print_configuration(instance: &str) {
     println!("INSTANCE_CONFIG[{},3]=\"{}\"", instance, pkgs_string);
 }
 
-pub fn compat() {
-    #[derive(Copy, Clone)]
-    enum Options {
-        Save,
-        Link,
-        None
-    }
-
-    let mut option: Options = Options::None;
-    let args = Arguments::new()
-        .prefix("-Axc")
-        .map(&mut option)
-        .short("-s").long("--save").set(Options::Save)
-        .short("-l").long("--link").set(Options::Link)
-        .assume_target()
-        .parse_arguments()
-        .require_target(1);
-    let mut runtime = args.targets().clone();
-    let instance = runtime.remove(0);    
-
-    match option {
-        Options::Save => save_configuration(&instance),
-        Options::Link => print_configuration(&instance),
-        _ => print_error(format!("Invalid switch sequence.")), 
+pub fn compat(mut args: Arguments) {
+    match args.next().unwrap_or_default() {
+        Operand::Short('s') | Operand::Long("save") => save_configuration(args.target()),
+        Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()), 
+        _ => args.invalid_operand()
     }
 }
 

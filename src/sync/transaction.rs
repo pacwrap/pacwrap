@@ -12,8 +12,7 @@ use crate::sync::{
     utils::get_local_package,
     utils::get_package};
 use crate::utils::print_error;
-use crate::config::{InstanceHandle, 
-    cache::InstanceCache};
+use crate::config::InstanceHandle;
 use self::stage::Stage;
 use self::{
     commit::Commit,
@@ -22,7 +21,7 @@ use self::{
 
 pub use self::aggregator::TransactionAggregator;
 
-mod aggregator;
+pub mod aggregator;
 mod commit;
 mod prepare;
 mod uptodate;
@@ -53,7 +52,7 @@ pub enum TransactionState {
 }
 
 pub enum TransactionType {
-    Upgrade(bool, bool),
+    Upgrade(bool, bool, bool),
     Remove(bool, bool, bool),
 }
 
@@ -76,11 +75,12 @@ pub trait Transaction {
 bitflags! {
     pub struct TransactionFlags: u8 {
         const NONE = 0;
-        const PREVIEW = 0b00001;
-        const NO_CONFIRM =  0b00010;
-        const FORCE_DATABASE = 0b00100;
-        const DATABASE_ONLY = 0b01000;
-        const CREATE = 0b10000;
+        const PREVIEW = 0b000001;
+        const NO_CONFIRM =  0b000010;
+        const FORCE_DATABASE = 0b000100;
+        const DATABASE_ONLY = 0b001000;
+        const CREATE = 0b010000;
+        const FILESYSTEM_SYNC =  0b100000;
     }
 }
 
@@ -125,17 +125,17 @@ impl TransactionState {
     }
 }
 
-impl TransactionType {
+impl TransactionType { 
     fn as_str(&self) -> &str {
         match self {
-            Self::Upgrade(_,_) => "installation",
+            Self::Upgrade(_,_,_) => "installation",
             Self::Remove(_,_,_) => "removal"
         }
     }
 
     fn action_message(&self, state: TransactionMode) {
         let message = match self {
-            Self::Upgrade(_,_) => match state {
+            Self::Upgrade(_,_,_) => match state {
                 TransactionMode::Foreign => "Synchronizing foreign database...",
                 TransactionMode::Local => "Synchronizing resident container..."
             }, 
@@ -148,7 +148,7 @@ impl TransactionType {
     fn begin_message(&self, inshandle: &InstanceHandle) {
         let instance = inshandle.vars().instance();
         let message = match self {
-            Self::Upgrade(upgrade, _) => match upgrade { 
+            Self::Upgrade(upgrade,_,_) => match upgrade { 
                 true => format!("Checking {instance} for updates..."),
                 false => format!("Transacting {instance}...")
             }
@@ -357,7 +357,7 @@ impl TransactionHandle {
 
     fn trans_ready(&self, trans_type: &TransactionType) -> Result<()> {
         if match trans_type {
-            TransactionType::Upgrade(_,_) => self.alpm.trans_add().len(),
+            TransactionType::Upgrade(_,_,_) => self.alpm.trans_add().len(),
             TransactionType::Remove(_,_,_) => self.alpm.trans_remove().len()
         } > 0 {
             Ok(())
@@ -386,31 +386,19 @@ impl TransactionHandle {
         drop(self);
     }
     
-    fn set_mode(&mut self, modeset: TransactionMode) { self.mode = modeset; }
-    fn get_mode(&self) -> &TransactionMode { &self.mode }
-    fn alpm_mut(&mut self) -> &mut Alpm { &mut self.alpm }
-    fn alpm(&mut self) -> &Alpm { &self.alpm }
-}
-
-pub fn update<'a>(mut update: TransactionAggregator<'a>, cache: &'a InstanceCache, aux_cache: &'a mut InstanceCache, sync_fs: bool) {
-    update.transaction(&cache.containers_base());
-    update.transaction(&cache.containers_dep());
-
-    if sync_fs || update.updated().len() > 0 {
-        aux_cache.populate(); 
-
-        if aux_cache.containers_root().len() > 0 {
-            let linker = update.fs_sync().unwrap();
-
-            linker.set_cache(aux_cache);
-            linker.prepare(aux_cache.registered().len());
-            linker.engage(&aux_cache.registered());
-            linker.finish();
-        }
-        
-        update = update.fs_sync_release(); 
+    fn set_mode(&mut self, modeset: TransactionMode) { 
+        self.mode = modeset; 
     }
 
-    update.transaction(&cache.containers_root());
-    println!("{} Transaction complete.",style("->").bold().green());
+    fn get_mode(&self) -> &TransactionMode { 
+        &self.mode 
+    }
+    
+    fn alpm_mut(&mut self) -> &mut Alpm { 
+        &mut self.alpm
+    }
+    
+    fn alpm(&mut self) -> &Alpm { 
+        &self.alpm
+    }
 }

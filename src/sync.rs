@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::Write;
 use std::process::{exit, Command};
 use std::env;
-use std::rc::Rc;
 
 use alpm::{Alpm,  SigLevel, Usage, PackageReason};
 use console::style;
@@ -14,17 +13,16 @@ use crate::constants::{self, LOCATION};
 use crate::log::Logger;
 use crate::sync::{
     dl_event::DownloadCallback,
-    filesystem::FileSystemStateSync,
     progress_event::ProgressCallback,
     transaction::TransactionType,
-    transaction::TransactionAggregator};
-use crate::utils::{print_help_error, print_help_msg};
-use crate::utils::{Arguments, 
-    arguments::invalid, 
+    transaction::aggregator};
+use crate::utils::arguments::Operand;
+use crate::utils::{arguments::Arguments, 
     test_root,
     handle_process,
     print_warning,
-    print_error};
+    print_error,
+    print_help_error};
 use crate::config::{InsVars,
     InstanceHandle,
     cache::InstanceCache};
@@ -43,142 +41,110 @@ mod resolver;
 mod resolver_local;
 mod utils;
 
-pub fn synchronize() {
+pub fn synchronize(mut args: Arguments) {
     if let Err(_) = validate_environment() {
         print_error("Execution without libfakechroot in an unprivileged context is not supported.");
         exit(1);
     }
 
-    let mut base = false;
-    let mut dep = false;
-    let mut create = false;
-    let mut force_database = false;
-    let mut refresh = false;
-    let mut upgrade = false;
-    let mut preview = false;
-    let mut no_confirm = false;
-    let mut no_deps = false;
-    let mut dbonly = false;
-    let mut y_count = 0;
-    let mut u_count = 0;
-    let args = Arguments::new()
-        .prefix("-S")
-        .ignore("--sync")
-        .ignore("--fake-chroot")
-        .short("-y").long("--refresh").map(&mut refresh).set(true).count(&mut y_count).push()
-        .short("-u").long("--upgrade").map(&mut upgrade).set(true).count(&mut u_count).push()
-        .short("-p").long("--preview").map(&mut preview).set(true).push()
-        .short("-o").long("--target-only").map(&mut no_deps).set(true).push()
-        .short("-c").long("--create").map(&mut create).set(true).push() 
-        .short("-d").long("--dep").map(&mut dep).set(true).push() 
-        .short("-b").long("--base").map(&mut base).set(true).push() 
-        .long("--force-foreign").map(&mut force_database).set(true).push()
-        .long("--db-only").map(&mut dbonly).set(true).push()
-        .long("--noconfirm").map(&mut no_confirm).set(true).push() 
-        .parse_arguments();
     let mut cache = InstanceCache::new();
-    let targets = args.targets().clone();
-    let mut runtime = args.get_runtime().clone();
+    let mut logger = Logger::new("pacwrap-sync").init().unwrap();  
+    let action = {
+        let mut u = 0;
+        let mut y = 0;
 
-    if create {
-        if ! upgrade {
-            print_help_msg("--upgrade is required for --create.");
-            exit(1); 
-        } else if ! refresh {
-            print_help_msg("--refresh is required for --create."); 
-        }
-
-        if targets.len() == 0 {
-            print_help_error("Target required for --create.");
-            exit(1);
-        }
-
-        let instype = if base {
-            InstanceType::BASE
-        } else if dep {
-            InstanceType::DEP
-        } else {
-            InstanceType::ROOT
-        };
-        let ins = targets.get(0)
-            .unwrap()
-            .as_ref();
-        let deps = targets.iter()
-            .filter_map(|p| {
-            if p.as_ref() != ins {
-                Some(p.as_ref().into())
-            } else {
-                None
-            } 
-        }).collect::<Vec<Rc<str>>>();
-
-        if base {
-            runtime.extend(vec!("base".into(), "pacwrap-base-dist".into()));
-        }
-
-        instantiate_container(ins, deps, instype);
-    }
-
-    if targets.len() > 0 {
-        cache.populate_from(&targets, true);
-    } else {
-        cache.populate();
-    }
-
-    if y_count == 4 {
-        let mut l: FileSystemStateSync = FileSystemStateSync::new(&cache);  
-
-        l.prepare(cache.registered().len());
-        l.engage(&cache.registered());
-        l.finish();
-    } else if upgrade || targets.len() > 0 {
-        if refresh {
-            synchronize_database(&cache, y_count == 2); 
-        }
-
-        let transaction_type = TransactionType::Upgrade(upgrade, u_count > 1);
-        let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-        let mut update = TransactionAggregator::new(transaction_type, &cache, &mut logger)
-            .preview(preview)
-            .force_database(force_database || create)
-            .database_only(y_count > 2 || dbonly)
-            .no_confirm(no_confirm)
-            .create(create);
-           
-        if targets.len() > 0 { 
-            let target = targets.get(0).unwrap();
-            let inshandle = cache.instances().get(target).unwrap();
-
-            update.queue(target.clone(), runtime);
-            
-            if no_deps || ! upgrade {
-                update.transact(&inshandle);
-            } else {
-                transaction::update(update, &cache, &mut InstanceCache::new(), create); 
+        while let Some(arg) = args.next() {
+            match arg {
+                Operand::Short('y') | Operand::Long("refresh") => y += 1,
+                Operand::Short('u') | Operand::Long("upgrade") => u += 1,
+                _ => continue,
             }
-        } else {
-            transaction::update(update, &cache, &mut InstanceCache::new(), create);
         }
-    } else if refresh {
-        synchronize_database(&cache, y_count == 2); 
-    } else {
-        invalid();
+
+        TransactionType::Upgrade(u > 0, y > 0, y > 1)
+    };
+
+    if let Some(instype) = create_type(&mut args) {
+        if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
+            if ! upgrade {
+                print_help_error("--upgrade/-u not supplied with --create/-c.");
+            } else if ! refresh {
+                print_help_error("--refresh/-y not supplied with --create/-c.");
+            }
+        }
+
+        create(instype, args.targets());
     }
+
+    aggregator::upgrade(action, &mut args, &mut cache, &mut logger).aggregate(&mut InstanceCache::new());
 }
 
-fn instantiate_container(ins: &str, deps: Vec<Rc<str>>, instype: InstanceType) {
+pub fn remove(mut args: Arguments) {
+    let mut cache: InstanceCache = InstanceCache::new();
+    let mut logger = Logger::new("pacwrap-sync").init().unwrap();
+    let action = {
+        let mut recursive = 0;
+        let mut cascade = false;
+
+        while let Some(arg) = args.next() {
+            match arg {
+                Operand::Short('s') | Operand::Long("recursive") => recursive += 1,
+                Operand::Short('c') | Operand::Long("cascade") => cascade = true,
+                _ => continue,
+            }
+        }
+
+        TransactionType::Remove(recursive > 0 , cascade, recursive > 1) 
+    };
+    
+    aggregator::remove(action, &mut args, &mut cache, &mut logger).aggregate(&mut InstanceCache::new());
+}
+
+fn create_type(args: &mut Arguments) -> Option<InstanceType> {
+    let mut instype = None;
+    let mut create = false;
+
+    args.set_index(1);
+
+    while let Some(arg) = args.next() {
+        match arg {
+            Operand::Short('c') | Operand::Long("create") => create = true, 
+            Operand::Short('b') | Operand::Long("base") => instype = Some(InstanceType::BASE),
+            Operand::Short('d') | Operand::Long("slice") => instype = Some(InstanceType::DEP),
+            Operand::Short('r') | Operand::Long("root") => instype = Some(InstanceType::ROOT),
+            _ => continue,
+        } 
+    }
+
+    if create { instype } else { None }
+}
+
+pub fn create(instype: InstanceType, mut targets: Vec<&str>) {
+    if targets.len() == 0 {
+        print_help_error("Creation target not specified.");
+    }
+
+    let target = targets.remove(0);
+
     if let InstanceType::ROOT | InstanceType::DEP = instype {
-        if deps.len() == 0 {
-            print_help_error("Dependencies are required for creation of root and dependent (sliced) filesystems.");
-            exit(1);
+        if target.len() == 0 {
+            print_help_error("Dependency targets not specified.");
         }
     }
 
+    instantiate_container(target, targets, instype); 
+}
+
+fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
     println!("{} {}", style("::").bold().green(), style(format!("Instantiating container {}...", ins)).bold());
 
+    let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
     let mut logger = Logger::new("pacwrap").init().unwrap();
     let instance = match config::provide_some_handle(ins) {
-        Some(handle) => handle,
+        Some(mut handle) => {
+            handle.metadata_mut().set(deps, vec!());
+            handle
+        },
         None => {
             let vars = InsVars::new(ins);
             let cfg = Instance::new(instype, vec!(), deps);
@@ -203,7 +169,6 @@ fn instantiate_container(ins: &str, deps: Vec<Rc<str>>, instype: InstanceType) {
                 exit(1);
             }
         }
-    
 
         let mut f = match File::create(&format!("{}/.bashrc", instance.vars().home().as_ref())) {
             Ok(f) => f,
@@ -225,62 +190,29 @@ fn instantiate_container(ins: &str, deps: Vec<Rc<str>>, instype: InstanceType) {
     println!("{} Instantiation complete.", style("->").bold().green());
 }
 
-pub fn remove() { 
-    let mut preview = false;
-    let mut recursive = false;
-    let mut cascade = false;
-    let mut no_confirm = false;
-    let mut db_only = false;
-    let mut recursive_count = 0;
-    let args = Arguments::new()
-        .prefix("-R")
-        .ignore("--remove")
-        .short("-p").long("--preview").map(&mut preview).set(true).push()
-        .short("-s").long("--recursive").map(&mut recursive).set(true).count(&mut recursive_count).push()
-        .short("-c").long("--cascade").map(&mut cascade).set(true).push()
-        .long("--db-only").map(&mut db_only).set(true).push()
-        .long("--noconfirm").map(&mut no_confirm).set(true)
-        .parse_arguments()
-        .require_target(1);
-    let mut targets = args.targets().clone();
-    let runtime = args.get_runtime().clone();
-    let mut cache: InstanceCache = InstanceCache::new();
-   
-    cache.populate_from(&targets, true);
-
-    let target = targets.remove(0);
-    let inshandle = cache.instances().get(&target).unwrap();
-    let transaction_type = TransactionType::Remove(recursive, cascade, recursive_count < 2); 
-    let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-    let mut update = TransactionAggregator::new(transaction_type, &cache, &mut logger)
-        .preview(preview)
-        .database_only(db_only)
-        .no_confirm(no_confirm);
-
-    update.queue(target, runtime);
-    update.transact(&inshandle);
-}
-
-pub fn query() {
-    let mut quiet = false;
+pub fn query(mut arguments: Arguments) {
+    let mut target = "";
     let mut explicit = false;
-    let args = Arguments::new().prefix("-Q")
-        .ignore("--query")
-        .short("-q").long("--quiet").map(&mut quiet).set(true).push()
-        .short("-e").long("--explicit").map(&mut explicit).set(true).push()
-        .assume_target()
-        .parse_arguments()
-        .require_target(1);
-    let targets = args.targets().clone();
-    let target = targets.get(0).unwrap().as_ref();
-    let instance_vars = InsVars::new(target);
+    let mut quiet = false;
 
-    test_root(&instance_vars);
-    query_database(instance_vars, explicit, quiet) 
-}
+    while let Some(arg) = arguments.next() {
+        match arg {
+            Operand::Short('e') | Operand::Long("explicit") => explicit = true,
+            Operand::Short('q') | Operand::Long("quiet") => quiet = true,
+            Operand::LongPos("target", t) | Operand::ShortPos(_, t) => target = t,
+            _ => arguments.invalid_operand(),
+        }
+    }
 
-fn query_database(vars: InsVars, explicit: bool, quiet: bool) {    
-    let root = vars.root().as_ref(); 
+    if target.is_empty() {
+        print_help_error("Target not specified.");
+    }
+
+    let insvars = InsVars::new(target);
+
+    test_root(&insvars);
+
+    let root = insvars.root().as_ref(); 
     let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
 
     for pkg in handle.localdb().pkgs() {

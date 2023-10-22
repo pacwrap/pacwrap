@@ -39,8 +39,9 @@ impl InsVars {
         vars
     }
 
-    pub fn debug(&self, cfg: &InstanceRuntime, runtime: &Vec<Rc<str>>) { 
+    pub fn debug(&self, cfg: &InstanceRuntime, runtime: &Vec<&str>) { 
         let mut args = String::new();
+
         for arg in runtime.iter() {
             args.push_str(format!("{} ", arg).as_str()); 
         }
