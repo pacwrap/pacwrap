@@ -1,8 +1,8 @@
 use std::{thread, time::Duration};
 use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
-use std::io::Read;
-use std::path::Path;
+use std::io::{Read, ErrorKind};
+use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use std::os::unix::io::AsRawFd;
 
@@ -179,8 +179,8 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
         .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
-            Ok(c) => wait_on_process(c, read_info_json(reader, writer), *cfg.allow_forking(), jobs, tc),
-            Err(_) => print_error(format!("Failed to initialise bwrap."))
+        Ok(c) => wait_on_process(c, read_info_json(reader, writer), *cfg.allow_forking(), jobs, tc),
+        Err(err) => print_error(format!("Failed to initialize '{BWRAP_EXECUTABLE}': {err}"))
     }
 }
 
@@ -257,13 +257,11 @@ fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &InsVars, args: &m
     for p in per.iter() {
        match p.check(vars) {
             Ok(_) => p.register(args, vars),
-            Err(e) => {
-                if *e.critical() {
-                    print_error(format!("Failed to mount {}: {} ", e.module(), e.error()));
-                    exit(1);
-                } else {
-                    print_warning(format!("Failed to mount {}: {} ", e.module(), e.error()));
-                }
+            Err(e) => if *e.critical() {
+                print_error(format!("Failed to mount {}: {} ", e.module(), e.error()));
+                exit(1);
+            } else {
+                print_warning(format!("Failed to mount {}: {} ", e.module(), e.error()));
             }
         }
     }
@@ -313,7 +311,7 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
             
             args.robind(&*DBUS_SOCKET, &dbus_socket_path);
             args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
-            args.env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={}", &dbus_socket_path));
+            args.env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={dbus_socket_path}"));
             
             /* 
              * This blocking code is required to prevent a downstream race condition with 
@@ -355,20 +353,18 @@ fn create_socket(path: &str) {
     match File::create(path) {
         Ok(file) => drop(file),
         Err(error) => {
-            print_error(format!("Failed to create socket '{}': {}", path, error));
-            eprintln!("Ensure you have write permissions to /run/user/.");
+            print_error(format!("Failed to create socket '{path}': {error}"));
             exit(2);
         }
     }
 }
 
 fn clean_up_socket(path: &str) { 
-    if ! Path::new(path).exists() {
-       return;
-    }
-
     if let Err(error) = remove_file(path) {
-        print_error(format!("'Failed to remove socket '{}': {}", path, error));
+        match error.kind() {
+            ErrorKind::NotFound => return,
+            _ => print_error(format!("'Failed to remove socket '{path}': {error}")),
+        }
     }
 }
 
@@ -385,63 +381,61 @@ fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbos
 
     match utils::fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
         Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0)),
-        Err(_) => print_error("Failed to initialise bwrap."), 
+        Err(err) => print_error(format!("Failed to initialize '{BWRAP_EXECUTABLE}:' {err}")), 
     }
 }
 
 fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<(), String> {
     if args.len() == 0 {
-        Err(format!("Runtime parameters not specified."))?
+        Err(format!("Runtime arguments not specified."))?
     }
 
-    let exec = args.get(0).unwrap().as_ref();
+    let exec = args.get(0).unwrap();
     let root = ins.vars().root().as_ref();
 
     for dir in path {
         match Path::new(&format!("{}/{}",root,dir)).try_exists() {
-            Ok(_) => { 
-                let exists = dest_exists(root, dir, exec, 0)?; 
-
-                if exists {
-                    return Ok(());
-                }
-            },
-            Err(error) => Err(&format!("Invalid {}PATH{} variable '{}': {}", *BOLD, *RESET, dir, error))?
+            Ok(_) => if dest_exists(root, dir, exec)? { return Ok(()) },
+            Err(error) => Err(&format!("Invalid {}PATH{} variable '{dir}': {error}", *BOLD, *RESET))?
         }
     }
 
-    Err(format!("'{exec}' not available in container {}PATH{}.", *BOLD, *RESET))
+    Err(format!("'{exec}': Not available in container {}PATH{}.", *BOLD, *RESET))
 }
 
-fn dest_exists(root: &str, dir: &str, exec: &str, mut recursion: u8) -> Result<bool,String> {
+fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,String> {
+    if exec.contains("..") {
+        Err(format!("'{exec}': Executable path must be absolute."))?
+    } else if dir.contains("..") {
+        Err(format!("'{dir}': {}PATH{} variable must be absolute.", *BOLD, *RESET))?
+    }
+
     let path = format!("{}{}/{}", root, dir, exec);
-    let path = Path::new(&path);
+    let path = obtain_path(Path::new(&path), exec)?;
     let path_direct = format!("{}/{}", root, exec);
-    let path_direct = Path::new(&path_direct);
+    let path_direct = obtain_path(Path::new(&path_direct), exec)?;
 
-    if recursion == 40 {
-        Err(format!("'{exec}': Symbolic link recursion depth maximum of {}{recursion}{} exceeded.", *BOLD, *RESET))?
-    }
-
-    recursion += 1;
-
-    if path.is_symlink() {
-        if let Ok(path) = path.read_link() {
-            if let Some(path) = path.as_os_str().to_str() {
-                return dest_exists(root, dir, path, recursion);
-            }
+    if path.is_dir() | path_direct.is_dir() {
+        Err(format!("'{exec}': Directories are not executable."))?
+    } else if let Ok(path) = path.read_link() {
+        if let Some(path) = path.as_os_str().to_str() {
+            return dest_exists(root, dir, path);
         }
-    } else if path.exists() {
-        return Ok(true) 
-    } else if path_direct.is_symlink() {
-        if let Ok(path) = path_direct.read_link() {
-            if let Some(path) = path.as_os_str().to_str() {
-                return dest_exists(root, dir, path, recursion);
-            } 
-        }
-    } else if path_direct.exists() {
-        return Ok(true)
-    }
+    } else if let Ok(path) = path_direct.read_link() {
+        if let Some(path) = path.as_os_str().to_str() {
+            return dest_exists(root, dir, path);
+        } 
+    } 
 
-    Ok(false)
+    Ok(path.exists() | path_direct.exists())
+}
+
+fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf,String> {
+    match Path::canonicalize(&path) {
+        Ok(path) => Ok(path), 
+        Err(err) => match err.kind() {
+            ErrorKind::NotFound => Ok(path.to_path_buf()),
+            _ => Err(format!("'{exec}': {err}"))? 
+        }
+    }
 }
