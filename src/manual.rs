@@ -209,7 +209,7 @@ fn default(layout: &HelpLayout) {
 
     println!("{head}NAME{reset}
 {tab}pacwrap - Command-line application which facilitates the creation, management, and execution of unprivileged, 
-{tab}Sandboxed containers with bubblewrap and libalpm.
+{tab}sandboxed containers with bubblewrap and libalpm.
 
 {head}SYNOPSIS{reset}
 {sub_text}pacwrap [{bold}OPERATIONS{reset_bold}] [{bold}ARGuMENTS{reset_bold}] [{bold}TARGET(S){reset_bold}]	
@@ -255,10 +255,11 @@ fn meta(layout: &HelpLayout) {
     let head = layout.head();
     let sub = layout.sub();
     let sub_text = layout.sub_text();
+    let reset = layout.reset();
     let reset_bold = layout.reset_bold();
     let tab = layout.tab();
 
-    println!("{head}HELP{reset_bold}
+    println!("{head}HELP{reset}
 
 {sub}-m, --more{reset_bold}
 {sub_text}When specifying a topic to display, show the default topic in addition to specified options.
