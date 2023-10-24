@@ -16,7 +16,7 @@ lazy_static! {
     pub static ref LOCATION: LocationVars = LocationVars::new();
     pub static ref HOME: String = env_var("HOME");
     pub static ref USER: String = env_var("USER");
-    pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}/", geteuid());
+    pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", geteuid());
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", geteuid(), &id());
     pub static ref LOG_LOCATION: &'static str = format!("{}/pacwrap.log", LOCATION.get_data()).leak();
     pub static ref IS_COLOR_TERMINLAL: bool = crate::utils::is_color_terminal();
