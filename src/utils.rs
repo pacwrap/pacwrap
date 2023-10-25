@@ -8,7 +8,6 @@ use std::fmt::Display;
 use nix::unistd::isatty;
 
 use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
-use crate::config::vars::InsVars;
 
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
@@ -16,13 +15,6 @@ pub use termcontrol::TermControl;
 pub mod termcontrol;
 pub mod arguments;
 pub mod prompt;
-
-pub fn test_root(instance: &InsVars) {
-    if ! Path::new(instance.root().as_ref()).exists() {  
-        print_error(format!("Target container {}: not found.", instance.instance()));
-        exit(2);
-    }
-}
 
 pub fn print_warning(message: impl Into<String> + Display) {
     eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET,  &message);
@@ -51,7 +43,7 @@ pub fn print_help_error(args: impl Into<String>) {
 
 #[allow(dead_code)]
 pub fn print_help_msg(args: impl Into<String>) {
-    println!("pacwrap error: {} ", args.into());
+    println!("Notice: {} ", args.into());
     println!("Try 'pacwrap -h' for more information on valid operational parameters.");
     exit(1);
 }

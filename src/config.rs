@@ -1,11 +1,7 @@
-use std::io::Read;
+use std::io::ErrorKind;
 use std::io::Write;
-use std::vec::Vec;
 use std::path::Path;
 use std::fs::File;
-use std::process::exit;
-
-use crate::utils::print_error;
 
 pub use crate::config::filesystem::Filesystem;
 pub use crate::config::permission::Permission;
@@ -28,7 +24,10 @@ pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {
         Ok(f) => f,
         Err(error) => Err(format!("{}", error))?
     };
-    let config = config_to_string(ins.instance());
+    let config = match serde_yaml::to_string(&ins.instance()) {
+        Ok(file) => file,
+        Err(error) => Err(format!("{}", error))?,
+    };
     
     match write!(f, "{}", config) {
         Ok(_) => Ok(()),
@@ -36,67 +35,26 @@ pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {
     }
 }
 
-pub fn provide_some_handle(instance: &str) -> Option<InstanceHandle> {
-    let vars = InsVars::new(instance); 
-    let path: &str = vars.config_path().as_ref();
-        
-    match File::open(path) {
-        Ok(file) => {
-            let str = read_into_string(file);
-            let config = read_config(str.as_str());
-            
-            Some(InstanceHandle::new(config, vars))
-        },
-        Err(_) => None
-    }
-}
-
-pub fn provide_handle(instance: &str) -> InstanceHandle {
+pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> {
     let vars = InsVars::new(instance); 
     let path: &str = vars.config_path().as_ref();
 
+    if ! Path::new(vars.root().as_ref()).exists() {  
+        Err(format!("Container '{instance}' doesn't exist."))?
+    }
+
     match File::open(path) {
         Ok(file) => {
-            let str = read_into_string(file);
-            let config = read_config(str.as_str());
+            let config = match serde_yaml::from_reader(&file) {
+                Ok(file) => file,
+                Err(error) => Err(format!("'{instance}.yml': {error}"))?
+            };
 
-            InstanceHandle::new(config, vars)
+            Ok(InstanceHandle::new(config, vars))
         },
-        Err(_) => {
-            let config = Instance::new(InstanceType::BASE, Vec::new(), Vec::new());
-            
-            InstanceHandle::new(config, vars) 
-        }
-    }
-}
-
-fn read_into_string(mut file: File) -> String {
-    let mut config: String = String::new();
-    match file.read_to_string(&mut config) {
-        Ok(_) => config,
-        Err(error) => { 
-            print_error(format!("{}", error));
-            exit(2);
-        },
-    }
-}
-
-fn config_to_string(cfg: &Instance) -> String {
-    match serde_yaml::to_string(cfg) {
-        Ok(file) => file,
-        Err(error) => { 
-            print_error(format!("{}", error));
-            exit(2);
-        }
-    }
-}
-
-fn read_config(str: &str) -> Instance {
-    match serde_yaml::from_str(str) {
-        Ok(file) => return file,
-        Err(error) => { 
-            print_error(format!("{}", error));
-            exit(2);
-        }
+        Err(error) => match error.kind() {
+            ErrorKind::NotFound => Err(format!("Configuration file for container '{instance}' is missing.")),
+            _ => Err(format!("'{path}': {error}")),
+        } 
     }
 }

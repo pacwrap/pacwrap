@@ -27,10 +27,15 @@ impl Transaction for Prepare {
        
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
-                        let dep_instance = ag.cache().instances().get(dep).unwrap();
-                        let dep_alpm = sync::instantiate_alpm(dep_instance);
-                        handle.enumerate_ignorelist(&dep_alpm);
-                        dep_alpm.release().unwrap();
+                        match ag.cache().instances().get(dep) {
+                            Some(dep_handle) => {
+                                let dep_alpm = sync::instantiate_alpm(dep_handle); 
+                            
+                                handle.enumerate_ignorelist(&dep_alpm); 
+                                dep_alpm.release().unwrap();
+                            },
+                            None => Err(Error::DependentContainerMissing(dep.to_string()))?,
+                        }
                     }
                 }
 

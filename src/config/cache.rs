@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use crate::constants::LOCATION;
 use crate::config::{self, InstanceHandle};
+use crate::utils::print_warning;
 
 use super::instance::InstanceType;
 
@@ -45,38 +46,49 @@ impl InstanceCache {
 
     pub fn populate(&mut self) {
         if let Ok(dir) = read_dir(format!("{}/root", LOCATION.get_data())) {
-            for f in dir {
-                if let Ok(file) = f {
-                    let name: Rc<str> = file.file_name()
-                        .to_str()
-                        .unwrap()
-                        .into();
+            for file in dir.filter_map(|f| match f { Ok(f) => Some(f), Err(_) => None }) {
+                let metadata = match file.metadata() {
+                    Ok(metadata) => metadata, Err(_) => continue,
+                };
 
-                    if self.map(&name) {      
-                        self.registered.push(name);
-                    }
+                if ! metadata.is_dir() {
+                    continue;
+                }
+
+                let name: Rc<str> = match file.file_name().to_str() {
+                    Some(filename) => filename, None => continue,
+                }.into();
+
+                if self.map(&name) {      
+                    self.registered.push(name);
                 }
             }
         }
     }
 
     fn map(&mut self, ins: &Rc<str>) -> bool {
-        let mut register = true;
+        match self.instances.get(ins) {
+            Some(_) => false,
+            None => {
+                let config = match config::provide_handle(ins) {
+                    Ok(ins) => ins, 
+                    Err(error) => { 
+                        print_warning(error); 
+                        return false
+                    }
+                };
 
-        if let None = self.instances.get(ins) {
-            let config = config::provide_handle(ins);
-           
-            match config.metadata().container_type() {
-                InstanceType::BASE => self.containers_base.push(ins.clone()),
-                InstanceType::DEP => self.containers_dep.push(ins.clone()),
-                InstanceType::ROOT => self.containers_root.push(ins.clone()),
-                InstanceType::LINK => register = false,
-            } 
+                match config.metadata().container_type() {
+                    InstanceType::BASE => self.containers_base.push(ins.clone()),
+                    InstanceType::DEP => self.containers_dep.push(ins.clone()),
+                    InstanceType::ROOT => self.containers_root.push(ins.clone()),
+                    InstanceType::LINK => return false,
+                } 
 
-            self.instances.insert(ins.clone(), config);
+                self.instances.insert(ins.clone(), config);
+                true
+            }
         }
-
-        register
     }
 
     pub fn registered(&self) -> &Vec<Rc<str>> { &self.registered }

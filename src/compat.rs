@@ -4,13 +4,13 @@ use std::rc::Rc;
 use alpm::PackageReason;
 
 use crate::log::Logger;
-use crate::sync;
+use crate::{sync, utils};
 use crate::config::{self, 
     Instance, 
     InsVars, 
     InstanceType, 
     InstanceHandle};
-use crate::utils::print_help_error;
+use crate::utils::{print_help_error, print_error};
 use crate::utils::{arguments::{Arguments, Operand}, 
     handle_process, 
     env_var};
@@ -20,9 +20,9 @@ fn save_configuration(ins: &str) {
     let mut pkgs = Vec::new();
     let deps: Vec<Rc<str>> = env_var("PACWRAP_DEPS").split_whitespace().map(|a| a.into()).collect(); 
     let ctype = InstanceType::new(env_var("PACWRAP_TYPE").as_str()); 
-    let mut instance = match config::provide_some_handle(ins) {
-        Some(handle) => handle,
-        None => {
+    let mut instance = match config::provide_handle(ins) {
+        Ok(handle) => handle,
+        Err(_) => {
             let vars = InsVars::new(ins);
             let cfg = Instance::new(ctype, pkgs.clone(), deps.clone());
             InstanceHandle::new(cfg, vars)
@@ -37,15 +37,21 @@ fn save_configuration(ins: &str) {
     if dep_depth > 0 {
         let dep = &depends[dep_depth-1];
 
-        if let Some(dep_instance) = config::provide_some_handle(dep) {
-            let alpm =  sync::instantiate_alpm(&dep_instance);
+        match config::provide_handle(dep) {
+            Ok(dep_handle) => {
+                let alpm =  sync::instantiate_alpm(&dep_handle);
 
-            for pkg in alpm.localdb()
-                .pkgs()
-                .iter()
-                .filter(|p| p.reason() == PackageReason::Explicit)
-                .collect::<Vec<_>>() {
-                skip.push(pkg.name().to_string());
+                for pkg in alpm.localdb()
+                    .pkgs()
+                    .iter()
+                    .filter(|p| p.reason() == PackageReason::Explicit)
+                    .collect::<Vec<_>>() {
+                    skip.push(pkg.name().to_string());
+                }
+            },
+            Err(error) => {
+                print_error(error);
+                std::process::exit(1);
             }
         }
     }
@@ -68,7 +74,12 @@ fn save_configuration(ins: &str) {
 }
 
 fn print_configuration(instance: &str) {
-    let ins = &config::provide_handle(instance);
+    let ins = match config::provide_handle(instance) {
+        Ok(ins) => ins, Err(error) => { 
+            utils::print_error(error);
+            std::process::exit(1);
+        },
+    };
     let depends = ins.metadata().dependencies();
     let pkgs = ins.metadata().explicit_packages();
     let mut pkgs_string = String::new();

@@ -87,7 +87,13 @@ impl <'a>From<&'a mut Arguments<'a>> for ExecParams<'a> {
         }
 
         let handle = match container {
-            Some(container) => config::provide_handle(container),
+            Some(container) => match config::provide_handle(container) {
+                Ok(container) => container,
+                Err(error) => { 
+                    print_error(error);
+                    exit(1);
+                }
+            },
             None => {
                 print_help_error("Target not specified.");
                 exit(1);
@@ -369,8 +375,6 @@ fn clean_up_socket(path: &str) {
 }
 
 fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbose: bool) {  
-    crate::utils::test_root(ins.vars());
-
     if verbose { 
         ins.vars().debug(ins.config(), &arguments); 
     }

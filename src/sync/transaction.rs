@@ -31,6 +31,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub enum Error {
     NothingToDo,
+    DependentContainerMissing(String),
     RecursionDepthExceeded(isize),
     TargetUpstream(Rc<str>),
     TargetNotInstalled(Rc<str>),
@@ -162,6 +163,7 @@ impl TransactionType {
 impl Error {
     fn message(&self) {
        print_error(match self {
+            Self::DependentContainerMissing(u) => format!("Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
             Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
             Self::TargetUpstream(pkg) => format!("Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
             Self::TargetNotInstalled(pkg) => format!("Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),

@@ -17,7 +17,6 @@ use crate::sync::{
     transaction::aggregator};
 use crate::utils::arguments::Operand;
 use crate::utils::{arguments::Arguments, 
-    test_root,
     handle_process,
     print_warning,
     print_error,
@@ -160,12 +159,12 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
 
     let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
     let mut logger = Logger::new("pacwrap").init().unwrap();
-    let instance = match config::provide_some_handle(ins) {
-        Some(mut handle) => {
+    let instance = match config::provide_handle(ins) {
+        Ok(mut handle) => {
             handle.metadata_mut().set(deps, vec!());
             handle
         },
-        None => {
+        Err(_) => {
             let vars = InsVars::new(ins);
             let cfg = Instance::new(instype, vec!(), deps);
             InstanceHandle::new(cfg, vars) 
@@ -228,23 +227,28 @@ pub fn query(mut arguments: Arguments) {
         print_help_error("Target not specified.");
     }
 
-    let insvars = InsVars::new(target);
+    match config::provide_handle(target) {
+        Ok(handle) => {
+            let root = handle.vars().root().as_ref(); 
+            let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
 
-    test_root(&insvars);
+            for pkg in handle.localdb().pkgs() {
+                if explicit && pkg.reason() != PackageReason::Explicit {
+                    continue;
+                }
+        
 
-    let root = insvars.root().as_ref(); 
-    let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
-
-    for pkg in handle.localdb().pkgs() {
-        if explicit && pkg.reason() != PackageReason::Explicit {
-            continue;
+                match quiet {
+                    true => println!("{} ", pkg.name()),
+                    false => println!("{} {}{}{} ", pkg.name(), *BOLD_GREEN, pkg.version(), *RESET), 
+                } 
+            }
+        },
+        Err(error) => {
+            print_error(error);
+            exit(1);
         }
-
-        match quiet {
-            true => println!("{} ", pkg.name()),
-            false => println!("{} {}{}{} ", pkg.name(), *BOLD_GREEN, pkg.version(), *RESET), 
-        }
-    } 
+    }
 }
 
 pub fn interpose() {
@@ -264,8 +268,6 @@ pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm {
 }
 
 fn alpm_handle(inshandle: &InstanceHandle, db_path: String) -> Alpm { 
-    test_root(&inshandle.vars());
-
     let root = inshandle.vars().root().as_ref();   
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
@@ -299,6 +301,7 @@ fn register_remote(mut handle: Alpm) -> Alpm {
         .unwrap();
 
     core.add_server(env!("PACWRAP_DIST_REPO")).unwrap();
+
     core.set_usage(Usage::ALL).unwrap();
 
     handle
