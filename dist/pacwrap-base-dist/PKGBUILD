@@ -1,7 +1,7 @@
 # Maintainer: Xavier R.M. (sapphirus at azorium dot net)
 
 pkgname=('pacwrap-base-dist')
-pkgver=0.4.1
+pkgver=0.4.2
 pkgrel=1
 pkgdesc=""
 arch=('any')
