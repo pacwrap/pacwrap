@@ -70,7 +70,7 @@ pub struct InstanceRuntime {
     #[serde(default)]  
     retain_session: bool,     
     #[serde(default)]  
-    allow_forking: bool, 
+    allow_forking: bool,    
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
     filesystems: Vec<Box<dyn Filesystem>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -89,7 +89,7 @@ impl InstanceRuntime {
         Self {
             allow_forking: false,
             retain_session: false,
-            enable_userns: false, 
+            enable_userns: false,
             permissions: per,
             dbus: Vec::new(),
             filesystems: fs,
@@ -112,6 +112,7 @@ pub enum InstanceType {
     ROOT
 }
 
+#[allow(dead_code)]
 impl InstanceType {
     pub fn new(instype: &str) -> Self {
         match instype {
@@ -171,11 +172,20 @@ impl InstanceMetadata {
             self.dependencies=dep;
             self.explicit_packages=pkg;
             self.meta_version = time_as_seconds(); 
+
     }
 
-    pub fn container_type(&self) -> &InstanceType { &self.container_type }
-    pub fn dependencies(&self) -> &Vec<Rc<str>> { &self.dependencies }
-    pub fn explicit_packages(&self) -> &Vec<Rc<str>> { &self.explicit_packages }
+    pub fn container_type(&self) -> &InstanceType { 
+        &self.container_type 
+    }
+
+    pub fn dependencies(&self) -> &Vec<Rc<str>> { 
+        &self.dependencies 
+    }
+    
+    pub fn explicit_packages(&self) -> &Vec<Rc<str>> { 
+        &self.explicit_packages 
+    }
 }
 
 fn time_as_seconds() -> u64 {
