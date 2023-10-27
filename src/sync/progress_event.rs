@@ -1,71 +1,86 @@
-use std::collections::HashMap;
+use std::rc::Rc;
 
 use alpm::Progress;
 use dialoguer::console::Term;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::constants::{BOLD, RESET};
 
-use super::utils::whitespace;
+use super::{utils::whitespace, transaction::{TransactionType, TransactionState}};
 
 #[derive(Clone)]
-pub struct ProgressCallback {
-    progress: MultiProgress,
-    prbar: HashMap<String, ProgressBar>,
-    style: ProgressStyle,
+pub struct ProgressEvent {
+    progress: ProgressBar,
     offset: usize,
+    style: ProgressStyle,
+    current: Rc<str>,
 }
 
-impl ProgressCallback {
-    pub fn new() -> Self {
+impl ProgressEvent {
+    pub fn new(state: &TransactionType) -> Self {
         let size = Term::size(&Term::stdout());
         let width = (size.1 / 2).to_string();
-        let width_str = " {spinner:.green} {msg:<".to_owned()+width.as_str();
-
+        
         Self {
-            offset: 1,
-            progress: MultiProgress::new(),
-            style:  ProgressStyle::with_template(&(width_str+"} [{wide_bar}] {percent:<3}%"))
+            offset: state.pr_offset(),
+            style: ProgressStyle::with_template(&(" {spinner:.green} {msg:<".to_owned()+width.as_str()+"} [{wide_bar}] {percent:<3}%"))
             .unwrap().progress_chars("#-").tick_strings(&[" ", "✓"]),
-            prbar: HashMap::new(),
+            progress: ProgressBar::new(0),
+            current: "".into(),
         }
     }
 }
 
-pub fn progress_event(progress: Progress, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressCallback) {
-    let progress_ident: String = progress_ident(progress,pkgname);
-    match this.prbar.get_mut(&progress_ident) {
-        Some(pb) => {
-            pb.set_position(percent as u64);
-            if percent == 100 {
-                pb.finish();
-            }
-        },
-        None => {
-            if current == 1 {
-                pos_offset(this,progress);
-            }
-           
-            let pos = current + this.offset;
-            let total = howmany + this.offset; 
-            let progress_name: String = progress_name(progress,pkgname);
-            let pb = this.progress.add(ProgressBar::new(100));
-            let whitespace = whitespace(total.to_string().len(), pos.to_string().len()); 
-            
-            pb.set_style(this.style.clone());
-            pb.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *BOLD, *RESET, *BOLD, *RESET)); 
-            pb.set_position(percent as u64); 
+pub fn event(progress: Progress, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressEvent) {
+    let ident = ident(progress,pkgname);  
 
-            if percent == 100 {
-                pb.finish();
-            }
+    if ident != this.current {
+        let pos = current + this.offset;
+        let total = howmany + this.offset; 
+        let progress_name: String = name(progress,pkgname);
+        let whitespace = whitespace(total.to_string().len(), pos.to_string().len());
+ 
+        this.progress = ProgressBar::new(100);
+        this.progress.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *BOLD, *RESET, *BOLD, *RESET)); 
+        this.progress.set_style(this.style.clone());
+        this.current = ident;
+    }
+    
+    this.progress.set_position(percent as u64);
 
-            this.prbar.insert(progress_ident, pb);   
-        }
+    if percent == 100 {
+        this.progress.finish();            
     }
 }
 
-fn progress_name(progress: Progress, pkgname: &str) -> String {
+pub fn condensed(progress: Progress, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressEvent) {
+     if let Progress::AddStart | Progress::RemoveStart = progress { 
+        let pos = current + this.offset;
+        let total = howmany + this.offset; 
+        let progress_name: String = name(progress,pkgname);
+        let whitespace = whitespace(total.to_string().len(), pos.to_string().len());
+
+        if this.current.as_ref() != "" {
+            this.progress = ProgressBar::new(howmany as u64);
+            this.progress.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *BOLD, *RESET, *BOLD, *RESET)); 
+            this.progress.set_style(this.style.clone());
+            this.progress.set_position(current as u64);
+            this.current = "".into();
+        } else {
+            this.progress.set_position(current as u64);
+            this.progress.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *BOLD, *RESET, *BOLD, *RESET));  
+        }
+
+        if current == howmany {
+            this.progress.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) Foreign synchronization complete", *BOLD, *RESET, *BOLD, *RESET));   
+            this.progress.finish();
+        }
+    } else {
+        event(progress, pkgname, percent, howmany, current, this)
+    }
+}
+
+fn name(progress: Progress, pkgname: &str) -> String {
     match progress {
         Progress::KeyringStart => "Loading keyring".into(), 
         Progress::IntegrityStart => "Checking integrity".into(),
@@ -80,19 +95,21 @@ fn progress_name(progress: Progress, pkgname: &str) -> String {
     }
 }
 
-fn pos_offset(this: &mut ProgressCallback, progress: Progress) {
+fn ident(progress: Progress, pkgname: &str) -> Rc<str> {
     match progress {
-        Progress::RemoveStart => this.offset = 0, _ => ()
-    }
+        Progress::KeyringStart => "keyring",
+        Progress::IntegrityStart => "integrity",
+        Progress::LoadStart => "loadstart",
+        Progress::ConflictsStart => "conflicts",
+        _ => pkgname
+
+    }.into()
 }
 
-fn progress_ident(progress: Progress, pkgname: &str) -> String {
-    match progress {
-        Progress::KeyringStart => "keyring".into(),
-        Progress::IntegrityStart => "integrity".into(),
-        Progress::LoadStart => "loadstart".into(),
-        Progress::ConflictsStart => "conflicts".into(),
-        _ => pkgname.into()
-
+pub fn callback(state: &TransactionState) -> for<'a, 'b> fn(Progress, &'a str, i32, usize, usize, &'b mut ProgressEvent) {
+    match state { 
+        TransactionState::Commit(_) => event,
+        TransactionState::CommitForeign => condensed,
+        _ => unreachable!()
     }
 }

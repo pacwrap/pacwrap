@@ -12,7 +12,6 @@ use crate::constants::{self, LOCATION, BAR_GREEN, RESET, BOLD, ARROW_GREEN, BOLD
 use crate::log::Logger;
 use crate::sync::{
     dl_event::DownloadCallback,
-    progress_event::ProgressCallback,
     transaction::TransactionType,
     transaction::aggregator};
 use crate::utils::arguments::Operand;
@@ -159,7 +158,7 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
 
     let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
     let mut logger = Logger::new("pacwrap").init().unwrap();
-    let instance = match config::provide_handle(ins) {
+    let instance = match config::provide_new_handle(ins) {
         Ok(mut handle) => {
             handle.metadata_mut().set(deps, vec!());
             handle
@@ -315,7 +314,6 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             let mut handle = alpm_handle(&ins, db_path);
 
             println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
-            handle.set_progress_cb(ProgressCallback::new(), progress_event::progress_event); 
             handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {

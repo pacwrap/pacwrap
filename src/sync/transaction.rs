@@ -86,8 +86,8 @@ bitflags! {
 }
 
 pub struct TransactionHandle {
-    ignore: HashSet<Rc<str>>, 
-    ignore_dep: HashSet<Rc<str>>,
+    foreign_pkgs: HashSet<Rc<str>>, 
+    resident_pkgs: HashSet<Rc<str>>,
     deps: Option<Vec<Rc<str>>>,
     queue: Vec<Rc<str>>,
     mode: TransactionMode,
@@ -127,6 +127,13 @@ impl TransactionState {
 }
 
 impl TransactionType { 
+    pub fn pr_offset(&self) -> usize {
+        match self {
+            Self::Upgrade(_,_,_) => 1,
+            Self::Remove(_,_,_) => 0
+        }
+    }
+
     fn as_str(&self) -> &str {
         match self {
             Self::Upgrade(_,_,_) => "installation",
@@ -179,8 +186,8 @@ impl Error {
 impl TransactionHandle { 
     pub fn new(al: Alpm, q: Vec<Rc<str>>) -> Self {
         Self {
-            ignore: HashSet::new(),
-            ignore_dep: HashSet::new(),
+            foreign_pkgs: HashSet::new(),
+            resident_pkgs: HashSet::new(),
             deps: None,
             mode: TransactionMode::Local,
             queue: q,
@@ -190,8 +197,8 @@ impl TransactionHandle {
 
     fn is_sync_req(&mut self, mode: TransactionMode) -> SyncReqResult {
         let ignored = match mode { 
-            TransactionMode::Foreign => &self.ignore_dep,
-            TransactionMode::Local => &self.ignore,
+            TransactionMode::Foreign => &self.resident_pkgs,
+            TransactionMode::Local => &self.foreign_pkgs,
         };
 
         for pkg in self.alpm.localdb().pkgs() {            
@@ -207,28 +214,29 @@ impl TransactionHandle {
         SyncReqResult::NotRequired
     }
 
-    fn enumerate_ignorelist(&mut self, dep_handle: &Alpm) {
-        self.ignore.extend(dep_handle.localdb()
+    fn enumerate_foreign_pkgs(&mut self, dep_handle: &Alpm) {
+        self.foreign_pkgs.extend(dep_handle.localdb()
             .pkgs()
             .iter()
             .filter_map(|p| {
                 let pkg_name = p.name().into();
             
-                if ! self.ignore.contains(&pkg_name) {
+                if ! self.foreign_pkgs.contains(&pkg_name) {
                     Some(pkg_name)
                 } else {
                     None
                 }
             })
             .collect::<Vec<Rc<str>>>());
-        self.ignore_dep.extend(self.alpm.localdb()
+
+        self.resident_pkgs.extend(self.alpm.localdb()
             .pkgs()
             .iter()
             .filter_map(|p| {
                 let pkg_name = p.name().into();
 
-                if ! self.ignore.contains(&pkg_name) 
-                && ! self.ignore_dep.contains(&pkg_name) {
+                if ! self.foreign_pkgs.contains(&pkg_name) 
+                && ! self.resident_pkgs.contains(&pkg_name) {
                     Some(pkg_name)
                 } else {
                     None
@@ -239,12 +247,12 @@ impl TransactionHandle {
 
     fn ignore(&mut self) {
         let ignore = match self.mode { 
-            TransactionMode::Foreign => &self.ignore_dep,
-            TransactionMode::Local => &self.ignore,
+            TransactionMode::Foreign => &self.resident_pkgs,
+            TransactionMode::Local => &self.foreign_pkgs,
         };
         let unignore = match self.mode { 
-            TransactionMode::Local => &self.ignore_dep,
-            TransactionMode::Foreign => &self.ignore,
+            TransactionMode::Local => &self.resident_pkgs,
+            TransactionMode::Foreign => &self.foreign_pkgs,
         };
   
         for pkg in unignore {
@@ -258,8 +266,8 @@ impl TransactionHandle {
 
     fn prepare_add(&mut self, flags: &TransactionFlags) -> Result<()> {
         let ignored = match self.mode { 
-            TransactionMode::Foreign => &self.ignore_dep,
-            TransactionMode::Local => &self.ignore,
+            TransactionMode::Foreign => &self.resident_pkgs,
+            TransactionMode::Local => &self.foreign_pkgs,
         };
 
         for queue in self.queue.iter() { 
@@ -289,7 +297,7 @@ impl TransactionHandle {
         }
 
         for pkg in packages.1 {
-            if let None = self.ignore.get(pkg.name().into()) {
+            if let None = self.foreign_pkgs.get(pkg.name().into()) {
                 if let TransactionMode::Foreign = self.mode {
                     continue;
                 }
@@ -303,8 +311,8 @@ impl TransactionHandle {
 
     fn prepare_removal(&mut self, enumerate: bool, cascade: bool, explicit: bool) -> Result<()> {
         let ignored = match self.mode { 
-            TransactionMode::Foreign => &self.ignore_dep,
-            TransactionMode::Local => &self.ignore,
+            TransactionMode::Foreign => &self.resident_pkgs,
+            TransactionMode::Local => &self.foreign_pkgs,
         };
 
         for queue in self.queue.iter() { 
@@ -339,7 +347,7 @@ impl TransactionHandle {
             .filter_map(|p| {
                 if p.reason() == PackageReason::Explicit
                 && ! p.name().starts_with("pacwrap-")
-                && ! self.ignore.contains(p.name()) {
+                && ! self.foreign_pkgs.contains(p.name()) {
                     Some(p.name().into())
                 } else {
                     None

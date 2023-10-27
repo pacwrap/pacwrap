@@ -7,7 +7,7 @@ use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
 use crate::{sync::{
     query_event::{self, QueryCallback},
-    progress_event::{self, ProgressCallback},
+    progress_event::{self, ProgressEvent},
     dl_event::{DownloadCallback, self}}, 
     exec::utils::execute_in_container, 
     utils::{print_error, print_warning}, 
@@ -33,10 +33,10 @@ impl Transaction for Commit {
         let kr = match new { 
             TransactionState::Commit(bool) => bool, _ => false
         };
- 
+
         Box::new(Self { 
             state: new,
-            keyring: kr
+            keyring: kr,
         })
     }
 
@@ -72,10 +72,11 @@ impl Transaction for Commit {
                     return state_transition(&self.state, handle);
                 }
             }
-
+   
             handle.alpm().set_question_cb(QueryCallback, query_event::questioncb);
-            handle.alpm().set_progress_cb(ProgressCallback::new(), progress_event::progress_event);
         }
+
+        handle.alpm().set_progress_cb(ProgressEvent::new(ag.action()), progress_event::callback(&self.state));
 
         if let Err(error) = handle.alpm_mut().trans_commit() {  
             erroneous_transaction(error)? 
@@ -113,7 +114,7 @@ fn execute_ldconfig(inshandle: &InstanceHandle) {
         return;
     }
 
-    execute_in_container(inshandle, vec!("/usr/bin/ldconfig"));
+    execute_in_container(inshandle, vec!("ldconfig"));
 }
 
 fn summary(handle: &Alpm) { 

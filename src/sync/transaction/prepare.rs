@@ -31,12 +31,12 @@ impl Transaction for Prepare {
                             Some(dep_handle) => {
                                 let dep_alpm = sync::instantiate_alpm(dep_handle); 
                             
-                                handle.enumerate_ignorelist(&dep_alpm); 
+                                handle.enumerate_foreign_pkgs(&dep_alpm); 
                                 dep_alpm.release().unwrap();
                             },
                             None => Err(Error::DependentContainerMissing(dep.to_string()))?,
                         }
-                    }
+                    }   
                 }
 
                 if let TransactionType::Upgrade(upgrade,_,_) = ag.action() {

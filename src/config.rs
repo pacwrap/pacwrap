@@ -35,15 +35,22 @@ pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {
     }
 }
 
-pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> {
-    let vars = InsVars::new(instance); 
-    let path: &str = vars.config_path().as_ref();
+pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> { 
+    let vars = InsVars::new(instance);
 
     if ! Path::new(vars.root().as_ref()).exists() {  
         Err(format!("Container '{instance}' doesn't exist."))?
     }
 
-    match File::open(path) {
+    handle(instance, vars)
+}
+
+pub fn provide_new_handle(instance: &str) -> Result<InstanceHandle, String> {
+    handle(instance, InsVars::new(instance))
+}
+
+fn handle(instance: &str, vars: InsVars) -> Result<InstanceHandle, String> {
+    match File::open(vars.config_path().as_ref()) {
         Ok(file) => {
             let config = match serde_yaml::from_reader(&file) {
                 Ok(file) => file,
@@ -54,7 +61,7 @@ pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> {
         },
         Err(error) => match error.kind() {
             ErrorKind::NotFound => Err(format!("Configuration file for container '{instance}' is missing.")),
-            _ => Err(format!("'{path}': {error}")),
+            _ => Err(format!("'{}': {error}", vars.config_path())),
         } 
     }
 }
