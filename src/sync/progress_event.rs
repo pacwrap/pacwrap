@@ -54,7 +54,7 @@ pub fn event(progress: Progress, pkgname: &str, percent: i32, howmany: usize, cu
 }
 
 pub fn condensed(progress: Progress, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressEvent) {
-     if let Progress::AddStart | Progress::RemoveStart = progress { 
+     if let Progress::AddStart | Progress::RemoveStart | Progress::UpgradeStart = progress { 
         let pos = current + this.offset;
         let total = howmany + this.offset; 
         let progress_name: String = name(progress,pkgname);
