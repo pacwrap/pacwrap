@@ -155,7 +155,7 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
    
     //TODO: Implement separate abstraction for path vars.
 
-    exec_args.env("PATH", "/usr/bin/:/bin");
+    exec_args.env("PATH", "/usr/local/bin:/usr/bin/:/bin:");
     exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
 
     if verbose { 
@@ -163,7 +163,7 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
         println!("{:?} ",exec_args); 
     }
 
-    if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
+    if let Err(error) = check_path(ins, &arguments, vec!("/usr/local/bin/", "/usr/bin", "/bin")) {
         print_help_error(error); 
     }
 

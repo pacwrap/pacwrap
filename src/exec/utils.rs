@@ -25,7 +25,7 @@ pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<
     .arg("--hostname").arg("FakeChroot")
     .arg("--new-session")
     .arg("--setenv").arg("TERM").arg("xterm")
-    .arg("--setenv").arg("PATH").arg("/usr/bin")
+    .arg("--setenv").arg("PATH").arg("/usr/local/bin:/usr/bin")
     .arg("--setenv").arg("CWD").arg(ins.vars().home_mount().as_ref())
     .arg("--setenv").arg("HOME").arg(ins.vars().home_mount().as_ref())
     .arg("--setenv").arg("USER").arg(ins.vars().user().as_ref())
