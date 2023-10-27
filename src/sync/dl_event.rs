@@ -81,7 +81,7 @@ pub fn download_event(file: &str, download: AnyDownloadEvent, this: &mut Downloa
             }    
         },
         DownloadEvent::Completed(_) => {
-            if let Some(pb) = this.prbar.get_mut(&file.to_string()) { 
+            if let Some(pb) = this.prbar.remove(&file.to_string()) { 
                 if pb.length().unwrap() == 0 {  
                     pb.set_style(UP_TO_DATE.clone());
                 }
