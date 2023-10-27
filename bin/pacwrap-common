@@ -302,7 +302,7 @@ initialize_data_directory() {
 }
 
 generate_config() {
-	PACWRAP_PKGS="$@" PACWRAP_DEPS="$(return_dependencies)" PACWRAP_TYPE="$(return_type)" pacwrap --compat --save $instance
+	return
 }
 
 log_invalid_arguments() {

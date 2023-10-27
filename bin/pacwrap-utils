@@ -373,12 +373,17 @@ replicate_instance() {
 	esac
 
 	local depend_params
+	local foreign_targets
+
+	for dep in $(return_dependencies); do
+		foreign_targets+="${INSTANCE_CONFIG[$dep,3]}"
+	done
 
 	for dep in $(return_dependencies); do
 		depend_params+="-t $dep "
 	done
 
-	$CREATE_SCRIPT -Syu$params -t $instance $(return_packages) $depend_params --noconfirm
+	$CREATE_SCRIPT -Syu$params -t $instance $(return_packages) $foreign_targets $depend_params --noconfirm
 
 	if [[ $? == 0 ]]; then 
 		printf " %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					
