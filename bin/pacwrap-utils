@@ -373,11 +373,6 @@ replicate_instance() {
 	esac
 
 	local depend_params
-	local foreign_targets
-
-	for dep in $(return_dependencies); do
-		foreign_targets+="${INSTANCE_CONFIG[$dep,3]}"
-	done
 
 	for dep in $(return_dependencies); do
 		depend_params+="-t $dep "

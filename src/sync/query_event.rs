@@ -32,7 +32,7 @@ pub fn questioncb(question: AnyQuestion, this: &mut QueryCallback) {
         },
         Corrupted(mut x) => {
             let prompt_string = format!("Remove corrupted package {}?", x.filepath());
-            let prompt =  prompt("->", prompt_string, false);
+            let prompt =  prompt("->", prompt_string, true);
             
             if let Ok(_) = prompt {
                 x.set_remove(true);
@@ -44,7 +44,7 @@ pub fn questioncb(question: AnyQuestion, this: &mut QueryCallback) {
             let email = key.email();
             let name = key.name();
             let prompt_string = format!("Import key {fingerprint},\"{name} <{email}>\" to keyring?");
-            let prompt =  prompt("->", prompt_string, false);
+            let prompt =  prompt("->", prompt_string, true);
             
             if let Ok(_) = prompt {
                 x.set_import(true);
