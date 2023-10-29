@@ -76,12 +76,13 @@ pub trait Transaction {
 bitflags! {
     pub struct TransactionFlags: u8 {
         const NONE = 0;
-        const PREVIEW = 0b000001;
-        const NO_CONFIRM =  0b000010;
-        const FORCE_DATABASE = 0b000100;
-        const DATABASE_ONLY = 0b001000;
-        const CREATE = 0b010000;
-        const FILESYSTEM_SYNC =  0b100000;
+        const TARGET_ONLY = 0b0000001; 
+        const PREVIEW = 0b0000010;
+        const NO_CONFIRM =  0b0000100;
+        const FORCE_DATABASE = 0b0001000;
+        const DATABASE_ONLY = 0b0010000;
+        const CREATE = 0b0100000;
+        const FILESYSTEM_SYNC =  0b1000000;
     }
 }
 

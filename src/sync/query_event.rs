@@ -1,22 +1,17 @@
-#![allow(unused_variables)]
+use std::path::Path;
 
 use alpm::{AnyQuestion, Question::*};
 
 use crate::utils::prompt::prompt;
 
-#[derive(Clone)]
-pub struct QueryCallback;
-
-pub fn questioncb(question: AnyQuestion, this: &mut QueryCallback) {
+pub fn questioncb(question: AnyQuestion, _: &mut ()) {
     match question.question() {
         Conflict(mut x) => {
-            let reason = x.conflict().reason();
             let pkg_a = x.conflict().package1();
             let pkg_b = x.conflict().package2();
             let prompt_string = format!("Conflict between {pkg_a} and {pkg_b}; Remove {pkg_b}?");
-            let prompt =  prompt("->", prompt_string, false);
             
-            if let Ok(_) = prompt {
+            if let Ok(_) = prompt("->", prompt_string, false) {
                 x.set_remove(true);
             }
         },
@@ -24,17 +19,18 @@ pub fn questioncb(question: AnyQuestion, this: &mut QueryCallback) {
             let old = x.oldpkg().name();
             let new = x.newpkg().name();
             let prompt_string = format!("Replace package {old} with {new}?");
-            let prompt =  prompt("->", prompt_string, false);
             
-            if let Ok(_) = prompt {
+            if let Ok(_) = prompt("->", prompt_string, false) {
                 x.set_replace(true);
             }
         },
         Corrupted(mut x) => {
-            let prompt_string = format!("Remove corrupted package {}?", x.filepath());
-            let prompt =  prompt("->", prompt_string, true);
-            
-            if let Ok(_) = prompt {
+            let filepath = x.filepath();
+            let filename = Path::new(filepath).file_name().unwrap().to_str().unwrap();
+            let reason = x.reason();
+            let prompt_string = format!("'{filename}': {reason}. Remove package?");
+
+            if let Ok(_) = prompt("::", prompt_string, true) {
                 x.set_remove(true);
             }
         },
@@ -44,12 +40,12 @@ pub fn questioncb(question: AnyQuestion, this: &mut QueryCallback) {
             let email = key.email();
             let name = key.name();
             let prompt_string = format!("Import key {fingerprint},\"{name} <{email}>\" to keyring?");
-            let prompt =  prompt("->", prompt_string, true);
             
-            if let Ok(_) = prompt {
+            if let Ok(_) = prompt("->", prompt_string, true) {
                 x.set_import(true);
             } 
         },
+        //TODO: Implement these questions.
         RemovePkgs(_) => (),
         SelectProvider(_) => (),
         InstallIgnorepkg(_) => (),

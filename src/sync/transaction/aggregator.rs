@@ -48,10 +48,11 @@ impl <'a>TransactionAggregator<'a> {
         } else {
             false
         };
+        let target = match self.target {
+            Some(s) => self.cache.instances().get(s), None => None
+        };
 
-        if let Some(target) = self.target {
-            let inshandle = self.cache.instances().get(target).unwrap();
-
+        if let Some(inshandle) = target { 
             if let InstanceType::BASE | InstanceType::DEP = inshandle.metadata().container_type() {
                 self.transact(inshandle); 
             }
@@ -60,7 +61,7 @@ impl <'a>TransactionAggregator<'a> {
             self.transaction(self.cache.containers_dep());
         }
 
-        if self.flags.intersects(TransactionFlags::CREATE) || self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC) || self.updated.len() > 0 {
+        if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
             aux_cache.populate(); 
 
             if aux_cache.containers_root().len() > 0 {
@@ -75,9 +76,7 @@ impl <'a>TransactionAggregator<'a> {
             self.filesystem_state = self.filesystem_state.unwrap().release();  
         }
 
-        if let Some(target) = self.target {
-            let inshandle = self.cache.instances().get(target).unwrap();
-
+        if let Some(inshandle) = target {
             if let InstanceType::ROOT = inshandle.metadata().container_type() {
                 self.transact(inshandle); 
             }
@@ -262,10 +261,9 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
     let mut targets = Vec::new();
     let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
     let mut current_target = "";
-    let mut target_only = false;
     let mut base = false;
 
-    args.set_index(2);
+    args.set_index(1);
 
     if let Operand::None = args.next().unwrap_or_default() {
         Err("Operation not specified.")?
@@ -278,7 +276,7 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
                 | Operand::Short('t') | Operand::Long("target") 
                 | Operand::Short('y') | Operand::Long("refresh")
                 | Operand::Short('u') | Operand::Long("upgrade") => continue,
-            Operand::Short('o') | Operand::Long("target-only") => target_only = true,
+            Operand::Short('o') | Operand::Long("target-only") => action_flags = action_flags | TransactionFlags::TARGET_ONLY,
             Operand::Short('f') | Operand::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
             Operand::Short('p') | Operand::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW,
             Operand::Short('c') | Operand::Long("create") => action_flags = action_flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE,
@@ -306,19 +304,27 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
                     },
                 }
             },
-            _ => Err(args.invalid_operand())?,
+            _ => Err(args.invalid_operand())?
         }
     }
 
-    let current_target = match target_only {
+    let current_target = match action_flags.intersects(TransactionFlags::TARGET_ONLY) {
         true => {
-            if current_target == "" {
+            if current_target == "" && ! action_flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
                 Err("Target not specified")?
             }
 
             Some(current_target)
         },
-        false => None,
+        false => {
+            if let TransactionType::Upgrade(upgrade, _, _) = action_type {
+                if ! upgrade {
+                    Err("Operation not specified.")? 
+                }
+            }
+       
+            None
+        }
     };
  
     if targets.len() > 0 {

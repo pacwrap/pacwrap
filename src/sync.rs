@@ -294,15 +294,13 @@ fn register_remote(mut handle: Alpm) -> Alpm {
         core.set_usage(Usage::ALL).unwrap();
     }
 
-    let siglevel = signature(&vec!(format!("DatabaseTrustAll")), SigLevel::DATABASE_OPTIONAL); 
+    let siglevel = SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK; 
     let core = handle
         .register_syncdb_mut("pacwrap", siglevel)
         .unwrap();
 
     core.add_server(env!("PACWRAP_DIST_REPO")).unwrap();
-
     core.set_usage(Usage::ALL).unwrap();
-
     handle
 }
 

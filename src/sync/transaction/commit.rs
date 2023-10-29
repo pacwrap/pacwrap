@@ -6,7 +6,7 @@ use dialoguer::console::Term;
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
 use crate::{sync::{
-    query_event::{self, QueryCallback},
+    query_event,
     progress_event::{self, ProgressEvent},
     dl_event::{DownloadCallback, self}}, 
     exec::utils::execute_in_container, 
@@ -57,25 +57,11 @@ impl Transaction for Commit {
             erroneous_preparation(error)?
         }
 
-        if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
-            summary(handle.alpm());
-
-            if ag.flags().contains(TransactionFlags::PREVIEW) {
-                return state_transition(&self.state, handle); 
-            } 
-
-            if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
-                let action = ag.action().as_str();
-                let query = format!("Proceed with {action}?");
-
-                if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
-                    return state_transition(&self.state, handle);
-                }
-            }
-   
-            handle.alpm().set_question_cb(QueryCallback, query_event::questioncb);
+        if let Some(result) = confirm(&self.state, ag, handle) {
+            return result;
         }
 
+        handle.alpm().set_question_cb((), query_event::questioncb);
         handle.alpm().set_progress_cb(ProgressEvent::new(ag.action()), progress_event::callback(&self.state));
 
         if let Err(error) = handle.alpm_mut().trans_commit() {  
@@ -97,6 +83,27 @@ impl Transaction for Commit {
         ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
         state_transition(&self.state, handle)
     }
+}
+
+fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> Option<Result<TransactionState>> {
+    if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
+        summary(handle.alpm());
+
+        if ag.flags().contains(TransactionFlags::PREVIEW) {
+            return Some(state_transition(state, handle)); 
+        } 
+
+        if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
+            let action = ag.action().as_str();
+            let query = format!("Proceed with {action}?");
+
+            if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
+                return Some(state_transition(state, handle));
+            }
+        } 
+    }
+
+    None
 }
 
 fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle) -> Result<TransactionState> {
