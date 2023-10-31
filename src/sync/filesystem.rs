@@ -513,7 +513,7 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(),String> {
     };
 
     if let Ok(src_path_dest) = fs::read_link(dest_path) {
-        if src_path.file_name().unwrap() == src_path_dest.file_name().unwrap() {
+        if src_path.as_path() == src_path_dest.as_path() {
             return Ok(());
         }
     }
