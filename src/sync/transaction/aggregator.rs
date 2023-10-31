@@ -317,8 +317,8 @@ pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscac
             Some(current_target)
         },
         false => {
-            if let TransactionType::Upgrade(upgrade, _, _) = action_type {
-                if ! upgrade {
+            if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
+                if ! upgrade && ! refresh {
                     Err("Operation not specified.")? 
                 }
             }
