@@ -35,6 +35,7 @@ pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {
     }
 }
 
+#[inline]
 pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> { 
     let vars = InsVars::new(instance);
 
@@ -45,6 +46,7 @@ pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> {
     handle(instance, vars)
 }
 
+#[inline]
 pub fn provide_new_handle(instance: &str) -> Result<InstanceHandle, String> {
     handle(instance, InsVars::new(instance))
 }

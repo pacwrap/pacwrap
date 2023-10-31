@@ -1,4 +1,4 @@
-use std::{process::Command, env};
+use std::process::Command;
 
 
 use crate::config;
@@ -33,7 +33,7 @@ fn print_configuration(instance: &str) -> Result<(),String> {
     Ok(())
 }
 
-pub fn compat(mut args: Arguments) {
+pub fn compat(args: &mut Arguments) {
     let result = match args.next().unwrap_or_default() {
         Operand::Short('s') | Operand::Long("save") => save_configuration(),
         Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()),
@@ -45,9 +45,8 @@ pub fn compat(mut args: Arguments) {
     }
 }
 
-pub fn execute_bash(executable: &str) { 
+pub fn execute_bash(executable: &str, args: &mut Arguments) { 
     handle_process(Command::new(format!("pacwrap-{executable}"))
-        .arg("")
-        .args(env::args().skip(1).collect::<Vec<_>>())
+        .args(args.values())
         .spawn());
 }

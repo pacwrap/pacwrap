@@ -10,7 +10,7 @@ mod log;
 mod manual;
 
 fn main() {
-    let mut arguments = Arguments::new().parse();
+    let arguments = &mut Arguments::new().parse();
     let param = arguments.next().unwrap_or_default();
 
     match param {
@@ -18,13 +18,13 @@ fn main() {
     }
 
     match param {
-        Operand::Short('E') | Operand::Long("exec") => exec::execute(&mut arguments),
+        Operand::Short('E') | Operand::Long("exec") => exec::execute(arguments),
         Operand::Short('Q') | Operand::Long("query") => sync::query(arguments),
         Operand::Short('R') | Operand::Long("remove") => sync::remove(arguments),
         Operand::Long("fake-chroot") => sync::synchronize(arguments),
         Operand::Short('S') | Operand::Long("sync") => sync::interpose(),  
-        Operand::Short('U') | Operand::Long("utils") => compat::execute_bash("utils"),
-        Operand::Short('P') | Operand::Long("proc") => compat::execute_bash("ps"), 
+        Operand::Short('U') | Operand::Long("utils") => compat::execute_bash("utils", arguments),
+        Operand::Short('P') | Operand::Long("proc") => compat::execute_bash("ps", arguments), 
         Operand::Short('h') | Operand::Long("help") => manual::help(arguments),
         Operand::Short('V') | Operand::Long("version") => manual::print_version(arguments),
         Operand::Long("compat") => compat::compat(arguments), 

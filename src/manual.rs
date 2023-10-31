@@ -19,7 +19,7 @@ lazy_static! {
         HelpTopic::Copyright].into();
 }
 
-pub fn help(mut args: Arguments) {
+pub fn help(mut args: &mut Arguments) {
     match ascertain_help(&mut args) {
         Ok(help) => {
             let mut buffer = String::new();
@@ -410,7 +410,7 @@ fn copyright(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Erro
 {tab}{tab}the terms of the GNU General Public License v3.\n")
 }
 
-pub fn print_version(mut args: Arguments) {
+pub fn print_version(mut args: &mut Arguments) {
     let name = env!("CARGO_PKG_NAME"); 
     let version = env!("CARGO_PKG_VERSION"); 
     let suffix = env!("PACWRAP_BUILDSTAMP");
