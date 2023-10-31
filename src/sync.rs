@@ -38,7 +38,7 @@ mod resolver;
 mod resolver_local;
 mod utils;
 
-pub fn synchronize(mut args: Arguments) {
+pub fn synchronize(mut args: &mut Arguments) {
     if let Err(_) = validate_environment() {
         print_error("Execution without libfakechroot in an unprivileged context is not supported.");
         exit(1);
@@ -81,7 +81,7 @@ pub fn synchronize(mut args: Arguments) {
     }
 }
 
-pub fn remove(mut args: Arguments) {
+pub fn remove(mut args: &mut Arguments) {
     let mut cache: InstanceCache = InstanceCache::new();
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let action = {
@@ -208,7 +208,7 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
     println!("{} Instantiation complete.", *ARROW_GREEN);
 }
 
-pub fn query(mut arguments: Arguments) {
+pub fn query(arguments: &mut Arguments) {
     let mut target = "";
     let mut explicit = false;
     let mut quiet = false;

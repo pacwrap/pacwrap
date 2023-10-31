@@ -13,7 +13,7 @@ pub enum Operand<'a> {
     None
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Arguments<'a> {
     values: Vec<&'a str>,
     operands: Vec<Operand<'a>>,
@@ -24,41 +24,34 @@ pub struct Arguments<'a> {
 impl<'a> Arguments<'a> {
     pub fn new() -> Self {
         Self {
-            values: Vec::new(),
+            values: env::args()
+            .skip(1)
+            .map(|a| { let a: &str = a.leak(); a })
+            .collect::<Vec<_>>(),
             operands: Vec::new(),
             idx: 0,
             cur: 0,
         }
     }
 
-    pub fn parse(mut self) -> Arguments<'a> {
-        for string in env::args().skip(1) {
+    pub fn parse(mut self) -> Arguments<'a> { 
+        for string in &self.values { 
             match string { 
-                string if string.starts_with("--") => {
-                    let string = string.leak();
-                    
+                string if string.starts_with("--") => { 
                     if string.contains('=') {
-                        let value: Vec<&'a str> = string.split_at(2).1.split('=').collect();
+                        let value: Vec<&'a str> = string[2..].split('=').collect();
 
                         self.operands.extend([Operand::Long(value[0]), Operand::LongPos(value[0], value[1])]); 
                     } else {
-                        self.operands.push(Operand::Long(string.split_at(2).1));
+                        self.operands.push(Operand::Long(&string[2..]));
                     }
-
-                    self.values.push(string);
                 },
                 string if string.starts_with("-") => if string.len() > 1 {
-                    let string = string.leak();
-
-                    for operand in string.split_at(1).1.chars() {
+                    for operand in string[1..].chars() {
                         self.operands.push(Operand::Short(operand));
                     }
-
-                    self.values.push(string);
                 },
-                _ => {
-                    let string = string.leak();
- 
+                _ => { 
                     self.operands.push(match self.operands.last() {
                         Some(last) => match last {
                             Operand::Short(c) => Operand::ShortPos(*c, string),
@@ -67,7 +60,6 @@ impl<'a> Arguments<'a> {
                         },
                         None => Operand::Value(string),
                     });
-                    self.values.push(string);
                 }
             }
         }
@@ -125,7 +117,7 @@ impl <'a>Iterator for Arguments<'a> {
 
         if self.cur < self.operands.len() {
             self.idx += 1;
-            Some(self.operands.as_slice()[self.cur])
+            Some(self.operands[self.cur])
         } else {        
             self.set_index(0);
             None
