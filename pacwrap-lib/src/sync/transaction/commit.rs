@@ -1,17 +1,9 @@
-use alpm::{Alpm, 
-    CommitResult, 
-    FileConflictType, 
-    PrepareResult};
+use alpm::Alpm;
 use dialoguer::console::Term;
+use crate::{exec::utils::execute_pacwrap_dist, sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation}};
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
-use crate::{sync::{
-    query_event,
-    progress_event::{self, ProgressEvent},
-    dl_event::{DownloadCallback, self}}, 
-    exec::utils::execute_in_container, 
-    utils::{print_error, print_warning}, 
-    config::InstanceType, constants::{RESET, BOLD, BOLD_WHITE, DIM}};
+use crate::constants::{RESET, BOLD, DIM};
 
 use crate::utils::prompt::prompt;
 use crate::config::InstanceHandle;
@@ -23,6 +15,7 @@ use super::{Transaction,
     Result, 
     Error};
 
+#[allow(dead_code)]
 pub struct Commit {
     state: TransactionState,
     keyring: bool,
@@ -61,28 +54,40 @@ impl Transaction for Commit {
             return result;
         }
 
-        handle.alpm().set_question_cb((), query_event::questioncb);
-        handle.alpm().set_progress_cb(ProgressEvent::new(ag.action()), progress_event::callback(&self.state));
+  
+        match execute_pacwrap_dist(inshandle) {
+            Ok(mut child) => {
+            let stdin = child.stdin.take().unwrap();
 
-        if let Err(error) = handle.alpm_mut().trans_commit() {  
-            erroneous_transaction(error)? 
+                if let Err(error) = ciborium::into_writer(handle.metadata(), &stdin) {
+                    Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error)))?  
+                }
+
+                if let Err(error) = ciborium::into_writer(&*DEFAULT_ALPM_CONF, &stdin) {
+                     Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error)))?                
+                }
+
+                if let Err(error) = ciborium::into_writer(ag.action(), &stdin) {
+                     Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error)))?                
+                }
+
+                match child.wait() {
+                    Ok(exit_status) => match exit_status.code().unwrap_or(0) {
+                        1 => Err(Error::AgentError),
+                        0 => {
+                            handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
+                            ag.set_updated(instance.clone());
+                            ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
+                            state_transition(&self.state, handle)
+                        }, 
+                        _ => Err(Error::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(0))))?,  
+                    },
+                    Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
+                }
+            },
+            Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,     
         }
-
-        if self.keyring {
-            ag.keyring_update(inshandle);        
-        }
-
-        if let TransactionState::Commit(_) = self.state {
-            ag.sync_filesystem(inshandle);
-            execute_ldconfig(inshandle);
-        }
-
-        handle.mark_depends();
-        handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
-        ag.set_updated(instance.clone());
-        ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
-        state_transition(&self.state, handle)
-    }
+    } 
 }
 
 fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> Option<Result<TransactionState>> {
@@ -103,25 +108,18 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
         } 
     }
 
+    handle.alpm_mut().trans_release().ok();
     None
 }
 
 fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle) -> Result<TransactionState> {
-    handle.alpm_mut().trans_release().unwrap(); 
-
+    handle.alpm_mut().trans_release().ok();
+ 
     Ok(match state {
         TransactionState::Commit(_) => TransactionState::Complete,
         TransactionState::CommitForeign => TransactionState::Stage,
         _ => unreachable!()
     })
-}
-
-fn execute_ldconfig(inshandle: &InstanceHandle) {
-    if let InstanceType::DEP = inshandle.metadata().container_type() {
-        return;
-    }
-
-    execute_in_container(inshandle, vec!("ldconfig"));
 }
 
 fn summary(handle: &Alpm) { 
@@ -178,68 +176,8 @@ fn summary(handle: &Alpm) {
 
     if download > 0 {
         println!("{}Total Download Size{}: {}", *BOLD, *RESET, download.to_byteunit(SI));
-        handle.set_dl_cb(DownloadCallback::new(download as u64, files_to_download), dl_event::download_event);
+        //handle.set_dl_cb(DownloadCallback::new(download as u64, files_to_download), dl_event::download_event);
     }
 
     println!();
-}
-
-fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Result<()> {
-    match error.0 {
-        CommitResult::FileConflict(file) => {
-            for conflict in file {
-                match conflict.conflict_type() {
-                    FileConflictType::Filesystem => {
-                        let file = conflict.file();
-                        let target = conflict.target();
-                        print_warning(format!("{}: '{}' already exists.", target, file));
-                    },
-                    FileConflictType::Target => {
-                        let file = conflict.file();
-                        let target = format!("{}{}{}",*BOLD_WHITE, conflict.target(), *RESET);
-                        if let Some(conflicting) = conflict.conflicting_target() { 
-                            let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
-                            print_warning(format!("{conflicting}: '{target}' is owned by {file}")); 
-                        } else {
-                            print_warning(format!("{target}: '{file}' is owned by foreign target"));
-                        }
-                    },
-                }
-            }
-
-            Err(Error::TransactionFailure("Conflict within container filesystem".into()))?
-        },
-        CommitResult::PkgInvalid(p) => {
-            for pkg in p.iter() {
-                let pkg = format!("{}{pkg}{}", *BOLD_WHITE, *RESET);
-                print_error(format!("Invalid package: {}", pkg)); 
-            }
-        },
-        _ => ()
-    }
-
-    Err(Error::TransactionFailure(error.1.to_string()))
-}
-
-fn erroneous_preparation<'a>(error:  (PrepareResult<'a>, alpm::Error)) -> Result<()> {  
-    match error.0 {
-        PrepareResult::PkgInvalidArch(list) => {
-        for package in list.iter() {
-                print_error(format!("Invalid architecture {}{}{} for {}{}{}", *BOLD, package.arch().unwrap(), *RESET, *BOLD, package.name(), *RESET));
-            }
-        },
-        PrepareResult::UnsatisfiedDeps(list) => {
-            for missing in list.iter() {
-                print_error(format!("Unsatisifed dependency {}{}{} for target {}{}{}", *BOLD, missing.depend(), *RESET, *BOLD, missing.target(), *RESET));
-            }
-        },
-        PrepareResult::ConflictingDeps(list) => {
-            for conflict in list.iter() {
-                print_error(format!("Conflict between {}{}{} and {}{}{}: {}", *BOLD, conflict.package1(), *RESET, *BOLD, conflict.package2(), *RESET, conflict.reason()));
-            }
-        },
-        _ => (),
-    }
-        
-    Err(Error::PreparationFailure(error.1.to_string()))
 }

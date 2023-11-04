@@ -1,49 +1,25 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-use std::process::{exit, Command};
-use std::env;
+use std::process::exit;
+use std::rc::Rc;
 
-use alpm::{Alpm,  SigLevel, Usage, PackageReason};
-use lazy_static::lazy_static;
-use pacmanconf;
+use alpm::{Alpm, PackageReason};
 
-use crate::config::{Instance, InstanceType, self};
-use crate::constants::{self, LOCATION, BAR_GREEN, RESET, BOLD, ARROW_GREEN, BOLD_GREEN, ARROW_RED};
-use crate::log::Logger;
-use crate::sync::{
-    dl_event::DownloadCallback,
-    transaction::TransactionType,
-    transaction::aggregator};
-use crate::utils::arguments::Operand;
-use crate::utils::{arguments::Arguments, 
-    handle_process,
-    print_warning,
+use pacwrap_lib::sync::transaction::{TransactionFlags, TransactionAggregator};
+use pacwrap_lib::{config::{Instance, InstanceType, self},
+    constants::{BAR_GREEN, RESET, BOLD, ARROW_GREEN, BOLD_GREEN},
+    log::Logger,
+    sync::transaction::TransactionType,
+    utils::arguments::Operand,
+    utils::{arguments::Arguments, 
     print_error,
-    print_help_error};
-use crate::config::{InsVars,
+    print_help_error},
+config::{InsVars,
     InstanceHandle,
-    cache::InstanceCache};
-
-lazy_static! {
-    static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman.conf", constants::LOCATION.get_config())).unwrap(); 
-    static ref DEFAULT_SIGLEVEL: SigLevel = signature(&PACMAN_CONF.sig_level, SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL);
-}
-
-mod progress_event;
-mod dl_event;
-mod query_event;
-mod filesystem;
-mod transaction;
-mod resolver;
-mod resolver_local;
-mod utils;
+    cache::InstanceCache}};
 
 pub fn synchronize(mut args: &mut Arguments) {
-    if let Err(_) = validate_environment() {
-        print_error("Execution without libfakechroot in an unprivileged context is not supported.");
-        exit(1);
-    }
-
     let mut cache = InstanceCache::new();
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();  
     let action = {
@@ -76,7 +52,7 @@ pub fn synchronize(mut args: &mut Arguments) {
         Err(error) => print_help_error(error),
     }
 
-    match aggregator::upgrade(action, &mut args, &mut cache, &mut logger) {
+    match upgrade(action, &mut args, &mut cache, &mut logger) {
         Ok(ag) => ag.aggregate(&mut InstanceCache::new()), Err(e) => print_help_error(e)
     }
 }
@@ -99,7 +75,7 @@ pub fn remove(mut args: &mut Arguments) {
         TransactionType::Remove(recursive > 0 , cascade, recursive > 1) 
     };
     
-    match aggregator::remove(action, &mut args, &mut cache, &mut logger) {
+    match remove_ag(action, &mut args, &mut cache, &mut logger) {
         Ok(ag) => ag.aggregate(&mut InstanceCache::new()), Err(e) => print_help_error(e),
     }
 }
@@ -250,141 +226,137 @@ pub fn query(arguments: &mut Arguments) {
     }
 }
 
-pub fn interpose() {
-    let arguments = env::args().skip(1).collect::<Vec<_>>(); 
-    let all_args = env::args().collect::<Vec<_>>();
-    let this_executable = all_args.first().unwrap();
+pub fn remove_ag<'a>(action_type: TransactionType, args: &'a mut Arguments, inscache: &'a mut InstanceCache, log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
+    let mut action_flags = TransactionFlags::NONE;
+    let mut targets = Vec::new();
+    let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
+    let mut current_target = "";
 
-    handle_process(Command::new(this_executable)
-        .env("LD_PRELOAD", "/usr/lib/libfakeroot/fakechroot/libfakechroot.so")
-        .arg("--fake-chroot")
-        .args(arguments)
-        .spawn());
-}
+    args.set_index(1);
 
-pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
-    alpm_handle(inshandle, format!("{}/var/lib/pacman/", inshandle.vars().root()))
-}
-
-fn alpm_handle(inshandle: &InstanceHandle, db_path: String) -> Alpm { 
-    let root = inshandle.vars().root().as_ref();   
-    let mut handle = Alpm::new(root, &db_path).unwrap();
-
-    handle.set_hookdirs(vec![format!("{}/usr/share/libalpm/hooks/", root), format!("{}/etc/pacman.d/hooks/", root)].iter()).unwrap();
-    handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
-    handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap();
-    handle.set_parallel_downloads(PACMAN_CONF.parallel_downloads.try_into().unwrap_or(1));
-    handle.set_logfile(format!("{}/pacwrap.log", LOCATION.get_data())).unwrap();
-    handle.set_check_space(PACMAN_CONF.check_space);
-    handle = register_remote(handle); 
-    handle
-}
-
-fn register_remote(mut handle: Alpm) -> Alpm { 
-    for repo in PACMAN_CONF.repos.iter() {
-        let siglevel = signature(&repo.sig_level, *DEFAULT_SIGLEVEL); 
-        let core = handle
-        .register_syncdb_mut(repo.name.as_str(), siglevel)
-        .unwrap();
-
-        for server in repo.servers.iter() {
-            core.add_server(server.as_str()).unwrap();
-        }
-
-        core.set_usage(Usage::ALL).unwrap();
+    if let Operand::None = args.next().unwrap_or_default() {
+        Err("Operation not specified.")?
     }
 
-    let siglevel = SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK; 
-    let core = handle
-        .register_syncdb_mut("pacwrap", siglevel)
-        .unwrap();
-
-    core.add_server(env!("PACWRAP_DIST_REPO")).unwrap();
-    core.set_usage(Usage::ALL).unwrap();
-    handle
-}
-
-fn synchronize_database(cache: &InstanceCache, force: bool) {
-     match cache.containers_base().get(0) {
-        Some(insname) => {
-            let db_path = format!("{}/pacman/", constants::LOCATION.get_data());
-            let ins: &InstanceHandle = cache.instances().get(insname).unwrap();      
-            let mut handle = alpm_handle(&ins, db_path);
-
-            println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
-            handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
-
-            if let Err(err) = handle.syncdbs_mut().update(force) {
-                print_error(format!("Unable to initialize transaction: {}.",err.to_string()));
-                println!("{} Transaction failed.", *ARROW_RED);
-                std::process::exit(1);
-            }
-           
-            Alpm::release(handle).unwrap();  
-
-            for i in cache.registered().iter() {
-                let ins: &InstanceHandle = cache.instances().get(i).unwrap();
-                let vars: &InsVars = ins.vars();
-                let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), "pacwrap");
-                let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), "pacwrap");
-                
-                if let Err(error) = filesystem::create_hard_link(src, dest) {
-                     print_warning(error);
+    while let Some(arg) = args.next() {
+        match arg {
+            Operand::Long("remove")
+                | Operand::Long("cascade") 
+                | Operand::Long("recursive") 
+                | Operand::Short('R')
+                | Operand::Short('c')  
+                | Operand::Short('s') 
+                | Operand::Short('t') => continue,  
+            Operand::Long("noconfirm") | Operand::Long("no-confirm") => action_flags = action_flags | TransactionFlags::NO_CONFIRM,                  
+            Operand::Short('p') | Operand::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW, 
+            Operand::Long("db-only") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
+            Operand::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
+            Operand::Short('f') | Operand::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
+            Operand::ShortPos('t', target) 
+                | Operand::LongPos("target", target) 
+                | Operand::ShortPos(_, target) => {
+                current_target = target;
+                targets.push(target.into());
+            },
+            Operand::Value(package) => if current_target != "" {
+                match queue.get_mut(current_target.into()) {
+                    Some(vec) => vec.push(package.into()),
+                    None => { queue.insert(current_target.into(), vec!(package.into())); },
                 }
-
-                for repo in PACMAN_CONF.repos.iter() {
-                    let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), repo.name);
-                    let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
-                    if let Err(error) = filesystem::create_hard_link(src, dest) {
-                        print_warning(error);
-                    }
-                }
-            } 
-        },
-        None => {
-            print_error("No compatible containers available to synchronize remote database.");
-            exit(2)
+            },
+            _ => Err(args.invalid_operand())?,
         }
     }
-}
+        
+    if current_target == "" {
+        Err("Target not specified")?
+    }
 
-fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
-    if sigs.len() > 0 {
-        let mut sig = SigLevel::empty();
+    let current_target = Some(current_target);
 
-        for level in sigs {
-            sig = sig | if level == "PackageRequired" || level == "PackageTrustedOnly" {
-                SigLevel::PACKAGE
-            } else if level == "DatabaseRequired" || level == "DatabaseTrustedOnly" {
-                SigLevel::DATABASE
-            } else if level == "PackageOptional" {
-                SigLevel::PACKAGE_OPTIONAL
-            } else if level == "PackageTrustAll" {
-                SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK
-            } else if level == "DatabaseOptional" {
-                SigLevel::DATABASE_OPTIONAL
-            } else if level == "DatabaseTrustAll" {
-                SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK
-            } else {
-                SigLevel::empty()
-            }
-        }
-
-        sig 
+    if targets.len() > 0 {
+        inscache.populate_from(&targets, true);
     } else {
-        default
+        inscache.populate();
     }
+
+    Ok(TransactionAggregator::new(inscache, queue, log, action_flags, action_type, current_target))
 }
 
-fn validate_environment() -> Result<(),()> {
-    match std::env::var("LD_PRELOAD") {
-        Ok(var) => {
-            if var != "/usr/lib/libfakeroot/fakechroot/libfakechroot.so" {
-                Err(())?
+pub fn upgrade<'a>(action_type: TransactionType, args: &'a mut Arguments, inscache: &'a mut InstanceCache, log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
+    let mut action_flags = TransactionFlags::NONE;
+    let mut targets = Vec::new();
+    let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
+    let mut current_target = "";
+    let mut base = false;
+
+    if let Operand::None = args.next().unwrap_or_default() {
+        Err("Operation not specified.")?
+    }
+
+    while let Some(arg) = args.next() {
+        match arg {
+                Operand::Short('d') | Operand::Long("slice")
+                | Operand::Short('r') | Operand::Long("root") 
+                | Operand::Short('t') | Operand::Long("target") 
+                | Operand::Short('y') | Operand::Long("refresh")
+                | Operand::Short('u') | Operand::Long("upgrade") => continue,
+            Operand::Short('o') | Operand::Long("target-only") => action_flags = action_flags | TransactionFlags::TARGET_ONLY,
+            Operand::Short('f') | Operand::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
+            Operand::Short('p') | Operand::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW,
+            Operand::Short('c') | Operand::Long("create") => action_flags = action_flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE,
+            Operand::Short('b') | Operand::Long("base") => base = true,
+            Operand::Long("db-only") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
+            Operand::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
+            Operand::Long("noconfirm") => action_flags = action_flags | TransactionFlags::NO_CONFIRM, 
+            Operand::ShortPos('t', target) 
+                | Operand::LongPos("target", target) => {
+                current_target = target;
+                targets.push(target.into());
+            },
+            Operand::Value(package) => if current_target != "" {
+                match queue.get_mut(current_target.into()) {
+                    Some(vec) => vec.push(package.into()),
+                    None => { 
+                        let packages = if base {
+                            base = false;
+                            vec!(package.into(), "base".into(), "pacwrap-base-dist".into())
+                        } else {
+                            vec!(package.into())
+                        };
+
+                        queue.insert(current_target.into(), packages); 
+                    },
+                }
+            },
+            _ => Err(args.invalid_operand())?
+        }
+    }
+
+    let current_target = match action_flags.intersects(TransactionFlags::TARGET_ONLY) {
+        true => {
+            if current_target == "" && ! action_flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
+                Err("Target not specified")?
             }
 
-            Ok(())
+            Some(current_target)
         },
-        Err(_) => Err(())
+        false => {
+            if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
+                if ! upgrade && ! refresh {
+                    Err("Operation not specified.")? 
+                }
+            }
+       
+            None
+        }
+    };
+ 
+    if targets.len() > 0 {
+        inscache.populate_from(&targets, true);
+    } else {
+        inscache.populate();
     }
+    
+    Ok(TransactionAggregator::new(inscache, queue, log, action_flags, action_type, current_target))
 }

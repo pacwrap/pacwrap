@@ -1,11 +1,9 @@
 use std::process::Command;
 
-
-use crate::config;
-use crate::utils::print_help_error;
-use crate::utils::{arguments::{Arguments, Operand}, 
-    handle_process};
-
+use pacwrap_lib::{config, 
+    utils::{print_help_error, 
+        handle_process, 
+        arguments::{Arguments, Operand}}}; 
 
 fn save_configuration() -> Result<(), String> {
     Err("This functionality has been deprecated and removed.")?

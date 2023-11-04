@@ -1,7 +1,7 @@
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [package]
-name = "pacwrap"
+name = "pacwrap-lib"
 version = "0.4.4"
 edition = "2021"
 
@@ -29,7 +29,3 @@ time = { version = "0.3.28", features = ["formatting", "macros", "local-offset",
 bitflags = "2.4.0"
 simplebyteunit = "0.2.1"
 dyn-clone = "1.0.14"
-
-[profile.release]
-lto = "thin"
-opt-level = "s"

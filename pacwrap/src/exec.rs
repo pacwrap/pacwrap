@@ -15,24 +15,28 @@ use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
 use serde_json::{Value, json};
 
-use crate::exec::args::ExecutionArgs;
-use crate::constants::{BWRAP_EXECUTABLE, XDG_RUNTIME_DIR, DBUS_SOCKET, RESET, BOLD};
-use crate::config::{self, 
-    InsVars, 
-    Filesystem, 
-    Permission, 
-    Dbus, 
-    permission::*, 
-    InstanceHandle, InstanceType};
-use crate::utils::{TermControl, 
-    arguments::{Arguments, Operand},
-    env_var, 
-    print_error,
-    print_help_error,
-    print_warning};
-
-pub mod args;
-pub mod utils;
+use pacwrap_lib::{exec::args::ExecutionArgs, 
+    exec::utils::fakeroot_container,
+    constants::{self,
+        BWRAP_EXECUTABLE, 
+        XDG_RUNTIME_DIR, 
+        DBUS_SOCKET, 
+        RESET, 
+        BOLD},
+    config::{self, 
+        InsVars,
+        Filesystem, 
+        Permission, 
+        Dbus, 
+        permission::*, 
+        InstanceHandle, 
+        InstanceType},
+    utils::{TermControl, 
+        arguments::{Arguments, Operand},
+        env_var, 
+        print_error,
+        print_help_error,
+        print_warning}};
 
 enum ExecParams<'a> {
     Root(bool, bool, Vec<&'a str>,  InstanceHandle),
@@ -127,24 +131,25 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
     let cfg = ins.config();
     let vars = ins.vars();
 
-    if shell { 
-        exec_args.env("TERM", "xterm"); 
-    }    
     
     if ! cfg.allow_forking() { 
         exec_args.push_env("--die-with-parent"); 
-    }
-
-    if ! cfg.retain_session() { 
-        exec_args.push_env("--new-session"); 
-    } else {
-        print_warning("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details."); 
     }
 
     if ! cfg.enable_userns() { 
         exec_args.push_env("--unshare-user"); 
         exec_args.push_env("--disable-userns"); 
     }
+
+    match ! cfg.retain_session() { 
+        true => exec_args.push_env("--new-session"),
+        false => print_warning("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details."),
+    }
+
+    match shell && *constants::IS_COLOR_TERMINLAL { 
+        true => exec_args.env("TERM", "xterm"),
+        false => exec_args.env("TERM", "dumb"),
+    } 
 
     if cfg.dbus().len() > 0 { 
         jobs.push(register_dbus(cfg.dbus(), &mut exec_args).into()); 
@@ -352,7 +357,7 @@ fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> b
     }
 
     thread::sleep(Duration::from_micros(500));
-    crate::utils::check_socket(socket)
+    pacwrap_lib::utils::check_socket(socket)
 }
 
 fn create_socket(path: &str) {
@@ -383,7 +388,7 @@ fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbos
         print_help_error(error); 
     }
 
-    match utils::fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
+    match fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
         Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0)),
         Err(err) => print_error(format!("Failed to initialize '{BWRAP_EXECUTABLE}:' {err}")), 
     }
