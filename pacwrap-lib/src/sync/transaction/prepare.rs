@@ -40,16 +40,16 @@ impl Transaction for Prepare {
                 }
 
                 if let TransactionType::Upgrade(upgrade,_,_) = ag.action() {
-                    if ! upgrade && handle.queue.len() == 0 {
+                    if ! upgrade && handle.metadata().queue.len() == 0 {
                         Err(Error::NothingToDo)?
                     }
                 } else {
-                    if handle.queue.len() == 0 {
+                    if handle.metadata().queue.len() == 0 {
                         Err(Error::NothingToDo)?
                     }  
                 }
 
-                if handle.queue.len() == 0 {
+                if handle.metadata().queue.len() == 0 {
                     if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Local) { 
                         return Ok(TransactionState::UpToDate)
                     }

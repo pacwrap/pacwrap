@@ -6,7 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::constants::{BOLD, RESET};
 
-use super::{utils::whitespace, transaction::{TransactionType, TransactionState}};
+use super::{utils::whitespace, transaction::{TransactionType, TransactionMode}};
 
 #[derive(Clone)]
 pub struct ProgressEvent {
@@ -106,10 +106,9 @@ fn ident(progress: Progress, pkgname: &str) -> Rc<str> {
     }.into()
 }
 
-pub fn callback(state: &TransactionState) -> for<'a, 'b> fn(Progress, &'a str, i32, usize, usize, &'b mut ProgressEvent) {
+pub fn callback(state: &TransactionMode) -> for<'a, 'b> fn(Progress, &'a str, i32, usize, usize, &'b mut ProgressEvent) {
     match state { 
-        TransactionState::Commit(_) => event,
-        TransactionState::CommitForeign => condensed,
-        _ => unreachable!()
+        TransactionMode::Local => event,
+        TransactionMode::Foreign => condensed,
     }
 }

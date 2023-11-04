@@ -41,6 +41,7 @@ fn is_debug() -> bool {
 fn main() {
     let debug: bool = is_debug();
 
+    println!("cargo:rerun-if-env-changed=PACWRAP_DIST_REPO");
     println!("cargo:rustc-env=PACWRAP_DIST_REPO={}", dist_repo());
     println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", head());
     println!("cargo:rustc-env=PACWRAP_BUILDTIME={}", time(debug));

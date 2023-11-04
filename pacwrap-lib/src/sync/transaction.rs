@@ -2,7 +2,8 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use bitflags::bitflags;
-use alpm::{Alpm, PackageReason};
+use alpm::{Alpm, PackageReason, TransFlag};
+use serde::{Deserialize, Serialize};
 
 use crate::config;
 use crate::constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED};
@@ -30,6 +31,7 @@ mod stage;
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub enum Error {
+    AgentError,
     NothingToDo,
     DependentContainerMissing(String),
     RecursionDepthExceeded(isize),
@@ -52,12 +54,13 @@ pub enum TransactionState {
     CommitForeign,
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum TransactionType {
     Upgrade(bool, bool, bool),
     Remove(bool, bool, bool),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum TransactionMode {
     Foreign,
     Local
@@ -87,12 +90,18 @@ bitflags! {
 }
 
 pub struct TransactionHandle {
+    meta: TransactionMetadata,
+    alpm: Alpm,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TransactionMetadata {
     foreign_pkgs: HashSet<Rc<str>>, 
     resident_pkgs: HashSet<Rc<str>>,
     deps: Option<Vec<Rc<str>>>,
     queue: Vec<Rc<str>>,
     mode: TransactionMode,
-    alpm: Alpm,
+    flags: (u8, u32)
 }
 
 impl TransactionMode {
@@ -169,7 +178,7 @@ impl TransactionType {
 }
 
 impl Error {
-    fn message(&self) {
+    pub fn message(&self) {
        print_error(match self {
             Self::DependentContainerMissing(u) => format!("Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
             Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
@@ -179,27 +188,36 @@ impl Error {
             Self::InitializationFailure(msg) => format!("Failure to initialize transaction: {msg}"),
             Self::PreparationFailure(msg) => format!("Failure to prepare transaction: {msg}"),
             Self::TransactionFailure(msg) => format!("Failure to commit transaction: {msg}"),
-            Self::NothingToDo => format!("Nothing to do."),
+            _ => format!("Nothing to do."),
         });
     }
 }
 
-impl TransactionHandle { 
-    pub fn new(al: Alpm, q: Vec<Rc<str>>) -> Self {
-        Self {
+impl TransactionMetadata {
+    fn new(q: Vec<Rc<str>>) -> TransactionMetadata {
+        Self { 
             foreign_pkgs: HashSet::new(),
             resident_pkgs: HashSet::new(),
             deps: None,
             mode: TransactionMode::Local,
             queue: q,
+            flags: (0, 0),
+        }
+    } 
+}
+
+impl TransactionHandle { 
+    pub fn new(al: Alpm, metadata: TransactionMetadata) -> Self {
+        Self {
+            meta: metadata,
             alpm: al,
         }  
     }
 
     fn is_sync_req(&mut self, mode: TransactionMode) -> SyncReqResult {
         let ignored = match mode { 
-            TransactionMode::Foreign => &self.resident_pkgs,
-            TransactionMode::Local => &self.foreign_pkgs,
+            TransactionMode::Foreign => &self.meta.resident_pkgs,
+            TransactionMode::Local => &self.meta.foreign_pkgs,
         };
 
         for pkg in self.alpm.localdb().pkgs() {            
@@ -216,13 +234,13 @@ impl TransactionHandle {
     }
 
     fn enumerate_foreign_pkgs(&mut self, dep_handle: &Alpm) {
-        self.foreign_pkgs.extend(dep_handle.localdb()
+        self.meta.foreign_pkgs.extend(dep_handle.localdb()
             .pkgs()
             .iter()
             .filter_map(|p| {
                 let pkg_name = p.name().into();
             
-                if ! self.foreign_pkgs.contains(&pkg_name) {
+                if ! self.meta.foreign_pkgs.contains(&pkg_name) {
                     Some(pkg_name)
                 } else {
                     None
@@ -230,14 +248,14 @@ impl TransactionHandle {
             })
             .collect::<Vec<Rc<str>>>());
 
-        self.resident_pkgs.extend(self.alpm.localdb()
+        self.meta.resident_pkgs.extend(self.alpm.localdb()
             .pkgs()
             .iter()
             .filter_map(|p| {
                 let pkg_name = p.name().into();
 
-                if ! self.foreign_pkgs.contains(&pkg_name) 
-                && ! self.resident_pkgs.contains(&pkg_name) {
+                if ! self.meta.foreign_pkgs.contains(&pkg_name) 
+                && ! self.meta.resident_pkgs.contains(&pkg_name) {
                     Some(pkg_name)
                 } else {
                     None
@@ -246,14 +264,14 @@ impl TransactionHandle {
             .collect::<Vec<Rc<str>>>());
     }
 
-    fn ignore(&mut self) {
-        let ignore = match self.mode { 
-            TransactionMode::Foreign => &self.resident_pkgs,
-            TransactionMode::Local => &self.foreign_pkgs,
+    pub fn ignore(&mut self) {
+        let ignore = match self.meta.mode { 
+            TransactionMode::Foreign => &self.meta.resident_pkgs,
+            TransactionMode::Local => &self.meta.foreign_pkgs,
         };
-        let unignore = match self.mode { 
-            TransactionMode::Local => &self.resident_pkgs,
-            TransactionMode::Foreign => &self.foreign_pkgs,
+        let unignore = match self.meta.mode { 
+            TransactionMode::Local => &self.meta.resident_pkgs,
+            TransactionMode::Foreign => &self.meta.foreign_pkgs,
         };
   
         for pkg in unignore {
@@ -265,41 +283,41 @@ impl TransactionHandle {
         }    
     }
 
-    fn prepare_add(&mut self, flags: &TransactionFlags) -> Result<()> {
-        let ignored = match self.mode { 
-            TransactionMode::Foreign => &self.resident_pkgs,
-            TransactionMode::Local => &self.foreign_pkgs,
+    pub fn prepare_add(&mut self, flags: &TransactionFlags) -> Result<()> {
+        let ignored = match self.meta.mode { 
+            TransactionMode::Foreign => &self.meta.resident_pkgs,
+            TransactionMode::Local => &self.meta.foreign_pkgs,
         };
 
-        for queue in self.queue.iter() { 
+        for queue in self.meta.queue.iter() { 
             if let None = get_package(&self.alpm, queue.as_ref()) { 
                 Err(Error::TargetNotAvailable(Rc::clone(queue)))?
             }
 
-            if ignored.contains(queue) && ! self.mode.bool() {
+            if ignored.contains(queue) && ! self.meta.mode.bool() {
                 if flags.contains(TransactionFlags::FORCE_DATABASE) {
                     continue;
                 }
             
                 Err(Error::TargetUpstream(Rc::clone(queue)))?
             } 
-        }        
+        }
 
         let ignored = ignored.iter()
             .map(|i| i.as_ref())
             .collect::<HashSet<_>>();
-        let queued = self.queue.iter()
+        let queued = self.meta.queue.iter()
             .map(|i| i.as_ref())
             .collect::<Vec<_>>();
         let packages = DependencyResolver::new(&self.alpm, &ignored).enumerate(&queued)?;
 
         if packages.0.len() > 0 {
-            self.deps = Some(packages.0);
+            self.meta.deps = Some(packages.0);
         }
 
         for pkg in packages.1 {
-            if let None = self.foreign_pkgs.get(pkg.name().into()) {
-                if let TransactionMode::Foreign = self.mode {
+            if let None = self.meta.foreign_pkgs.get(pkg.name().into()) {
+                if let TransactionMode::Foreign = self.meta.mode {
                     continue;
                 }
             }
@@ -307,21 +325,21 @@ impl TransactionHandle {
             self.alpm.trans_add_pkg(pkg).unwrap();        
         }
 
-        Ok(())
+       Ok(())
     }
 
-    fn prepare_removal(&mut self, enumerate: bool, cascade: bool, explicit: bool) -> Result<()> {
-        let ignored = match self.mode { 
-            TransactionMode::Foreign => &self.resident_pkgs,
-            TransactionMode::Local => &self.foreign_pkgs,
+    pub fn prepare_removal(&mut self, enumerate: bool, cascade: bool, explicit: bool) -> Result<()> {
+        let ignored = match self.meta.mode { 
+            TransactionMode::Foreign => &self.meta.resident_pkgs,
+            TransactionMode::Local => &self.meta.foreign_pkgs,
         };
 
-        for queue in self.queue.iter() { 
+        for queue in self.meta.queue.iter() { 
             if let None = get_local_package(&self.alpm, queue.as_ref()) { 
                 Err(Error::TargetNotInstalled(Rc::clone(queue)))? 
             }
 
-            if ignored.contains(queue) && ! self.mode.bool() {
+            if ignored.contains(queue) && ! self.meta.mode.bool() {
                 Err(Error::TargetUpstream(Rc::clone(queue)))? 
             } 
         }
@@ -329,7 +347,7 @@ impl TransactionHandle {
         let ignored = ignored.iter()
             .map(|i| i.as_ref())
             .collect::<HashSet<_>>();
-        let queued = self.queue.iter()
+        let queued = self.meta.queue.iter()
             .map(|i| i.as_ref())
             .collect::<Vec<_>>(); 
 
@@ -348,7 +366,7 @@ impl TransactionHandle {
             .filter_map(|p| {
                 if p.reason() == PackageReason::Explicit
                 && ! p.name().starts_with("pacwrap-")
-                && ! self.foreign_pkgs.contains(p.name()) {
+                && ! self.meta.foreign_pkgs.contains(p.name()) {
                     Some(p.name().into())
                 } else {
                     None
@@ -377,8 +395,8 @@ impl TransactionHandle {
         }
     }
 
-    fn mark_depends(&mut self) {
-        if let Some(deps) = self.deps.as_ref() {
+    pub fn mark_depends(&mut self) {
+        if let Some(deps) = self.meta.deps.as_ref() {
             for pkg in deps {
                 if let Some(mut pkg) = get_local_package(&self.alpm, pkg) {
                     pkg.set_reason(PackageReason::Depend).unwrap();
@@ -388,28 +406,44 @@ impl TransactionHandle {
     }
 
     fn release_on_fail(self, error: Error) {
-        error.message();
+        match error {
+            Error::AgentError => (), _ => error.message(),
+        }
+
         println!("{} Transaction failed.", *ARROW_RED);
         drop(self);
     }
 
-    fn release(self) {
+    pub fn release(self) {
         drop(self);
     }
     
     fn set_mode(&mut self, modeset: TransactionMode) { 
-        self.mode = modeset; 
+        self.meta.mode = modeset; 
     }
 
-    fn get_mode(&self) -> &TransactionMode { 
-        &self.mode 
+    pub fn get_mode(&self) -> &TransactionMode { 
+        &self.meta.mode 
     }
     
-    fn alpm_mut(&mut self) -> &mut Alpm { 
+    pub fn alpm_mut(&mut self) -> &mut Alpm { 
         &mut self.alpm
     }
     
-    fn alpm(&mut self) -> &Alpm { 
+    pub fn alpm(&mut self) -> &Alpm { 
         &self.alpm
     }
+
+    pub fn set_flags(&mut self, flags: &TransactionFlags, flags_alpm: TransFlag) {
+        self.meta.flags = (flags.bits(), flags_alpm.bits()); 
+    }
+
+    pub fn retrieve_flags(&self) -> (u8, u32) {
+        self.meta.flags
+    }
+
+    fn metadata(&mut self) -> &TransactionMetadata {
+        &self.meta
+    } 
+
 }
