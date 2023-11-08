@@ -1,8 +1,12 @@
-use pacwrap_lib::{config, utils::{arguments::{Arguments, Operand}, print_help_error}};
+use pacwrap_lib::{config, 
+        utils::{arguments::{Arguments, Operand}, 
+        print_help_error}};
 
+mod sync;
+mod remove;
+mod query;
 mod exec;
 mod compat;
-mod sync;
 mod manual;
 
 fn main() {
@@ -15,9 +19,9 @@ fn main() {
 
     match param {
         Operand::Short('E') | Operand::Long("exec") => exec::execute(arguments),
-        Operand::Short('Q') | Operand::Long("query") => sync::query(arguments),
-        Operand::Short('R') | Operand::Long("remove") => sync::remove(arguments),
         Operand::Short('S') | Operand::Long("sync") => sync::synchronize(arguments), 
+        Operand::Short('R') | Operand::Long("remove") => remove::remove(arguments),
+        Operand::Short('Q') | Operand::Long("query") => query::query(arguments),
         Operand::Short('U') | Operand::Long("utils") => compat::execute_bash("utils", arguments),
         Operand::Short('P') | Operand::Long("proc") => compat::execute_bash("ps", arguments), 
         Operand::Short('h') | Operand::Long("help") => manual::help(arguments),
