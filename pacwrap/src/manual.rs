@@ -48,45 +48,67 @@ fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, 
             Operand::Long("format")
                 | Operand::Long("help")
                 | Operand::Short('f')
-                | Operand::Short('h') => continue,
-            Operand::Short('m') | Operand::Long("more") => more = true,
-            Operand::LongPos("format", "dumb") | Operand::ShortPos('f', "dumb") => layout = &HelpLayout::Dumb, 
-            Operand::LongPos("format", "markdown") | Operand::ShortPos('f', "markdown") => layout = &HelpLayout::Markdown,
-            Operand::LongPos("format", "man") | Operand::ShortPos('f', "man") => layout = &HelpLayout::Man,
-            Operand::LongPos("format", "ansi") | Operand::ShortPos('f', "ansi") => layout = &HelpLayout::Console,
+                | Operand::Short('h') 
+                => continue,
+            Operand::Short('m') 
+                | Operand::Long("more") 
+                => more = true,
+            Operand::LongPos("format", "dumb") 
+                | Operand::ShortPos('f', "dumb") 
+                => layout = &HelpLayout::Dumb, 
+            Operand::LongPos("format", "markdown") 
+                | Operand::ShortPos('f', "markdown") 
+                => layout = &HelpLayout::Markdown,
+            Operand::LongPos("format", "man") 
+                | Operand::ShortPos('f', "man") 
+                => layout = &HelpLayout::Man,
+            Operand::LongPos("format", "ansi") 
+                | Operand::ShortPos('f', "ansi") 
+                => layout = &HelpLayout::Console,
             Operand::ShortPos('h', "sync")
                 | Operand::ShortPos('h', "S")
                 | Operand::LongPos("help", "sync")
-                | Operand::LongPos("help", "S") => topic.push(&HelpTopic::Sync),
+                | Operand::LongPos("help", "S") 
+                => topic.push(&HelpTopic::Sync),
             Operand::ShortPos('h', "E")
                 | Operand::ShortPos('h', "exec")
                 | Operand::LongPos("help", "E")
-                | Operand::LongPos("help", "exec") => topic.push(&HelpTopic::Execute),
+                | Operand::LongPos("help", "exec") 
+                => topic.push(&HelpTopic::Execute),
             Operand::ShortPos('h', "process")
                 | Operand::ShortPos('h', "P")
                 | Operand::LongPos("help", "process")
-                | Operand::LongPos("help", "P")=> topic.push(&HelpTopic::Process),
+                | Operand::LongPos("help", "P")
+                => topic.push(&HelpTopic::Process),
             Operand::ShortPos('h', "utils")
                 | Operand::ShortPos('h', "U")
                 | Operand::LongPos("help", "utils")
-                | Operand::LongPos("help", "U")=> topic.push(&HelpTopic::Utils),
+                | Operand::LongPos("help", "U") 
+                => topic.push(&HelpTopic::Utils),
             Operand::ShortPos('h', "help")
                 | Operand::ShortPos('h', "h")
                 | Operand::LongPos("help", "help")
-                | Operand::LongPos("help", "h")=> topic.push(&HelpTopic::Help),
-            Operand::ShortPos('h', "synopsis") | Operand::LongPos("help", "synopsis") => topic.push(&HelpTopic::Default),
+                | Operand::LongPos("help", "h") 
+                => topic.push(&HelpTopic::Help),
+            Operand::ShortPos('h', "synopsis") 
+                | Operand::LongPos("help", "synopsis") 
+                => topic.push(&HelpTopic::Default),
             Operand::ShortPos('h', "V")
                 | Operand::ShortPos('h', "version")
                 | Operand::LongPos("help", "V")
                 | Operand::LongPos("help", "version")
                 => topic.push(&HelpTopic::Version),
-            Operand::ShortPos('h', "copyright") | Operand::LongPos("help", "copyright") => topic.push(&HelpTopic::Copyright),
+            Operand::ShortPos('h', "copyright") 
+                | Operand::LongPos("help", "copyright") 
+                => topic.push(&HelpTopic::Copyright),
             Operand::ShortPos('h', "all")
                 | Operand::LongPos("help", "all")
                 | Operand::Short('a')
-                | Operand::Long("all") => topic.extend(HELP_ALL.iter()),
+                | Operand::Long("all") 
+                => topic.extend(HELP_ALL.iter()),
             Operand::ShortPos('h', topic) 
-                | Operand::LongPos("help", topic) => Err(format!("Topic '{topic}' is not available."))?,
+                | Operand::LongPos("help", topic) 
+                => Err(format!("Topic '{topic}' is not available."))?,
            _ => Err(args.invalid_operand())?,
         }
     }
