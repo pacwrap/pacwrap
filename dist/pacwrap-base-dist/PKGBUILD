@@ -1,20 +1,20 @@
 # Maintainer: Xavier R.M. (sapphirus at azorium dot net)
 
 pkgname=('pacwrap-base-dist')
-pkgver=0.4.3
+pkgver=0.5.0
 pkgrel=1
-pkgdesc=""
+pkgdesc="Distribution package to configure Arch Linux for use with pacwrap."
 arch=('any')
 url="https://pacwrap.sapphirus.org/"
 license=('GPLv3-only')
 conflicts=('pacwrap-base-dist')
-depends=('fakeroot' 'fakechroot')
+depends=('fakeroot' 'fakechroot' 'flatpak-xdg-utils')
 
 source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
-sha512sums=('53226312533e2935caf23d9102e277e441f0165f394752a022c27dd2ede6fffad9a2e1a0005468d7fd94e0da0a51c10675f43bc4292c4864ece9c88dbd539f69')
+sha512sums=('96e4cfde8f56eaff18d5b807564f3fa8b2a1b72d115210c7f3de44a8651dfecb3a6b862fcf3b622e0ecc4bd28fb7726fb9a0dee163e3871895a1975830e88dea')
 
 package() {
-  	cd "${srcdir}"
+  cd "${srcdir}"
 
 	local pacman_hooks=('20-systemd-sysusers'
 			    '30-systemd-tmpfiles' 
@@ -22,14 +22,18 @@ package() {
 			    '30-systemd-sysctl'
 			    '30-systemd-catalog'
 			    '30-systemd-update'
-		    	    '30-systemd-udev-reload'
+		    	'30-systemd-udev-reload'
 			    '30-systemd-hwdb'
-		    	    'dbus-reload')
+		    	'dbus-reload')
 	
-	mkdir -p "$pkgdir/etc/pacman.d/hooks/"
+	mkdir -p "${pkgdir}/etc/pacman.d/hooks/" "${pkgdir}/usr/local/bin/"
 	for pacman_hook in ${pacman_hooks[@]}; do
-		ln -s /dev/null "$pkgdir/etc/pacman.d/hooks/$pacman_hook.hook"; done
-   	install -Dm 644 "dist_src/0-pacwrap-dist.hook" "${pkgdir}/usr/share/libalpm/hooks/0-pacwrap-dist.hook"
-   	install -Dm 644 "dist_src/42-trust-permission.hook" "${pkgdir}/usr/share/libalpm/hooks/42-trust-permission.hook"
-   	install -Dm 755 "dist_src/pacwrap-dist" "${pkgdir}/usr/bin/pacwrap-dist"
+		ln -s /dev/null "${pkgdir}/etc/pacman.d/hooks/${pacman_hook}.hook"; done
+	
+  ln -s ../../../usr/lib/flatpak-xdg-utils/xdg-open "${pkgdir}/usr/local/bin/"
+	ln -s ../../../usr/lib/flatpak-xdg-utils/xdg-email "${pkgdir}/usr/local/bin/"
+
+  install -Dm 644 "dist_src/0-pacwrap-dist.hook" "${pkgdir}/usr/share/libalpm/hooks/0-pacwrap-dist.hook" 
+  install -Dm 644 "dist_src/42-trust-permission.hook" "${pkgdir}/usr/share/libalpm/hooks/42-trust-permission.hook"
+  install -Dm 755 "dist_src/pacwrap-dist" "${pkgdir}/usr/share/libalpm/scripts/pacwrap-dist"
 }
