@@ -1,0 +1,5 @@
+/*.sh
+/target
+/dist/repo
+/dist/runtime
+/dist/pacwrap-base-dist/*.tar.zst
