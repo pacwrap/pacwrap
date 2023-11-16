@@ -1,7 +1,26 @@
+#!/bin/bash
+#
+#  pacwrap - repo.sh
+# 
+#  Copyright (C) 2023 Xavier R.M. 
+#  sapphirus(at)azorium(dot)net
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, with only version 3 of the License.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 echo "Preparing repo.."
-./dist/tools/clean.sh
+./dist/tools/clean.sh repo
 echo "Packaging.."
 ./dist/tools/package.sh pacwrap-base-dist $1 $2
 echo "Building repo.."
-cp ./dist/*/*.pkg.tar.zst ./dist/dist-repo/
-repose pacwrap -zfr ./dist/dist-repo/
+repose pacwrap -vzfr ./dist/dist-repo/

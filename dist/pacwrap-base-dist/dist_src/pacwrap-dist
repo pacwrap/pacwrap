@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Pacwrap - distribution script
+#  pacwrap - distribution script
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -23,8 +23,12 @@ user() {
 		return
 	fi
 
+	local uid=$(id -u)
+	local gid=$(id -g)
+
 	echo "Creating dummy user.."
-	echo 'user:x:1000:1000::/:/usr/bin/nologin' >> /etc/passwd
+	echo "user:x:$uid:$gid::/:/usr/bin/nologin" >> /etc/passwd
+	echo "user:x:$gid:" >> /etc/group
 }
 
 locale() {
@@ -34,7 +38,7 @@ locale() {
 
 	echo "Initializing locales.."	
 	
-	if [[ $LANG == "en_US.UTF-8" ]] || [[ -z $LANG ]]; then
+	if [[ $LANG == "en_US.UTF-8" ]] || [[ -z "$LANG" ]]; then
 		echo -e "\nen_US.UTF-8" >> "$INSTANCE_ROOT/etc/locale.gen"	
 	else
 		echo -e "\nen_US.UTF-8 UTF-8\n$LANG ${LANG#*.}" >> "$INSTANCE_ROOT/etc/locale.gen"	
@@ -44,15 +48,24 @@ locale() {
 	locale-gen
 }
 
-cleanup() {
-	rm /usr/share/libalpm/hooks/0-pacwrap-dist.hook /usr/bin/pacwrap-dist
-}
-
 dist() {
 	locale
 	user
-	cleanup
 	echo "Distribution configuration completed."
 }
 
-dist
+cert_store() {
+	chmod -R 755 /usr/share/ca-certificates /etc/ca-certificates
+	
+	if [[ $? == 0 ]]; then 
+		echo "Applied permissions to certificate stores successfully."
+	else
+		echo "Error occurred whilst applying permissions to certificate stores."
+	fi
+}
+
+case $1 in
+	cert-store) cert_store;;
+	config) dist;;
+	*) echo "error: Hook parameter '$1' not found.";;
+esac

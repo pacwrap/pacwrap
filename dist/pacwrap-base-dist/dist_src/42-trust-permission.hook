@@ -8,4 +8,4 @@ Target = usr/share/ca-certificates/trust-source/*
 [Action] 
 Description = Permissing certificate store... 
 When = PostTransaction 
-Exec = /usr/bin/chmod -R 755 /usr/share/ca-certificates /etc/ca-certificates
+Exec = /usr/share/libalpm/scripts/pacwrap-dist cert-store
