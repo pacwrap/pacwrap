@@ -41,4 +41,4 @@ A minimum version of Rust 1.70, with base-devel and repose packages from Arch Li
 ## Distribution support
 
 Currently only Arch Linux is supported in containers as package management is faciliated by libalpm.
-However, this package should be distribution agnostic, so it should be possible to use, on non-Arch-based distributions.
+However, this package should be distribution agnostic, so it should be possible to use on non-Arch-based distributions.
