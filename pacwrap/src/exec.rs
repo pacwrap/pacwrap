@@ -15,7 +15,7 @@ use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
 use serde_json::{Value, json};
 
-use pacwrap_lib::{exec::args::ExecutionArgs, 
+use pacwrap_core::{exec::args::ExecutionArgs, 
     exec::utils::fakeroot_container,
     constants::{self,
         BWRAP_EXECUTABLE, 
@@ -357,7 +357,7 @@ fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> b
     }
 
     thread::sleep(Duration::from_micros(500));
-    pacwrap_lib::utils::check_socket(socket)
+    pacwrap_core::utils::check_socket(socket)
 }
 
 fn create_socket(path: &str) {

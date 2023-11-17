@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 
-use pacwrap_lib::{log::Logger,
+use pacwrap_core::{log::Logger,
     sync::transaction::TransactionType,
     utils::{arguments::Operand, print_help_error},
     utils::arguments::Arguments,
@@ -39,7 +38,7 @@ fn ascertain_aggregator<'a>(
     log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
-    let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
+    let mut queue: HashMap<&'a str,Vec<&'a str>> = HashMap::new();
     let mut current_target = "";
 
     args.set_index(1);
@@ -78,7 +77,7 @@ fn ascertain_aggregator<'a>(
             Operand::Value(package) => if current_target != "" {
                 match queue.get_mut(current_target.into()) {
                     Some(vec) => vec.push(package.into()),
-                    None => { queue.insert(current_target.into(), vec!(package.into())); },
+                    None => { queue.insert(current_target, vec!(package)); },
                 }
             },
             _ => Err(args.invalid_operand())?,

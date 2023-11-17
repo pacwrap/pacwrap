@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use alpm::{Package, Alpm, PackageReason};
 
-use super::{transaction::Error, utils::get_local_package};
+use super::{transaction::Error, utils::AlpmUtils};
 
 #[allow(dead_code)]
 pub struct LocalDependencyResolver<'a> {
@@ -51,7 +51,7 @@ impl <'a>LocalDependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(pkg) = get_local_package(&self.handle, pkg) {    
+            if let Some(pkg) = self.handle.get_local_package(pkg) {    
                 if self.depth > 0 {
                     //TODO: Implement proper explicit package handling
                     if ! self.cascading

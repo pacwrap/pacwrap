@@ -1,19 +1,20 @@
+use std::{fs, io::Stdin, process::exit};
+
+
 use alpm::TransFlag;
-use pacwrap_lib::sync::query_event;
-use std::io::Stdin;
-use std::process::exit;
 
-use pacwrap_lib::constants::{BOLD, RESET};
-use pacwrap_lib::sync::{self, AlpmConfigData,
-    progress_event::{self, ProgressEvent}, 
-    utils::{erroneous_transaction, erroneous_preparation}, 
-    transaction::{TransactionMetadata,
-        TransactionHandle,
-        TransactionType, 
-        TransactionFlags,
-        Error, Result}};
-
-use pacwrap_lib::utils::print_error;
+use pacwrap_core::{constants::{BOLD, RESET},
+    utils::print_error,
+    sync::{self, AlpmConfigData,
+        query_event,
+        progress_event::{self, ProgressEvent}, 
+        utils::{erroneous_transaction, erroneous_preparation}, 
+            transaction::{TransactionMetadata,
+            TransactionHandle,
+            TransactionType, 
+            TransactionFlags,
+            Error, 
+            Result}}};
 use serde::Deserialize;
 
 pub fn transact() {
@@ -24,19 +25,11 @@ pub fn transact() {
     let alpm = sync::instantiate_alpm_agent(&alpm_remotes);
     let mut handle = TransactionHandle::new(alpm, meta);
 
-
-    println!("[DEBUG]: Running agent in container");
-
-    match conduct_transaction(&mut handle, mode) {
-        Ok(_) => handle.release(), 
-        Err(error) => {
-            handle.release();
-            error.message();
-            exit(1);
-        },
+    if let Err(error) = conduct_transaction(&mut handle, mode) {
+        error.message();
+        handle.alpm_mut().trans_release().ok();
+        exit(1);
     }
-
-    println!("[DEBUG]: Agent exiting.");
 }
 
 fn deserialize_stdin<T: for<'de> Deserialize<'de>>(stdin: &mut Stdin) -> T {
@@ -90,7 +83,8 @@ fn conduct_transaction(handle: &mut TransactionHandle, mode: TransactionType) ->
         erroneous_transaction(error)?
     }
 
+    handle.alpm_mut().trans_release().unwrap();
+    fs::copy("/etc/ld.so.cache", "/mnt/etc/ld.so.cache").ok();
     handle.mark_depends();
-
     Ok(())
 }

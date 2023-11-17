@@ -1,4 +1,4 @@
-use pacwrap_lib::{config, 
+use pacwrap_core::{config, 
         utils::{arguments::{Arguments, Operand}, 
         print_help_error}};
 

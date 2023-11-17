@@ -1,9 +1,8 @@
 use std::{collections::HashMap, fs::File};
-use std::rc::Rc;
 use std::io::Write;
 use std::process::exit;
 
-use pacwrap_lib::{log::Logger,
+use pacwrap_core::{log::Logger,
     sync::transaction::TransactionType,
     utils::{arguments::Operand, print_help_error, print_error},
     utils::arguments::Arguments,
@@ -165,7 +164,7 @@ fn ascertain_aggregator<'a>(
     log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
-    let mut queue: HashMap<Rc<str>,Vec<Rc<str>>> = HashMap::new();
+    let mut queue: HashMap<&'a str ,Vec<&'a str>> = HashMap::new();
     let mut current_target = "";
     let mut base = false;
 
@@ -193,7 +192,8 @@ fn ascertain_aggregator<'a>(
                 | Operand::Long("create") 
                 => action_flags = action_flags | TransactionFlags::CREATE 
                     | TransactionFlags::FORCE_DATABASE,
-            Operand::Short('b') | Operand::Long("base") => base = true,
+            Operand::Short('b') | 
+                Operand::Long("base") => base = true,
             Operand::Long("db-only") 
                 => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
             Operand::Long("force-foreign") 
@@ -211,9 +211,9 @@ fn ascertain_aggregator<'a>(
                     None => { 
                         let packages = if base {
                             base = false;
-                            vec!(package.into(), "base".into(), "pacwrap-base-dist".into())
+                            vec!(package, "base", "pacwrap-base-dist")
                         } else {
-                            vec!(package.into())
+                            vec!(package)
                         };
 
                         queue.insert(current_target.into(), packages); 

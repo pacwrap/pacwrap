@@ -1,6 +1,9 @@
+use std::process::ChildStdin;
+
 use alpm::Alpm;
 use dialoguer::console::Term;
-use crate::{exec::utils::execute_pacwrap_dist, sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation}};
+use serde::Serialize;
+use crate::{exec::utils::execute_agent, sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation, self}};
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
 use crate::constants::{RESET, BOLD, DIM};
@@ -54,27 +57,25 @@ impl Transaction for Commit {
             return result;
         }
 
+        handle.set_alpm(None);
   
-        match execute_pacwrap_dist(inshandle) {
+        match execute_agent(inshandle) {
             Ok(mut child) => {
-            let stdin = child.stdin.take().unwrap();
+                let stdin = child.stdin.take().unwrap();
 
-                if let Err(error) = ciborium::into_writer(handle.metadata(), &stdin) {
-                    Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error)))?  
-                }
-
-                if let Err(error) = ciborium::into_writer(&*DEFAULT_ALPM_CONF, &stdin) {
-                     Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error)))?                
-                }
-
-                if let Err(error) = ciborium::into_writer(ag.action(), &stdin) {
-                     Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error)))?                
-                }
+                write_to_stdin(handle.metadata(), &stdin)?;
+                write_to_stdin(&*DEFAULT_ALPM_CONF, &stdin)?;
+                write_to_stdin(ag.action(), &stdin)?;
 
                 match child.wait() {
                     Ok(exit_status) => match exit_status.code().unwrap_or(0) {
                         1 => Err(Error::AgentError),
                         0 => {
+                            if self.keyring {
+                                ag.keyring_update(inshandle);
+                            }
+
+                            handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
                             handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
                             ag.set_updated(instance.clone());
                             ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
@@ -88,6 +89,13 @@ impl Transaction for Commit {
             Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,     
         }
     } 
+}
+
+fn write_to_stdin<T: for<'de> Serialize>(input: &T, stdin: &ChildStdin) -> Result<()> { 
+    match ciborium::into_writer::<T, &ChildStdin>(input, stdin) {
+        Ok(()) => Ok(()),
+        Err(error) => Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error))),
+    }
 }
 
 fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> Option<Result<TransactionState>> {
@@ -122,6 +130,7 @@ fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle
     })
 }
 
+#[allow(unused_variables)]
 fn summary(handle: &Alpm) { 
     let mut installed_size_old: i64 = 0;
     let mut installed_size: i64 = 0;
