@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use pacwrap_lib::{config, 
+use pacwrap_core::{config, 
     utils::{print_help_error, 
         handle_process, 
         arguments::{Arguments, Operand}}}; 

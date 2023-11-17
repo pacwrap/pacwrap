@@ -1,4 +1,4 @@
-use pacwrap_lib::utils::{print_error, Arguments, arguments::Operand};
+use pacwrap_core::utils::{print_error, Arguments, arguments::Operand};
 use serde::{Serialize, Deserialize};
 
 mod agent;

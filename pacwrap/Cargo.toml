@@ -2,32 +2,19 @@
 
 [package]
 name = "pacwrap"
-version = "0.4.4"
+version = "0.5.0"
 edition = "2021"
 default-run = "pacwrap"
 
 [dependencies]
-pacwrap-lib = { path = "../pacwrap-lib/", version = "0.4.4" }
+pacwrap-core = { path = "../pacwrap-core/", version = "0.5.0" }
 command-fds = "0.2.2"
-#tempfile = "3"
 serde_json = "1.0"
-#envy = "0.4"
-rayon = "1.7.0"
 nix = "0.22.3, <= 0.22.3"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_yaml = "0.9"
-typetag="0.2"
 os_pipe = "1.1.4"
 signal-hook = "0.3.15"
 lazy_static = "1.4.0"
 alpm = { version = "2.2.2", features = ["checkver"] }
-indicatif = "0.17.5"
-dialoguer = "0.10.4"
-pacmanconf = "2.0.0"
-ciborium = "0.2.1"
-walkdir = "2.3.3"
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
-time = { version = "0.3.28", features = ["formatting", "macros", "local-offset", "parsing"] }
-bitflags = "2.4.0"
-simplebyteunit = "0.2.1"
-dyn-clone = "1.0.14"

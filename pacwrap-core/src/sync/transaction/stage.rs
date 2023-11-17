@@ -42,7 +42,7 @@ impl Transaction for Stage {
         })
     }
 
-    fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> { 
+    fn engage(&self, ag: &mut TransactionAggregator,  handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> { 
         if let Err(error) = handle.alpm().trans_init(self.flags) {
             Err(Error::InitializationFailure(error.to_string().into()))?
         }

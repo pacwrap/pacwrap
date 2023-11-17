@@ -1,38 +1,48 @@
-use std::{process::{Child, Command, Stdio}, io::Error};
+use std::{process::{Child, Command, Stdio}, io::Error, env::var};
 
-use crate::{constants::BWRAP_EXECUTABLE, 
+use crate::{constants::{BWRAP_EXECUTABLE, self}, 
     config::InstanceHandle, 
-    utils::{handle_process, env_var}};
+    utils::handle_process};
 
-pub fn execute_pacwrap_dist(ins: &InstanceHandle) -> Result<Child,Error> {  
+pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> { 
+    let dist_img = option_env!("PACWRAP_DIST_IMG").unwrap_or("/usr/lib/pacwrap/runtime");
+    let dist_tls = option_env!("PACWRAP_DIST_TLS").unwrap_or("/etc/ca-certificates/extracted/tls-ca-bundle.pem"); 
+
     Command::new(BWRAP_EXECUTABLE)
     .env_clear()
     .stdin(Stdio::piped())
-    .arg("--bind").arg(ins.vars().root().as_ref()).arg("/")
+    .arg("--bind").arg(ins.vars().root().as_ref()).arg("/mnt")
     .arg("--tmpfs").arg("/tmp")
-    .arg("--ro-bind").arg(option_env!("PACWRAP_DIST_LIBS").unwrap_or("/usr/lib/pacwrap/lib/")).arg("/tmp/lib/") 
+    .arg("--tmpfs").arg("/etc")
+    .arg("--ro-bind").arg(format!("{}/lib", dist_img)).arg("/lib64")
+    .arg("--ro-bind").arg(format!("{}/bin", dist_img)).arg("/bin")
+    .arg("--symlink").arg("/mnt/usr").arg("/usr")
     .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
-    .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime")
+    .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 
+    .arg("--ro-bind").arg(dist_tls).arg("/etc/ssl/certs/ca-certificates.crt")
+    .arg("--bind").arg(*constants::LOG_LOCATION).arg("/tmp/pacwrap.log") 
     .arg("--bind").arg(&ins.vars().pacman_gnupg.as_ref()).arg("/tmp/pacman/gnupg")
     .arg("--bind").arg(&ins.vars().pacman_cache.as_ref()).arg("/tmp/pacman/pkg")
-    .arg("--ro-bind").arg(env!("PACWRAP_DIST_REPO").split_at(7).1).arg("/tmp/dist-repo")
-    .arg("--ro-bind").arg(option_env!("PACWRAP_DIST_EXEC").unwrap_or("/usr/lib/pacwrap/agent")).arg("/tmp/bin/agent")
+    .arg("--ro-bind").arg(env!("PACWRAP_DIST_REPO")).arg("/tmp/dist-repo")
     .arg("--dev").arg("/dev")
-    .arg("--proc").arg("/proc")
+    .arg("--dev").arg("/mnt/dev")
+    .arg("--proc").arg("/mnt/proc")
     .arg("--unshare-all").arg("--share-net")
     .arg("--clearenv")
-    .arg("--hostname").arg("FakeChroot")
+    .arg("--hostname").arg("pacwrap-agent")
     .arg("--new-session")
+    .arg("--setenv").arg("PATH").arg("/bin")
     .arg("--setenv").arg("TERM").arg(env_var("TERM"))
-    .arg("--setenv").arg("LD_LIBRARY_PATH").arg("/tmp/lib")
+    .arg("--setenv").arg("LD_LIBRARY_PATH").arg("/lib64:/usr/lib")
+    .arg("--setenv").arg("LD_PRELOAD").arg("/lib64/libfakeroot.so:/lib64/libfakechroot.so")
     .arg("--setenv").arg("HOME").arg("/tmp")
     .arg("--setenv").arg("COLORTERM").arg(env_var("COLORTERM"))
+    .arg("--setenv").arg("LANG").arg(env_var("LANG"))
     .arg("--setenv").arg("RUST_BACKTRACE").arg("1")
     .arg("--die-with-parent")
     .arg("--unshare-user")
     .arg("--disable-userns")
-    .arg("/tmp/lib/ld-linux-x86-64.so.2")
-    .arg("/tmp/bin/agent")
+    .arg("agent")
     .arg("transact")
     .spawn()
 }
@@ -69,4 +79,11 @@ pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<
     .arg("fakeroot")
     .args(arguments)
     .spawn()
+}
+
+fn env_var(env: &str) -> String {
+    match var(env) {
+        Ok(var) => var,
+        Err(_) => String::new()
+    }
 }

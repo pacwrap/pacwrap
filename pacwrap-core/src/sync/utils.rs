@@ -4,33 +4,18 @@ use crate::{sync::transaction::Result, sync::transaction::Error};
 use crate::constants::{BOLD, BOLD_WHITE, RESET};
 use crate::utils::{print_error, print_warning};
 
-
-pub fn get_local_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
-    if let Ok(pkg) = handle.localdb().pkg(pkg) {
-        return Some(pkg);
-    } else {
-        handle.localdb()
-            .pkgs()
-            .iter()
-            .find_map(|f| {
-            if f.provides()
-                    .iter()
-                    .filter(|d| pkg == d.name())
-                    .count() > 0 {
-                Some(f)
-            } else {
-                None
-            }  
-        })
-    }
+pub trait AlpmUtils {
+    fn get_local_package(&self, pkg: &str) -> Option<Package<'_>>;
+    fn get_package(&self, pkg: &str) -> Option<Package<'_>>; 
 }
 
-pub fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
-    for sync in handle.syncdbs() {  
-        if let Ok(pkg) = sync.pkg(pkg) {
-           return Some(pkg);
+impl AlpmUtils for Alpm {
+    fn get_local_package<'a>(&self, pkg: &'a str) -> Option<Package<'_>> {
+        if let Ok(pkg) = self.localdb().pkg(pkg) {
+            return Some(pkg);
         } else {
-            let package = sync.pkgs()
+            self.localdb()
+                .pkgs()
                 .iter()
                 .find_map(|f| {
                 if f.provides()
@@ -41,17 +26,38 @@ pub fn get_package<'a>(handle: &'a Alpm, pkg: &'a str) -> Option<Package<'a>> {
                 } else {
                     None
                 }  
-            });
-
-            if let None = package {
-                continue;
-            }
-
-            return package
+            })
         }
     }
 
-    None
+    fn get_package(&self, pkg: &str) -> Option<Package<'_>> {
+        for sync in self.syncdbs() {  
+            if let Ok(pkg) = sync.pkg(pkg) {
+                return Some(pkg);
+            } else {
+                let package = sync.pkgs()
+                    .iter()
+                    .find_map(|f| {
+                    if f.provides()
+                            .iter()
+                            .filter(|d| pkg == d.name())
+                            .count() > 0 {
+                        Some(f)
+                    } else {
+                        None
+                    }  
+                });
+
+                if let None = package {
+                    continue;
+                }
+
+                return package
+            }
+        }
+
+        None
+    }
 }
 
 pub fn whitespace(total: usize, current: usize) -> String {

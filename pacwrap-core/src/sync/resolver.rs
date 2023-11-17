@@ -3,7 +3,7 @@ use std::{rc::Rc, collections::HashSet};
 use alpm::{Package, Alpm};
 
 use super::{transaction::Error,
-    utils::{get_package, get_local_package}};
+    utils::AlpmUtils};
 
 pub struct DependencyResolver<'a> {
     resolved: HashSet<&'a str>,
@@ -47,14 +47,14 @@ impl <'a>DependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(pkg) = get_package(&self.handle, pkg) {   
+            if let Some(pkg) = self.handle.get_package(pkg) {   
                 self.packages.push(pkg);
                 self.resolved.insert(pkg.name());
                 synchronize.extend(pkg.depends()
                     .iter()
                     .filter_map(|p| 
-                        match get_local_package(&self.handle, p.name()) {
-                            None => match get_package(&self.handle, p.name()) {  
+                        match self.handle.get_local_package(p.name()) {
+                            None => match self.handle.get_package(p.name()) {  
                                 Some(dep) => Some(dep.name()), None => None,
                             },
                             Some(_) => None,

@@ -11,7 +11,6 @@ use crate::sync::{self,
 use crate::config::{InstanceHandle, 
     InstanceType::ROOT,
     cache::InstanceCache};
-use crate::utils::{arguments::Operand, Arguments};
 use super::{
     Transaction,
     TransactionHandle,
@@ -27,7 +26,7 @@ pub enum Error {
 pub struct TransactionAggregator<'a> {
     queried: Vec<Rc<str>>,
     updated: Vec<Rc<str>>,
-    pkg_queue: HashMap<Rc<str>, Vec<Rc<str>>>,
+    pkg_queue: HashMap<&'a str, Vec<&'a str>>,
     action: TransactionType,
     filesystem_state: Option<FileSystemStateSync<'a>>,
     cache: &'a InstanceCache,
@@ -38,8 +37,9 @@ pub struct TransactionAggregator<'a> {
 }
 
 impl <'a>TransactionAggregator<'a> { 
-    pub fn new(inscache: &'a InstanceCache, 
-        queue: HashMap<Rc<str>, Vec<Rc<str>>>, 
+    pub fn new(
+        inscache: &'a InstanceCache, 
+        queue: HashMap<&'a str, Vec<&'a str>>, 
         log: &'a mut Logger, 
         action_flags: TransactionFlags, 
         action_type: TransactionType,  
@@ -60,14 +60,15 @@ impl <'a>TransactionAggregator<'a> {
 
 
     pub fn aggregate(mut self, aux_cache: &'a mut InstanceCache) {
-        let upgrade = if let TransactionType::Upgrade(upgrade, refresh, force) = self.action { 
-            if refresh {
-                sync::synchronize_database(self.cache, force); 
-            }
+        let upgrade = match self.action {
+            TransactionType::Upgrade(upgrade, refresh, force) => {
+                if refresh {
+                    sync::synchronize_database(self.cache, force); 
+                }
 
-            upgrade
-        } else {
-            false
+                upgrade
+            },
+            _ => false,
         };
         let target = match self.target {
             Some(s) => self.cache.instances().get(s), None => None
@@ -82,7 +83,8 @@ impl <'a>TransactionAggregator<'a> {
             self.transaction(self.cache.containers_dep());
         }
 
-        if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
+        if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) 
+        || self.updated.len() > 0 {
             aux_cache.populate(); 
 
             if aux_cache.containers_root().len() > 0 {
@@ -127,11 +129,12 @@ impl <'a>TransactionAggregator<'a> {
     }
 
     pub fn transact(&mut self, inshandle: &InstanceHandle) { 
-        let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
+        let queue = match self.pkg_queue.get(inshandle.vars().instance().as_ref()) {
             Some(some) => some.clone(), None => Vec::new(),
         };
         let alpm = sync::instantiate_alpm(&inshandle);
-        let mut handle = TransactionHandle::new(alpm, TransactionMetadata::new(queue));
+        let meta = TransactionMetadata::new(queue);
+        let mut handle = TransactionHandle::new(alpm, meta);
         let mut act: Box<dyn Transaction> = TransactionState::Prepare.from(self);
         
         self.action.begin_message(&inshandle);

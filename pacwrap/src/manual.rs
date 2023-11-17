@@ -2,7 +2,7 @@ use indexmap::IndexSet;
 use lazy_static::lazy_static;
 use std::fmt::Write;
 
-use pacwrap_lib::utils::{Arguments, 
+use pacwrap_core::utils::{Arguments, 
     arguments::Operand,
     print_help_error, 
     is_color_terminal, 

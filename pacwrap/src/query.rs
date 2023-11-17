@@ -1,7 +1,7 @@
 use std::process::exit;
 use alpm::{Alpm, PackageReason};
 
-use pacwrap_lib::{config,
+use pacwrap_core::{config,
     constants::{RESET, BOLD_GREEN},
     utils::arguments::Operand,
     utils::{arguments::Arguments, 

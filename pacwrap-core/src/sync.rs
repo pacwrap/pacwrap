@@ -14,7 +14,7 @@ use crate::config::{InsVars,
 
 lazy_static! {
     static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman.conf", constants::LOCATION.get_config())).unwrap(); 
-    static ref DEFAULT_SIGLEVEL: SigLevel = SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL;
+    static ref DEFAULT_SIGLEVEL: SigLevel = signature(&PACMAN_CONF.sig_level, SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL);
     static ref DEFAULT_ALPM_CONF: AlpmConfigData = AlpmConfigData::new();
 }
 
@@ -41,8 +41,8 @@ impl AlpmConfigData {
         }
 
         remotes.push(("pacwrap".into(), 
-            (SigLevel::PACKAGE_OPTIONAL | SigLevel::DATABASE_OPTIONAL).bits(), 
-            vec!(env!("PACWRAP_DIST_REPO").into(), "file:///tmp/dist-repo/".into())));
+            (SigLevel::PACKAGE_MARGINAL_OK | SigLevel::DATABASE_MARGINAL_OK).bits(), 
+            vec![format!("file://{}", env!("PACWRAP_DIST_REPO")), format!("file:///tmp/dist-repo/")]));
  
         Self {
             repos: remotes,
@@ -51,9 +51,10 @@ impl AlpmConfigData {
 }
 
 pub fn instantiate_alpm_agent(remotes: &AlpmConfigData) -> Alpm {
-    let mut handle = Alpm::new("/", "/var/lib/pacman/").unwrap();
+    let mut handle = Alpm::new("/mnt/", "/mnt/var/lib/pacman/").unwrap();
 
-    handle.set_hookdirs(vec!["/usr/share/libalpm/hooks/", "/etc/pacman.d/hooks/"].iter()).unwrap();
+    handle.set_logfile("/tmp/pacwrap.log").unwrap(); 
+    handle.set_hookdirs(vec!["/mnt/usr/share/libalpm/hooks/", "/mnt/etc/pacman.d/hooks/"].iter()).unwrap();
     handle.set_cachedirs(vec!["/tmp/pacman/pkg"].iter()).unwrap();
     handle.set_gpgdir("/tmp/pacman/gnupg").unwrap();
     handle.set_parallel_downloads(5);
@@ -72,13 +73,11 @@ fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> 
     let root = insvars.root().as_ref();   
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
-    handle.set_hookdirs(vec![format!("{}/usr/share/libalpm/hooks/", root), format!("{}/etc/pacman.d/hooks/", root)].iter()).unwrap();
     handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
     handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap();
     handle.set_parallel_downloads(PACMAN_CONF.parallel_downloads.try_into().unwrap_or(1));
     handle.set_logfile(format!("{}/pacwrap.log", LOCATION.get_data())).unwrap();
     handle.set_check_space(PACMAN_CONF.check_space);
-    handle.set_noextracts(vec!["usr/bin/ldconfig"].iter()).unwrap();
     handle = register_remote(handle, remotes); 
     handle
 }
