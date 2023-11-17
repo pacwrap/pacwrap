@@ -1,0 +1,7 @@
+[workspace]
+resolver = "1"
+members = ["pacwrap", "pacwrap-agent", "pacwrap-core"]
+
+[profile.release]
+lto = "thin"
+opt-level = "s"
