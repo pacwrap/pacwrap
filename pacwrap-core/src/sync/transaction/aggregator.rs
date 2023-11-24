@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::process::exit;
-use std::rc::Rc;
 
 use crate::constants::ARROW_GREEN;
 use crate::config::InstanceType;
@@ -24,12 +23,12 @@ pub enum Error {
 }
 
 pub struct TransactionAggregator<'a> {
-    queried: Vec<Rc<str>>,
-    updated: Vec<Rc<str>>,
+    queried: Vec<&'a str>,
+    updated: Vec<&'a str>,
     pkg_queue: HashMap<&'a str, Vec<&'a str>>,
     action: TransactionType,
     filesystem_state: Option<FileSystemStateSync<'a>>,
-    cache: &'a InstanceCache,
+    cache: &'a InstanceCache<'a>,
     keyring: bool,
     logger: &'a mut Logger,
     flags: TransactionFlags,
@@ -58,8 +57,7 @@ impl <'a>TransactionAggregator<'a> {
         }
     }
 
-
-    pub fn aggregate(mut self, aux_cache: &'a mut InstanceCache) {
+    pub fn aggregate(mut self) -> Result<(),String> {
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
                 if refresh {
@@ -71,7 +69,7 @@ impl <'a>TransactionAggregator<'a> {
             _ => false,
         };
         let target = match self.target {
-            Some(s) => self.cache.instances().get(s), None => None
+            Some(s) => self.cache.get_instance(s), None => None
         };
 
         if let Some(inshandle) = target { 
@@ -79,20 +77,18 @@ impl <'a>TransactionAggregator<'a> {
                 self.transact(inshandle); 
             }
         } else if upgrade {
-            self.transaction(self.cache.containers_base());
-            self.transaction(self.cache.containers_dep());
+            self.transaction(self.cache.registered_base());
+            self.transaction(self.cache.registered_dep());
         }
 
         if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) 
         || self.updated.len() > 0 {
-            aux_cache.populate(); 
-
-            if aux_cache.containers_root().len() > 0 {
+            if self.cache.registered_root().len() > 0 {
+                let file = self.cache.registered();
                 let linker = self.fs_sync().unwrap();
 
-                linker.set_cache(aux_cache);
-                linker.prepare(aux_cache.registered().len());
-                linker.engage(&aux_cache.registered());
+                linker.prepare(file.len());
+                linker.engage(file);
                 linker.finish();
             }
         
@@ -104,32 +100,32 @@ impl <'a>TransactionAggregator<'a> {
                 self.transact(inshandle); 
             }
         } else if upgrade {
-            self.transaction(self.cache.containers_root());
+            self.transaction(self.cache.registered_root());
         }
 
         println!("{} Transaction complete.", *ARROW_GREEN);
+        Ok(())
     }
 
-    pub fn transaction(&mut self, containers: &Vec<Rc<str>>) {
+    pub fn transaction(&mut self, containers: &Vec<&'a str>) {
         for ins in containers.iter() { 
             if self.queried.contains(ins) {
                 continue;
             }
 
-            let inshandle = self.cache
-                .instances()
-                .get(ins);
-
-            if let Some(inshandle) = inshandle {
-                self.transaction(inshandle.metadata().dependencies());
-                self.queried.push(ins.clone());
+            if let Some(inshandle) = self.cache.get_instance(ins) {
+                self.transaction(&inshandle.metadata()
+                    .dependencies()
+                    .iter().map(|a| a.as_ref())
+                    .collect());
+                self.queried.push(ins);
                 self.transact(inshandle);
             }
         }
     }
 
     pub fn transact(&mut self, inshandle: &InstanceHandle) { 
-        let queue = match self.pkg_queue.get(inshandle.vars().instance().as_ref()) {
+        let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
             Some(some) => some.clone(), None => Vec::new(),
         };
         let alpm = sync::instantiate_alpm(&inshandle);
@@ -165,7 +161,7 @@ impl <'a>TransactionAggregator<'a> {
         self.keyring = true;
     }
 
-    pub fn sync_filesystem(&mut self, inshandle: &InstanceHandle) { 
+    pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) { 
         if let ROOT = inshandle.metadata().container_type() {
             return;
         }
@@ -173,7 +169,7 @@ impl <'a>TransactionAggregator<'a> {
         let fs_sync = self.fs_sync().unwrap();
 
         fs_sync.prepare_single();
-        fs_sync.engage(&vec![inshandle.vars().instance().clone()]);
+        fs_sync.engage(&vec![inshandle.vars().instance()]);
     }
 
     pub fn cache(&self) -> &InstanceCache { 
@@ -184,7 +180,7 @@ impl <'a>TransactionAggregator<'a> {
         &self.action 
     }
 
-    pub fn updated(&self) -> &Vec<Rc<str>> { 
+    pub fn updated(&self) -> &Vec<&'a str> { 
         &self.updated 
     }
 
@@ -205,9 +201,5 @@ impl <'a>TransactionAggregator<'a> {
             Some(linker) => Ok(linker),
             None => Err(Error::LinkerUninitialised),
         }
-    }
-
-    pub fn set_updated(&mut self, updated: Rc<str>) {
-        self.updated.push(updated);
     }
 }

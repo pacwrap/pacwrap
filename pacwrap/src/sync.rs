@@ -11,12 +11,11 @@ use pacwrap_core::{log::Logger,
         InsVars, 
         Instance, 
         InstanceHandle,
-        cache::InstanceCache},
+        cache},
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
     constants::{BAR_GREEN, BOLD, RESET, ARROW_GREEN}};
 
 pub fn synchronize(mut args: &mut Arguments) {
-    let mut cache = InstanceCache::new();
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();  
     let action = {
         let mut u = 0;
@@ -48,8 +47,8 @@ pub fn synchronize(mut args: &mut Arguments) {
         Err(error) => print_help_error(error),
     }
 
-    match ascertain_aggregator(action, &mut args, &mut cache, &mut logger) {
-        Ok(ag) => ag.aggregate(&mut InstanceCache::new()), Err(e) => print_help_error(e)
+    if let Err(e) = aggregator(action, &mut args, &mut logger) {
+        print_help_error(e);
     }
 }
 
@@ -119,34 +118,34 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
         }
     };
 
-    if let Err(err) = std::fs::create_dir(instance.vars().root().as_ref()) {
+    if let Err(err) = std::fs::create_dir(instance.vars().root()) {
         if let std::io::ErrorKind::AlreadyExists = err.kind() {
-            print_error(format!("'{}': Container root already exists.", instance.vars().root().as_ref()));
+            print_error(format!("'{}': Container root already exists.", instance.vars().root()));
         } else {
-            print_error(format!("'{}': {}", instance.vars().root().as_ref(), err));
+            print_error(format!("'{}': {}", instance.vars().root(), err));
         }
         
         exit(1);
     }
 
     if let InstanceType::ROOT | InstanceType::BASE = instype { 
-        if let Err(err) = std::fs::create_dir(instance.vars().home().as_ref()) {
+        if let Err(err) = std::fs::create_dir(instance.vars().home()) {
             if err.kind() != std::io::ErrorKind::AlreadyExists {
-                print_error(format!("'{}': {}", instance.vars().root().as_ref(), err));
+                print_error(format!("'{}': {}", instance.vars().root(), err));
                 exit(1);
             }
         }
 
-        let mut f = match File::create(&format!("{}/.bashrc", instance.vars().home().as_ref())) {
+        let mut f = match File::create(&format!("{}/.bashrc", instance.vars().home())) {
             Ok(f) => f,
             Err(error) => {
-                print_error(format!("'{}/.bashrc': {}", instance.vars().home().as_ref(), error));
+                print_error(format!("'{}/.bashrc': {}", instance.vars().home(), error));
                 exit(1); 
             }
         };
    
         if let Err(error) = write!(f, "PS1=\"{}> \"", ins) {
-            print_error(format!("'{}/.bashrc': {}", instance.vars().home().as_ref(), error));
+            print_error(format!("'{}/.bashrc': {}", instance.vars().home(), error));
             exit(1);
         }
     }
@@ -157,11 +156,10 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
     println!("{} Instantiation complete.", *ARROW_GREEN);
 }
 
-fn ascertain_aggregator<'a>(
+fn aggregator<'a>(
     action_type: TransactionType, 
     args: &'a mut Arguments, 
-    inscache: &'a mut InstanceCache, 
-    log: &'a mut Logger) -> Result<TransactionAggregator<'a>, String> { 
+    log: &'a mut Logger) -> Result<(), String> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str ,Vec<&'a str>> = HashMap::new();
@@ -203,7 +201,7 @@ fn ascertain_aggregator<'a>(
             Operand::ShortPos('t', target) 
                 | Operand::LongPos("target", target) => {
                 current_target = target;
-                targets.push(target.into());
+                targets.push(target);
             },
             Operand::Value(package) => if current_target != "" {
                 match queue.get_mut(current_target.into()) {
@@ -242,12 +240,11 @@ fn ascertain_aggregator<'a>(
             None
         }
     };
- 
-    if targets.len() > 0 {
-        inscache.populate_from(&targets, true);
-    } else {
-        inscache.populate();
-    }
-    
-    Ok(TransactionAggregator::new(inscache, queue, log, action_flags, action_type, current_target))
+
+    Ok(TransactionAggregator::new(&cache::populate()?, 
+        queue, 
+        log, 
+        action_flags, 
+        action_type, 
+        current_target).aggregate()?)
 }

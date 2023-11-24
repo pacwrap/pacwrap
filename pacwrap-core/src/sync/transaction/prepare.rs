@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{config::InstanceHandle, sync};
 use super::{Transaction, 
     TransactionType, 
@@ -27,7 +29,7 @@ impl Transaction for Prepare {
        
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
-                        match ag.cache().instances().get(dep) {
+                        match ag.cache().get_instance(dep) {
                             Some(dep_handle) => {
                                 let dep_alpm = sync::instantiate_alpm(dep_handle); 
                             
@@ -70,7 +72,7 @@ impl Transaction for Prepare {
                             .iter()
                             .filter(|a| inshandle.metadata()
                                 .dependencies()
-                                .contains(a))
+                                .contains(&Rc::from(**a)))
                                 .count() > 0 {
                                     return Ok(TransactionState::StageForeign)
                             }

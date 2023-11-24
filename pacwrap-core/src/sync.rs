@@ -70,7 +70,7 @@ pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm {
 }
 
 fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> Alpm { 
-    let root = insvars.root().as_ref();   
+    let root = insvars.root();   
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
     handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
@@ -98,10 +98,9 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
 }
 
 fn synchronize_database(cache: &InstanceCache, force: bool) {
-     match cache.containers_base().get(0) {
-        Some(insname) => {
+     match cache.obtain_base_handle() {
+        Some(ins) => {
             let db_path = format!("{}/pacman/", constants::LOCATION.get_data());
-            let ins: &InstanceHandle = cache.instances().get(insname).unwrap();      
             let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
             println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
@@ -116,7 +115,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             Alpm::release(handle).unwrap();  
 
             for i in cache.registered().iter() {
-                let ins: &InstanceHandle = cache.instances().get(i).unwrap();
+                let ins: &InstanceHandle = cache.get_instance(i).unwrap();
                 let vars: &InsVars = ins.vars();
                 let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), "pacwrap");
                 let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), "pacwrap");

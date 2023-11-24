@@ -128,7 +128,7 @@ pub struct FileSystemStateSync<'a> {
     linked: HashSet<Rc<str>>,
     queued: HashSet<Rc<str>>,
     progress: ProgressBar,
-    cache: &'a InstanceCache,
+    cache: &'a InstanceCache<'a>,
     pool: Option<ThreadPool>,
     max_chars: u16, 
 }
@@ -158,8 +158,8 @@ impl <'a>FileSystemStateSync<'a> {
         }
     }
 
-    pub fn engage(&mut self, containers: &Vec<Rc<str>>) {
-        let (tx, rx) = self.link(containers, mpsc::channel()); 
+    pub fn engage(&mut self, containers: &Vec<&'a str>) {
+        let (tx, rx) = self.link(&containers.iter().map(|a| Rc::from(*a)).collect(), mpsc::channel()); 
         
         drop(tx); 
         
@@ -174,7 +174,7 @@ impl <'a>FileSystemStateSync<'a> {
                 continue;
             }
 
-            let inshandle = match self.cache.instances().get(ins) {
+            let inshandle = match self.cache.get_instance(ins) {
                 Some(ins) => ins,
                 None => {
                     print_error(format!("Linker: {} not found.", ins));
@@ -289,8 +289,8 @@ impl <'a>FileSystemStateSync<'a> {
     } 
 
     fn obtain_slice(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) {
-        let instance: Arc<str> = inshandle.vars().instance().as_ref().into();
-        let root = inshandle.vars().root().clone();
+        let instance: Arc<str> = inshandle.vars().instance().into();
+        let root = inshandle.vars().root().into();
        
         self.previous_state(&instance);
         self.pool().unwrap().spawn(move ||{ 
@@ -307,19 +307,19 @@ impl <'a>FileSystemStateSync<'a> {
         let mut map = Vec::new(); 
         let mut prev = Vec::new();
         let deps = inshandle.metadata().dependencies(); 
-        let instance: Arc<str> = inshandle.vars().instance().as_ref().into();
-        let root = inshandle.vars().root().clone();
+        let instance: Arc<str> = inshandle.vars().instance().into();
+        let root: Arc<str> = inshandle.vars().root().into();
         let state = FileSystemState::new();
  
         for dep in deps {
-            let dephandle = self.cache.instances().get(dep).unwrap();
+            let dephandle = self.cache.get_instance(dep).unwrap();
             let state = match self.state_map.get(dep.as_ref().into()) { 
                 Some(state) => state.clone(),
                 None => FileSystemState::new()
             };
 
             prev.push(self.previous_state(&Arc::from(dep.as_ref())));
-            map.push((dephandle.vars().root().clone(), state));
+            map.push((dephandle.vars().root().into(), state));
         }
 
         self.pool().unwrap().spawn(move ||{ 

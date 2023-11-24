@@ -77,7 +77,7 @@ impl Transaction for Commit {
 
                             handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
                             handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
-                            ag.set_updated(instance.clone());
+                            //ag.set_updated(instance.clone());
                             ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
                             state_transition(&self.state, handle)
                         }, 

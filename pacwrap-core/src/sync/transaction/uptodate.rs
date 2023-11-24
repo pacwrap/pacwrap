@@ -15,6 +15,6 @@ impl Transaction for UpToDate {
     fn engage(&self, _: &mut TransactionAggregator, _: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
         println!("{} {instance} is up-to-date!", *ARROW_GREEN); 
-        Ok(TransactionState::Complete)
+        Ok(TransactionState::Complete(false))
     }
 }
