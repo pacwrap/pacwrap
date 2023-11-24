@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
+use std::borrow::Cow;
 use std::fmt::Display;
-use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::vec::Vec;
 use serde::{Deserialize, Serialize};
@@ -12,15 +12,15 @@ use crate::config::dbus::Dbus;
 use crate::config::vars::InsVars;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Instance {
+pub struct Instance<'a> {
     #[serde(flatten)]  
-    metadata: InstanceMetadata,
+    metadata: InstanceMetadata<'a>,
     #[serde(flatten)]
     runtime: InstanceRuntime,
 }
 
-impl Instance { 
-    pub fn new(ctype: InstanceType, pkg: Vec<Rc<str>>, deps: Vec<Rc<str>>) -> Self {
+impl <'a>Instance<'a> { 
+    pub fn new(ctype: InstanceType, pkg: Vec<Cow<'a, str>>, deps: Vec<Cow<'a, str>>) -> Self {
         Self {
             metadata: InstanceMetadata::new(ctype,pkg,deps),
             runtime: InstanceRuntime::new(), 
@@ -29,13 +29,13 @@ impl Instance {
 }
 
 #[derive(Clone)]
-pub struct InstanceHandle {
-    instance: Instance,
-    vars: InsVars,
+pub struct InstanceHandle<'a> {
+    instance: Instance<'a>,
+    vars: InsVars<'a>,
 }
 
-impl InstanceHandle {
-    pub fn new(ins: Instance, v: InsVars) -> Self {
+impl <'a>InstanceHandle<'a> {
+    pub fn new(ins: Instance<'a>, v: InsVars<'a>) -> Self {
         Self {
             instance: ins,
             vars: v,
@@ -50,7 +50,7 @@ impl InstanceHandle {
         &self.instance.runtime
     }
 
-    pub fn metadata_mut(&mut self) -> &mut InstanceMetadata {
+    pub fn metadata_mut(&mut self) -> &mut InstanceMetadata<'a> {
         &mut self.instance.metadata
     }
 
@@ -147,43 +147,42 @@ impl Default for InstanceType {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct InstanceMetadata {
+pub struct InstanceMetadata<'a> {
     #[serde(default)]  
     container_type: InstanceType, 
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    dependencies: Vec<Rc<str>>,    
+    dependencies: Vec<Cow<'a, str>>,    
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    explicit_packages: Vec<Rc<str>>,
+    explicit_packages: Vec<Cow<'a, str>>,
     #[serde(default = "time_as_seconds")]
     meta_version: u64,
 }
 
-impl InstanceMetadata {
-    fn new(ctype: InstanceType, pkg: Vec<Rc<str>>, deps: Vec<Rc<str>>) -> Self {
+impl <'a>InstanceMetadata<'a> {
+    fn new(ctype: InstanceType, deps: Vec<Cow<'a, str>>, pkg: Vec<Cow<'a, str>>) -> Self {
         Self {
             container_type: ctype,
             dependencies: deps,
-            explicit_packages: pkg, 
+            explicit_packages: pkg,
             meta_version: time_as_seconds(),
         }
     }
 
-    pub fn set(&mut self, dep: Vec<Rc<str>>, pkg: Vec<Rc<str>>) {
-            self.dependencies=dep;
-            self.explicit_packages=pkg;
-            self.meta_version = time_as_seconds(); 
-
+    pub fn set(&mut self, deps: Vec<Cow<'a, str>>, pkg: Vec<Cow<'a, str>>) {
+        self.dependencies = deps;
+        self.explicit_packages = pkg;
+        self.meta_version = time_as_seconds();
     }
 
     pub fn container_type(&self) -> &InstanceType { 
         &self.container_type 
     }
 
-    pub fn dependencies(&self) -> &Vec<Rc<str>> { 
-        &self.dependencies 
+    pub fn dependencies(&self) -> &Vec<Cow<'a, str>> { 
+        &self.dependencies
     }
     
-    pub fn explicit_packages(&self) -> &Vec<Rc<str>> { 
+    pub fn explicit_packages(&self) -> &Vec<Cow<'a, str>> { 
         &self.explicit_packages 
     }
 }

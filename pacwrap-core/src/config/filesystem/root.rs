@@ -12,7 +12,7 @@ pub struct ROOT;
 #[typetag::serde]
 impl Filesystem for ROOT {
     fn check(&self, vars: &InsVars) -> Result<(), Error> {
-        if ! Path::new(vars.root().as_ref()).exists() {
+        if ! Path::new(vars.root()).exists() {
             Err(Error::new("ROOT", format!("Container {} not found. ", vars.instance()), true))?
         }
         Ok(())

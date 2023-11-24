@@ -39,8 +39,8 @@ use pacwrap_core::{exec::args::ExecutionArgs,
         print_warning}};
 
 enum ExecParams<'a> {
-    Root(bool, bool, Vec<&'a str>,  InstanceHandle),
-    Container(bool, bool, Vec<&'a str>, InstanceHandle),
+    Root(bool, bool, Vec<&'a str>,  InstanceHandle<'a>),
+    Container(bool, bool, Vec<&'a str>, InstanceHandle<'a>),
 }
 
 /*

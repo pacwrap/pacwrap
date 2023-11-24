@@ -20,7 +20,7 @@ pub mod instance;
 pub mod init;
 
 pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {   
-    let mut f = match File::create(Path::new(ins.vars().config_path().as_ref())) {
+    let mut f = match File::create(Path::new(ins.vars().config_path())) {
         Ok(f) => f,
         Err(error) => Err(format!("{}", error))?
     };
@@ -39,7 +39,7 @@ pub fn save_handle(ins: &InstanceHandle) -> Result<(), String> {
 pub fn provide_handle(instance: &str) -> Result<InstanceHandle, String> { 
     let vars = InsVars::new(instance);
 
-    if ! Path::new(vars.root().as_ref()).exists() {  
+    if ! Path::new(vars.root()).exists() {  
         Err(format!("Container '{instance}' doesn't exist."))?
     }
 
@@ -51,8 +51,8 @@ pub fn provide_new_handle(instance: &str) -> Result<InstanceHandle, String> {
     handle(instance, InsVars::new(instance))
 }
 
-fn handle(instance: &str, vars: InsVars) -> Result<InstanceHandle, String> {
-    match File::open(vars.config_path().as_ref()) {
+fn handle<'a>(instance: &str, vars: InsVars<'a>) -> Result<InstanceHandle<'a>, String> {
+    match File::open(vars.config_path()) {
         Ok(file) => {
             let config = match serde_yaml::from_reader(&file) {
                 Ok(file) => file,

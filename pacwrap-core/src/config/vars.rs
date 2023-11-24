@@ -1,49 +1,41 @@
 use std::env::var;
-use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::constants::{LOCATION, HOME, USER};
 use crate::config::instance::InstanceRuntime;
 
 #[derive(Clone)]
-pub struct InsVars {
-    home: Rc<str>,
-    root: Arc<str>,
-    user: Rc<str>,
-    config: Rc<str>,
-    instance: Rc<str>,
-    home_mount: Rc<str>,
-    pub pacman_cache: Rc<str>,
-    pub pacman_gnupg: Rc<str>,
+pub struct InsVars<'a> {
+    home: &'a str,
+    root: &'a str,
+    user: &'a str,
+    config: &'a str,
+    instance: &'a str,
+    home_mount: &'a str,
+    pacman_cache: &'a str,
+    pacman_gnupg: &'a str,
 }
 
-impl InsVars {
-    pub fn new(_i: impl Into<Rc<str>>) -> Self {
-        let ins = _i.into();
-
-        let mut vars = Self {
-            home: format!("{}/home/{}", LOCATION.get_data(), ins).into(),
-            root: format!("{}/root/{}", LOCATION.get_data(), ins).into(),
-            pacman_gnupg: format!("{}/pacman/gnupg", LOCATION.get_data()).into(),
-            pacman_cache: format!("{}/pkg", LOCATION.get_cache()).into(),
-            config: format!("{}/instance/{}.yml", LOCATION.get_config(), ins).into(), 
-            home_mount: format!("/home/{}", &ins).into(),   
-            user: ins.clone(),
-            instance: ins.into(),
-        };
-
-        if let Ok(var) = var("PACWRAP_HOME") { 
-            vars.home=var.into(); 
+impl <'a>InsVars<'a> {
+    pub fn new(ins: &'a str) -> Self {
+        Self {
+            home: match var("PACWRAP_HOME") { 
+               Err(_) => format!("{}/home/{ins}", LOCATION.get_data()), Ok(var) => var 
+            }.leak(),
+            root: format!("{}/root/{ins}", LOCATION.get_data()).leak(),
+            pacman_gnupg: format!("{}/pacman/gnupg", LOCATION.get_data()).leak(),
+            pacman_cache: format!("{}/pkg", LOCATION.get_cache()).leak(),
+            config: format!("{}/instance/{ins}.yml", LOCATION.get_config()).leak(), 
+            home_mount: format!("/home/{ins}").leak(),   
+            user: ins,
+            instance: ins,
         }
-
-        vars
     }
 
     pub fn debug(&self, cfg: &InstanceRuntime, runtime: &Vec<&str>) { 
         let mut args = String::new();
 
         for arg in runtime.iter() {
-            args.push_str(format!("{} ", arg).as_str()); 
+            args.push_str(&format!("{arg} "));
         }
 
         println!("Arguments: {}", args);
@@ -59,10 +51,35 @@ impl InsVars {
         println!("INSTANCE_HOME_MOUNT: {}", self.home_mount);
     }
 
-    pub fn config_path(&self) -> &Rc<str> { &self.config }
-    pub fn root(&self) -> &Arc<str> { &self.root }
-    pub fn home(&self) -> &Rc<str> { &self.home }
-    pub fn home_mount(&self) -> &Rc<str> { &self.home_mount }
-    pub fn user(&self) -> &Rc<str> { &self.user }
-    pub fn instance(&self) -> &Rc<str> { &self.instance }
+    pub fn pacman_cache(&self) -> &'a str { 
+        &self.pacman_cache 
+    }
+
+    pub fn pacman_gnupg(&self) -> &'a str { 
+        &self.pacman_gnupg 
+    }
+
+    pub fn config_path(&self) -> &'a str { 
+        &self.config 
+    }
+
+    pub fn root(&self) -> &'a str { 
+        &self.root 
+    }
+
+    pub fn home(&self) -> &str { 
+        &self.home 
+    }
+
+    pub fn home_mount(&self) -> &'a str { 
+        &self.home_mount 
+    }
+
+    pub fn user(&self) -> &'a str { 
+        &self.user 
+    }
+
+    pub fn instance(&self) -> &'a str { 
+        &self.instance 
+    }
 }
