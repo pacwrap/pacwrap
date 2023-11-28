@@ -3,7 +3,6 @@ use std::fs::{self, File, Metadata};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, self, Receiver};
 
@@ -16,14 +15,10 @@ use serde::{Serialize, Deserialize, Deserializer, Serializer, de::Visitor};
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
 
+use crate::ErrorKind;
 use crate::config::{InstanceHandle, InstanceCache, InstanceType::*};
-use crate::constants::{LOCATION, RESET, BOLD, ARROW_CYAN, BAR_GREEN};
+use crate::constants::{RESET, BOLD, ARROW_CYAN, BAR_GREEN, DATA_DIR};
 use crate::utils::{print_warning, print_error};
-
-#[derive(Debug)]
-enum Error {
-    ThreadPoolUninitialised
-}
 
 impl Serialize for FileType {
     fn serialize<D: Serializer>(&self, serializer: D) -> Result<D::Ok, D::Error> 
@@ -125,8 +120,8 @@ enum SyncMessage {
 pub struct FileSystemStateSync<'a> {
     state_map: HashMap<Arc<str>, FileSystemState>, 
     state_map_prev: HashMap<Arc<str>, FileSystemState>,
-    linked: HashSet<Rc<str>>,
-    queued: HashSet<Rc<str>>,
+    linked: HashSet<Arc<str>>,
+    queued: HashSet<&'a str>,
     progress: ProgressBar,
     cache: &'a InstanceCache<'a>,
     pool: Option<ThreadPool>,
@@ -158,52 +153,49 @@ impl <'a>FileSystemStateSync<'a> {
         }
     }
 
-    pub fn engage(&mut self, containers: &Vec<&'a str>) {
-        let (tx, rx) = self.link(&containers.iter().map(|a| Rc::from(*a)).collect(), mpsc::channel()); 
+    pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<(), ErrorKind> {
+        let (tx, rx) = self.link(&containers, mpsc::channel())?; 
         
         drop(tx); 
-        
-        while let Ok(()) = rx.recv() {}    
+        while let Ok(()) = rx.recv() {}
+        Ok(())
     }
   
-    fn link(&mut self, containers: &Vec<Rc<str>>, mut write_chan: (Sender<()>, Receiver<()>)) -> (Sender<()>, Receiver<()>) { 
+    fn link(&mut self, containers: &Vec<&'a str>, mut write_chan: (Sender<()>, Receiver<()>)) -> Result<(Sender<()>, Receiver<()>), ErrorKind> { 
         let (tx, rx): (Sender<SyncMessage>, Receiver<SyncMessage>) = mpsc::channel();
 
-        for ins in containers.iter() { 
+        for ins in containers { 
             if self.queued.contains(ins) {
                 continue;
             }
 
             let inshandle = match self.cache.get_instance(ins) {
                 Some(ins) => ins,
-                None => {
-                    print_error(format!("Linker: {} not found.", ins));
-                    std::process::exit(1) 
-                }
+                None => Err(ErrorKind::InstanceNotFound(ins.to_string()))?
             };
+            let deps = inshandle.metadata()
+                .dependencies()
+                .iter()
+                .map(|a| a.as_ref())
+                .collect();
           
-            write_chan = self.link(inshandle.metadata().dependencies(), write_chan);
+            write_chan = self.link(&deps, write_chan)?;
             
             if let ROOT = inshandle.metadata().container_type() {
-                self.link_instance(inshandle, tx.clone()); 
+                self.link_instance(inshandle, tx.clone())?; 
             } else {
-                self.obtain_slice(inshandle, tx.clone()); 
+                self.obtain_slice(inshandle, tx.clone())?; 
             }
 
-            self.queued.insert(ins.clone());
+            self.queued.insert(ins);
         }
 
         drop(tx);
         self.wait(self.queued.clone(), rx, &write_chan);
-        write_chan
+        Ok(write_chan)
     }
 
-    fn wait(&mut self, queue: HashSet<Rc<str>>, rx: Receiver<SyncMessage>, write_chan: &(Sender<()>, Receiver<()>)) { 
-        let mut queue = queue.iter()
-            .filter(|m| ! self.linked.contains(m.as_ref()))
-            .map(|m| m.as_ref())
-            .collect::<HashSet<_>>();
-
+    fn wait(&mut self, mut queue: HashSet<&'a str>, rx: Receiver<SyncMessage>, write_chan: &(Sender<()>, Receiver<()>)) { 
         while let Ok(recv) = rx.recv() {
             match recv {
                 SyncMessage::LinkComplete(ins) => {
@@ -211,7 +203,7 @@ impl <'a>FileSystemStateSync<'a> {
                     let status = queue_status(&queue, instance, self.max_chars as usize);
                     
                     queue.remove(instance);
-                    self.linked.insert(ins.as_ref().into());
+                    self.linked.insert(ins);
                     self.progress.set_message(status);
                     self.progress.inc(1);
                 },
@@ -236,7 +228,7 @@ impl <'a>FileSystemStateSync<'a> {
             return st.clone()
         }
 
-        let path = format!("{}/state/{}.dat", LOCATION.get_data(), instance);
+        let path = format!("{}/state/{}.dat", *DATA_DIR, instance);
         let file = match File::open(&path) { 
             Ok(file) => file,
             Err(err) => {
@@ -270,7 +262,7 @@ impl <'a>FileSystemStateSync<'a> {
     }
 
     fn write(&mut self, tx: Sender<()>, ds: FileSystemState, dep: Arc<str>) {
-        let path: &str = &format!("{}/state/{}.dat", LOCATION.get_data(), dep);
+        let path: &str = &format!("{}/state/{}.dat", *DATA_DIR, dep);
         let output = match File::create(path) {
             Ok(file) => file,
             Err(err) => {
@@ -288,22 +280,22 @@ impl <'a>FileSystemStateSync<'a> {
         });
     } 
 
-    fn obtain_slice(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) {
+    fn obtain_slice(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), ErrorKind> {
         let instance: Arc<str> = inshandle.vars().instance().into();
         let root = inshandle.vars().root().into();
        
         self.previous_state(&instance);
-        self.pool().unwrap().spawn(move ||{ 
+        Ok(self.pool()?.spawn(move ||{ 
             let mut state = FileSystemState::new();
 
             obtain_state(root, &mut state);
 
             tx.send(SyncMessage::SaveState(instance.clone(), state)).unwrap();
             tx.send(SyncMessage::LinkComplete(instance)).unwrap();
-        })
+        }))
     }
 
-    fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) {
+    fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), ErrorKind> {
         let mut map = Vec::new(); 
         let mut prev = Vec::new();
         let deps = inshandle.metadata().dependencies(); 
@@ -322,7 +314,7 @@ impl <'a>FileSystemStateSync<'a> {
             map.push((dephandle.vars().root().into(), state));
         }
 
-        self.pool().unwrap().spawn(move ||{ 
+        Ok(self.pool()?.spawn(move ||{ 
             let state = filesystem_state(state, map);
             let state_prev = previous_state(prev);
 
@@ -331,13 +323,13 @@ impl <'a>FileSystemStateSync<'a> {
             link_filesystem(&state, &root);
 
             tx.send(SyncMessage::LinkComplete(instance)).unwrap();
-        })
+        }))
     }
 
-    fn pool(&self) -> Result<&ThreadPool, Error> {
+    fn pool(&self) -> Result<&ThreadPool, ErrorKind> {
         match self.pool.as_ref() {
           Some(pool) =>  Ok(pool),
-          None => Err(Error::ThreadPoolUninitialised)
+          None => Err(ErrorKind::ThreadPoolUninitialized)
         }
     }
 
@@ -415,14 +407,11 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
         let src_tr: Arc<str> = src.split_at(len).1.into();
                     
         if let Some(_) = state.files.get(&src_tr) {
-            continue
-        }
-
-        if src.contains("/var/lib/pacman") {
             continue;
         }
 
-        if src.ends_with("/etc/ld.so.cache") {
+        if src.contains("/var/lib/pacman")
+        || src.ends_with("/etc/ld.so.cache") {
             continue;
         }
 

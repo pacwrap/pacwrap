@@ -1,11 +1,12 @@
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
 use bitflags::bitflags;
 use alpm::{Alpm, PackageReason, TransFlag};
 use serde::{Deserialize, Serialize};
 
-use crate::config;
+use crate::{config, ErrorKind};
 use crate::constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED};
 use crate::sync::{
     resolver_local::LocalDependencyResolver,
@@ -40,10 +41,11 @@ pub enum Error {
     PreparationFailure(String),
     TransactionFailure(String),
     InitializationFailure(String),
+    InternalError(String),
 }
 
 pub enum TransactionState {
-    Complete,
+    Complete(bool),
     Prepare,
     UpToDate,
     PrepareForeign,
@@ -122,7 +124,7 @@ impl TransactionState {
             Self::StageForeign => Stage::new(self, ag), 
             Self::Commit(_) => Commit::new(self, ag),
             Self::CommitForeign => Commit::new(self, ag),
-            Self::Complete => unreachable!(),
+            Self::Complete(_) => unreachable!(),
         }
     }
 
@@ -176,19 +178,32 @@ impl TransactionType {
     }
 }
 
-impl Error {
-    pub fn message(&self) {
-       print_error(match self {
-            Self::DependentContainerMissing(u) => format!("Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
-            Self::RecursionDepthExceeded(u) => format!("Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::TargetUpstream(pkg) => format!("Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
-            Self::TargetNotInstalled(pkg) => format!("Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
-            Self::TargetNotAvailable(pkg) => format!("Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
-            Self::InitializationFailure(msg) => format!("Failure to initialize transaction: {msg}"),
-            Self::PreparationFailure(msg) => format!("Failure to prepare transaction: {msg}"),
-            Self::TransactionFailure(msg) => format!("Failure to commit transaction: {msg}"),
-            _ => format!("Nothing to do."),
-        });
+impl Display for Error {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
+       match self {
+            Self::DependentContainerMissing(u) => write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
+            Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
+            Self::TargetUpstream(pkg) => write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
+            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
+            Self::TargetNotAvailable(pkg) => write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
+            Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
+            Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
+            Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
+            Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
+            _ => write!(fmter, "Nothing to do."),
+        }
+    }
+}
+
+impl From<Error> for String {
+    fn from(error: Error) -> Self {
+        error.into()
+    }
+}
+
+impl From<ErrorKind> for Error {
+    fn from(error: ErrorKind) -> Self {
+        Self::InternalError(error.into())
     }
 }
 
@@ -364,7 +379,9 @@ impl <'a>TransactionHandle {
 
     fn apply_configuration(&mut self, instance: &InstanceHandle, create: bool) {
         let depends = instance.metadata().dependencies();
-        let pkgs = self.alpm.as_mut().unwrap().localdb()
+        let pkgs = self.alpm
+            .as_mut()
+            .unwrap().localdb()
             .pkgs()
             .iter()
             .filter_map(|p| {
@@ -413,7 +430,7 @@ impl <'a>TransactionHandle {
 
     fn release_on_fail(self, error: Error) {
         match error {
-            Error::AgentError => (), _ => error.message(),
+            Error::AgentError => (), _ => print_error(error),
         }
 
         println!("{} Transaction failed.", *ARROW_RED);

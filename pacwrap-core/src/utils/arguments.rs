@@ -1,7 +1,8 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
-use std::{env, process::exit};
-use super::print_help_error;
+use std::env;
+
+use crate::ErrorKind;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Operand<'a> {
@@ -67,6 +68,7 @@ impl<'a> Arguments<'a> {
         self
     }
 
+    #[deprecated]
     pub fn targets(&mut self) -> Vec<&'a str> {
         let mut targets = Vec::new();
 
@@ -79,17 +81,16 @@ impl<'a> Arguments<'a> {
         targets
     }
     
-    pub fn target(&mut self) -> &'a str {
+    pub fn target(&mut self) -> Result<&'a str, ErrorKind> {
         for op in self.into_iter() {
             if let Operand::ShortPos(_, name) 
             | Operand::LongPos(_, name) 
             | Operand::Value(name) = op {
-                return name;
+                return Ok(name);
             }
         }
 
-        print_help_error("Target not specified.");
-        exit(1)
+        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))
     }    
 
     pub fn set_index(&mut self, index: usize) {
@@ -97,10 +98,10 @@ impl<'a> Arguments<'a> {
         self.cur = index;
     }
 
-    pub fn invalid_operand(&self) -> String {
+    pub fn invalid_operand(&self) -> ErrorKind {
         match self.operands.get(self.cur) {
-            Some(oper) => format!("Invalid option -- '{}'", oper),
-            None => format!("Operation not specified."),
+            Some(oper) => ErrorKind::Argument(InvalidArgument::InvalidOperand(oper.to_string().leak())),
+            None => ErrorKind::Argument(InvalidArgument::OperationUnspecified),
         }
     }
 
@@ -141,7 +142,7 @@ impl <'a>Display for Operand<'a> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>)  -> std::fmt::Result {
         match self {
             Operand::Long(str) => write!(fmt, "--{}", str),
-            Operand::LongPos(str, eq) => write!(fmt, "--{} {}", str, eq),
+            Operand::LongPos(str, eq) => write!(fmt, "--{}={}", str, eq),
             Operand::Short(char) => write!(fmt, "-{}", char),
             Operand::ShortPos(str, eq) => write!(fmt, "-{} {}", str, eq),
             Operand::Value(str) => write!(fmt, "{}", str),
@@ -149,3 +150,24 @@ impl <'a>Display for Operand<'a> {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum InvalidArgument {
+    InvalidOperand(&'static str),
+    UnsuppliedOperand(&'static str, &'static str),
+    OperationUnspecified,
+    TargetUnspecified,
+}
+
+impl Display for InvalidArgument {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+       match self {
+            Self::UnsuppliedOperand(params, message) => write!(fmter, "Option '{params}': {message}"),
+            Self::InvalidOperand(oper) => write!(fmter, "Invalid option '{oper}'"), 
+            Self::OperationUnspecified => write!(fmter, "Operation not specified."),
+            Self::TargetUnspecified => write!(fmter, "Target not specified."),
+        }
+    }
+}
+
+

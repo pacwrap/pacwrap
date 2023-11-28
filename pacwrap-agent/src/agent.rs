@@ -26,7 +26,7 @@ pub fn transact() {
     let mut handle = TransactionHandle::new(alpm, meta);
 
     if let Err(error) = conduct_transaction(&mut handle, mode) {
-        error.message();
+        print_error(error);
         handle.alpm_mut().trans_release().ok();
         exit(1);
     }

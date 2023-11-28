@@ -18,7 +18,7 @@ impl Permission for NET {
         args.bind("/etc/resolv.conf", "/etc/resolv.conf");
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "NET"
     }
 }

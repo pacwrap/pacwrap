@@ -25,7 +25,7 @@ impl Permission for DEV {
         args.dev(&format!("/dev/{}", self.device));
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "DEV"
     }
 }

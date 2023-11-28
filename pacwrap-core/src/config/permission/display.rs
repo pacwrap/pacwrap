@@ -56,7 +56,7 @@ impl Permission for DISPLAY {
         }          
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "DISPLAY"
     }
 }

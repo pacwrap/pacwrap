@@ -1,6 +1,6 @@
 use std::{path::Path, process::exit, fs::File, io::Write};
 
-use crate::{utils::print_error, constants::LOCATION};
+use crate::{utils::print_error, constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR}};
 
 static PACMAN_CONF_DEFAULT: &'static str = r###"
 [options]
@@ -50,21 +50,21 @@ impl DirectoryLayout {
 fn data_layout() -> DirectoryLayout {
     DirectoryLayout {
         dirs: vec!("/root", "/home", "/state", "/pacman/gnupg", "/pacman/sync"),
-        root: LOCATION.get_data(),
+        root: *DATA_DIR,
     }
 }
 
 fn cache_layout() -> DirectoryLayout {
     DirectoryLayout {
         dirs: vec!("/pkg"),
-        root: LOCATION.get_cache()
+        root: *CACHE_DIR
     }
 }
 
 fn config_layout() -> DirectoryLayout {
     DirectoryLayout {
         dirs: vec!("/instance"),
-        root: LOCATION.get_config()
+        root: *CONFIG_DIR
     }
 }
 
@@ -93,5 +93,5 @@ pub fn init() {
     config_layout().instantiate();
     data_layout().instantiate();
     cache_layout().instantiate();    
-    write_to_file(&format!("{}/pacman.conf", LOCATION.get_config()), PACMAN_CONF_DEFAULT);
+    write_to_file(&format!("{}/pacman.conf", *CONFIG_DIR), PACMAN_CONF_DEFAULT);
 }

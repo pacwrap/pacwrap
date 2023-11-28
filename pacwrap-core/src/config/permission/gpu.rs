@@ -35,7 +35,7 @@ impl Permission for GPU {
         }
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "GPU"
     }
 }

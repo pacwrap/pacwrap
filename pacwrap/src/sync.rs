@@ -2,10 +2,13 @@ use std::{collections::HashMap, fs::File};
 use std::io::Write;
 use std::process::exit;
 
-use pacwrap_core::{log::Logger,
+use pacwrap_core::{ErrorKind,
+    log::Logger,
     sync::transaction::TransactionType,
-    utils::{arguments::Operand, print_help_error, print_error},
-    utils::arguments::Arguments,
+    utils::{arguments::{Arguments, 
+        InvalidArgument, 
+        Operand}, 
+        print_error},
     config::{self, 
         InstanceType, 
         InsVars, 
@@ -15,7 +18,7 @@ use pacwrap_core::{log::Logger,
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
     constants::{BAR_GREEN, BOLD, RESET, ARROW_GREEN}};
 
-pub fn synchronize(mut args: &mut Arguments) {
+pub fn synchronize(mut args: &mut Arguments) -> Result<(), ErrorKind> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();  
     let action = {
         let mut u = 0;
@@ -32,27 +35,24 @@ pub fn synchronize(mut args: &mut Arguments) {
         TransactionType::Upgrade(u > 0, y > 0, y > 1)
     };
 
-    match create(&mut args) {
-        Ok(option) => if let Some(instype) = option {
-            if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
-                if ! upgrade {
-                    print_help_error("--upgrade/-u not supplied with --create/-c.");
-                } else if ! refresh {
-                    print_help_error("--refresh/-y not supplied with --create/-c.");
-                }
+    config::init::init();
+
+    if let Some(instype) = create(&mut args)?  {
+        if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
+            if ! refresh {
+                Err(ErrorKind::Argument(InvalidArgument::UnsuppliedOperand("--refresh", "Required for container creation.")))?
+            } else if ! upgrade {
+                Err(ErrorKind::Argument(InvalidArgument::UnsuppliedOperand("--upgrade", "Required for container creation.")))?
             }
+        }
 
-            instantiate(instype, args.targets());
-        },
-        Err(error) => print_help_error(error),
+        instantiate(instype, args.targets())?
     }
 
-    if let Err(e) = aggregator(action, &mut args, &mut logger) {
-        print_help_error(e);
-    }
+    engage_aggregator(action, &mut args, &mut logger)
 }
 
-fn create<'a>(args: &mut Arguments) -> Result<Option<InstanceType>, &'a str> {
+fn create<'a>(args: &mut Arguments) -> Result<Option<InstanceType>, ErrorKind> {
     let mut instype = None;
     let mut create = false;
 
@@ -63,15 +63,15 @@ fn create<'a>(args: &mut Arguments) -> Result<Option<InstanceType>, &'a str> {
             Operand::Short('c') | Operand::Long("create") => create = true, 
             Operand::Short('b') | Operand::Long("base") => match instype { 
                 None => instype =  Some(InstanceType::BASE),
-                Some(_) => Err("Multiple container types cannot be assigned to a container.")?,
+                Some(_) => Err(ErrorKind::DuplicateType)?,
             },
             Operand::Short('d') | Operand::Long("slice") => match instype {
                 None => instype = Some(InstanceType::DEP),
-                Some(_) => Err("Multiple container types cannot be assigned to a container.")?,
+                Some(_) => Err(ErrorKind::DuplicateType)?, 
             },
             Operand::Short('r') | Operand::Long("root") => match instype {
-                None => instype = Some(InstanceType::ROOT),
-                Some(_) => Err("Multiple container types cannot be assigned to a container.")?,
+                None => instype = Some(InstanceType::ROOT), 
+                Some(_) => Err(ErrorKind::DuplicateType)?,
             },
             _ => continue,
         } 
@@ -79,29 +79,29 @@ fn create<'a>(args: &mut Arguments) -> Result<Option<InstanceType>, &'a str> {
 
     match create { 
         true => match instype {
-            None => Err("Instance type not specified"), Some(_) => Ok(instype),
+            None => Err(ErrorKind::Message("Container type unspecified."))?, Some(_) => Ok(instype),
         },
         false => Ok(None) 
     }
 }
 
-fn instantiate(instype: InstanceType, mut targets: Vec<&str>) {
+fn instantiate(instype: InstanceType, mut targets: Vec<&str>) -> Result<(), ErrorKind> {
     if targets.len() == 0 {
-        print_help_error("Creation target not specified.");
+        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
     }
 
     let target = targets.remove(0);
 
     if let InstanceType::ROOT | InstanceType::DEP = instype {
         if target.len() == 0 {
-            print_help_error("Dependency targets not specified.");
+            Err(ErrorKind::Message("Dependencies not specified."))?         
         }
     }
 
-    instantiate_container(target, targets, instype); 
+    instantiate_container(target, targets, instype)
 }
 
-fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
+fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) -> Result<(), ErrorKind> {
     println!("{} {}Instantiating container {ins}{}", *BAR_GREEN, *BOLD, *RESET);
 
     let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
@@ -120,12 +120,10 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
 
     if let Err(err) = std::fs::create_dir(instance.vars().root()) {
         if let std::io::ErrorKind::AlreadyExists = err.kind() {
-            print_error(format!("'{}': Container root already exists.", instance.vars().root()));
+            Err(ErrorKind::Message("Container root already exists."))?
         } else {
-            print_error(format!("'{}': {}", instance.vars().root(), err));
-        }
-        
-        exit(1);
+            Err(ErrorKind::IOError(instance.vars().root().into(), err.kind()))? 
+        }    
     }
 
     if let InstanceType::ROOT | InstanceType::BASE = instype { 
@@ -136,30 +134,27 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) {
             }
         }
 
-        let mut f = match File::create(&format!("{}/.bashrc", instance.vars().home())) {
-            Ok(f) => f,
-            Err(error) => {
-                print_error(format!("'{}/.bashrc': {}", instance.vars().home(), error));
-                exit(1); 
-            }
-        };
-   
-        if let Err(error) = write!(f, "PS1=\"{}> \"", ins) {
-            print_error(format!("'{}/.bashrc': {}", instance.vars().home(), error));
-            exit(1);
-        }
+        let bashrc = format!("{}/.bashrc", instance.vars().home());
+        
+        match File::create(&bashrc) {
+            Ok(mut f) => if let Err(error) = write!(f, "PS1=\"{}> \"", ins) {
+                Err(ErrorKind::IOError(bashrc, error.kind()))?
+            },
+            Err(error) => Err(ErrorKind::IOError(bashrc.clone(), error.kind()))?
+        }; 
     }
 
     config::save_handle(&instance).ok(); 
     logger.log(format!("Configuration file created for {ins}")).unwrap();
     drop(instance);
     println!("{} Instantiation complete.", *ARROW_GREEN);
+    Ok(())
 }
 
-fn aggregator<'a>(
+fn engage_aggregator<'a>(
     action_type: TransactionType, 
     args: &'a mut Arguments, 
-    log: &'a mut Logger) -> Result<(), String> { 
+    log: &'a mut Logger) -> Result<(), ErrorKind> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str ,Vec<&'a str>> = HashMap::new();
@@ -167,7 +162,7 @@ fn aggregator<'a>(
     let mut base = false;
 
     if let Operand::None = args.next().unwrap_or_default() {
-        Err("Operation not specified.")?
+        Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
     }
 
     while let Some(arg) = args.next() {
@@ -225,7 +220,7 @@ fn aggregator<'a>(
     let current_target = match action_flags.intersects(TransactionFlags::TARGET_ONLY) {
         true => {
             if current_target == "" && ! action_flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
-                Err("Target not specified")?
+                Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
             }
 
             Some(current_target)
@@ -233,7 +228,7 @@ fn aggregator<'a>(
         false => {
             if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
                 if ! upgrade && ! refresh {
-                    Err("Operation not specified.")? 
+                    Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
                 }
             }
        

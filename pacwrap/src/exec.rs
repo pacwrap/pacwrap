@@ -1,41 +1,41 @@
 use std::{thread, time::Duration};
 use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
-use std::io::{Read, ErrorKind};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use std::os::unix::io::AsRawFd;
 
 use nix::unistd::Pid;
-use nix::sys::signal::kill;
-use nix::sys::signal::Signal;
+use nix::sys::signal::{Signal, kill};
 
 use signal_hook::{consts::*, iterator::Signals};
 use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
 use serde_json::{Value, json};
 
-use pacwrap_core::{exec::args::ExecutionArgs, 
-    exec::utils::fakeroot_container,
+use pacwrap_core::{
+    ErrorKind,
+    exec::{ExecutionError,
+        args::ExecutionArgs, 
+        utils::fakeroot_container,
+    },
     constants::{self,
         BWRAP_EXECUTABLE, 
-        XDG_RUNTIME_DIR, 
-        DBUS_SOCKET, 
-        RESET, 
-        BOLD},
+        XDG_RUNTIME_DIR,
+        DBUS_PROXY_EXECUTABLE,
+        DBUS_SOCKET},
     config::{self, 
-        InsVars,
-        Filesystem, 
-        Permission, 
-        Dbus, 
-        permission::*, 
+        Dbus,        
         InstanceHandle, 
-        InstanceType},
+        InstanceType,
+        register::{register_filesystems, 
+            register_permissions, 
+            register_dbus}},
     utils::{TermControl, 
-        arguments::{Arguments, Operand},
+        arguments::{Arguments, Operand, InvalidArgument},
         env_var, 
         print_error,
-        print_help_error,
         print_warning}};
 
 enum ExecParams<'a> {
@@ -48,8 +48,8 @@ enum ExecParams<'a> {
  * is conflicting with an application you use.
  */
 
-impl <'a>From<&'a mut Arguments<'a>> for ExecParams<'a> {
-    fn from(args: &'a mut Arguments) -> Self {
+impl <'a>ExecParams<'a> {
+    fn parse(args: &'a mut Arguments) -> Result<Self, ErrorKind> {
         let runtime = args.values()
             .iter()
             .filter_map(|f| {
@@ -91,33 +91,25 @@ impl <'a>From<&'a mut Arguments<'a>> for ExecParams<'a> {
         }
 
         let handle = match container {
-            Some(container) => match config::provide_handle(container) {
-                Ok(container) => container,
-                Err(error) => { 
-                    print_error(error);
-                    exit(1);
-                }
-            },
-            None => {
-                print_help_error("Target not specified.");
-                exit(1);
-            },
+            Some(container) => config::provide_handle(container)?,
+            None => Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?,
+
+
         };
 
         if let InstanceType::DEP = handle.metadata().container_type() {
-            print_error("Execution in dependencies is not supported.");
-            exit(1);
+            Err(ErrorKind::Message("Execution upon sliced filesystems is not supported."))?
         }
 
-        match root {
+        Ok(match root {
             true => Self::Root(verbose, shell, runtime, handle),
             false => Self::Container(verbose, shell, runtime, handle),
-        }
+        })
     }
 }
 
-pub fn execute<'a>(args: &'a mut Arguments<'a>) {
-    match args.into() {
+pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<(), ErrorKind> {
+    match ExecParams::parse(args)? {
         ExecParams::Root(verbose, true, _, handle) => execute_fakeroot_container(&handle, vec!("bash"), verbose),
         ExecParams::Root(verbose,  false, args, handle) => execute_fakeroot_container(&handle, args, verbose),
         ExecParams::Container(verbose, true, _, handle) => execute_container(&handle, vec!("bash"), true, verbose),
@@ -125,7 +117,7 @@ pub fn execute<'a>(args: &'a mut Arguments<'a>) {
     }
 }
 
-fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, verbose: bool) {
+fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, verbose: bool) -> Result<(), ErrorKind> {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
@@ -152,25 +144,22 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
     } 
 
     if cfg.dbus().len() > 0 { 
-        jobs.push(register_dbus(cfg.dbus(), &mut exec_args).into()); 
+        jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec_args)?); 
     } 
 
-    register_filesystems(cfg.filesystem(), &vars, &mut exec_args);
-    register_permissions(cfg.permissions(), &mut exec_args);
+    register_filesystems(cfg.filesystem(), &vars, &mut exec_args)?;
+    register_permissions(cfg.permissions(), &mut exec_args)?;
    
     //TODO: Implement separate abstraction for path vars.
 
     exec_args.env("PATH", "/usr/local/bin:/usr/bin/:/bin:");
     exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
 
-    if verbose { 
-        ins.vars().debug(ins.config(), &arguments); 
-        println!("{:?} ",exec_args); 
+    if verbose {
+        println!("Arguments:\t     {arguments:?}\n{ins:?}\n{exec_args:?}");
     }
 
-    if let Err(error) = check_path(ins, &arguments, vec!("/usr/local/bin/", "/usr/bin", "/bin")) {
-        print_help_error(error); 
-    }
+    check_path(ins, &arguments, vec!("/usr/local/bin/", "/usr/bin", "/bin"))?;
 
     let (reader, writer) = os_pipe::pipe().unwrap();
     let fd = writer.as_raw_fd();
@@ -190,8 +179,8 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
         .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
-        Ok(c) => wait_on_process(c, read_info_json(reader, writer), *cfg.allow_forking(), jobs, tc),
-        Err(err) => print_error(format!("Failed to initialize '{BWRAP_EXECUTABLE}': {err}"))
+        Ok(c) => Ok(wait_on_process(c, read_info_json(reader, writer), *cfg.allow_forking(), jobs, tc)),
+        Err(err) => Err(ErrorKind::ExecFailure(BWRAP_EXECUTABLE, err.kind())), 
     }
 }
 
@@ -264,57 +253,14 @@ fn process_exit(status: ExitStatus) {
     }
 }
 
-fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &InsVars, args: &mut ExecutionArgs) {
-    for p in per.iter() {
-       match p.check(vars) {
-            Ok(_) => p.register(args, vars),
-            Err(e) => if *e.critical() {
-                print_error(format!("Failed to mount {}: {} ", e.module(), e.error()));
-                exit(1);
-            } else {
-                print_warning(format!("Failed to mount {}: {} ", e.module(), e.error()));
-            }
-        }
-    }
-}
-
-fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut ExecutionArgs) {
-    for p in per.iter() {
-        match p.check() {
-            Ok(condition) => match condition {
-                Some(b) => {
-                    p.register(args);
-                    
-                    if let Condition::SuccessWarn(warning) = b {
-                        print_warning(format!("{}: {} ", p.module(), warning));
-                    }
-                },
-                None => continue
-            },
-            Err(condition) => match condition {
-                PermError::Warn(error) => {
-                    print_warning(format!("Failed to register permission {}: {} ", p.module(), error));
-                },
-                PermError::Fail(error) => {
-                    print_error(format!("Failed to register permission {}: {} ", p.module(), error));
-                    exit(1);
-                }
-            }
-        }    
-    }
-}
-
-fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
-    for p in per.iter() {
-        p.register(args);
-    }
-
+fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<Child, ErrorKind> {
+    register_dbus(per, args)?;
     create_socket(&*DBUS_SOCKET);
 
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
-    let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS");
+    let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS")?;
 
-    match Command::new("xdg-dbus-proxy")
+    match Command::new(DBUS_PROXY_EXECUTABLE)
     .arg(dbus_session).arg(&*DBUS_SOCKET)
     .args(args.get_dbus()).spawn() {
         Ok(mut child) => {
@@ -335,29 +281,26 @@ fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Child {
              * to wait on a FD prior to instantiating the filesystem bindings.
              */
 
-            while ! check_socket(&*DBUS_SOCKET, &increment, &mut child) {
+            while ! check_socket(&*DBUS_SOCKET, &increment, &mut child)? {
                 increment += 1;
             }
 
-            child
+            Ok(child)
         },
-        Err(_) => {
-            print_error("Activation of xdg-dbus-proxy failed.");
-            exit(2); 
-        },
+        Err(error) => Err(ErrorKind::ExecFailure(DBUS_PROXY_EXECUTABLE, error.kind()))?
     }
 }
 
-fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> bool {
+fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> Result<bool, ErrorKind> {
     if increment == &200 { 
         process_child.kill().ok();
-        print_error(format!("Socket '{}': timed out.", socket));
         clean_up_socket(&*DBUS_SOCKET);
-        exit(2); 
+
+        Err(ErrorKind::Execution(ExecutionError::SocketTimeout(socket.into())))?
     }
 
     thread::sleep(Duration::from_micros(500));
-    pacwrap_core::utils::check_socket(socket)
+    Ok(pacwrap_core::utils::check_socket(socket))
 }
 
 fn create_socket(path: &str) {
@@ -373,50 +316,48 @@ fn create_socket(path: &str) {
 fn clean_up_socket(path: &str) { 
     if let Err(error) = remove_file(path) {
         match error.kind() {
-            ErrorKind::NotFound => return,
+            std::io::ErrorKind::NotFound => return,
             _ => print_error(format!("'Failed to remove socket '{path}': {error}")),
         }
     }
 }
 
-fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbose: bool) {  
-    if verbose { 
-        ins.vars().debug(ins.config(), &arguments); 
+fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbose: bool) -> Result<(), ErrorKind> {  
+    if verbose {
+        println!("Arguments:\t     {arguments:?}\n{ins:?}");
     }
 
-    if let Err(error) = check_path(ins, &arguments, vec!("/usr/bin", "/bin")) {
-        print_help_error(error); 
-    }
+    check_path(ins, &arguments, vec!("/usr/bin", "/bin"))?;
 
     match fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
-        Ok(process) => wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0)),
-        Err(err) => print_error(format!("Failed to initialize '{BWRAP_EXECUTABLE}:' {err}")), 
+        Ok(process) => Ok(wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0))),
+        Err(err) => Err(ErrorKind::ExecFailure(BWRAP_EXECUTABLE, err.kind())), 
     }
 }
 
-fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<(), String> {
+fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&'static str>) -> Result<(), ErrorKind> {
     if args.len() == 0 {
-        Err(format!("Runtime arguments not specified."))?
+        Err(ErrorKind::Execution(ExecutionError::RuntimeArguments))?
     }
 
-    let exec = args.get(0).unwrap();
+    let exec = *args.get(0).unwrap();
     let root = ins.vars().root().as_ref();
 
     for dir in path {
         match Path::new(&format!("{}/{}",root,dir)).try_exists() {
             Ok(_) => if dest_exists(root, dir, exec)? { return Ok(()) },
-            Err(error) => Err(&format!("Invalid {}PATH{} variable '{dir}': {error}", *BOLD, *RESET))?
+            Err(error) => Err(ErrorKind::Execution(ExecutionError::InvalidPathVar(dir, error.kind())))?
         }
     }
 
-    Err(format!("'{exec}': Not available in container {}PATH{}.", *BOLD, *RESET))
+    Err(ErrorKind::Execution(ExecutionError::ExecutableUnavailable(exec.into())))?
 }
 
-fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,String> {
+fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,ErrorKind> {
     if exec.contains("..") {
-        Err(format!("'{exec}': Executable path must be absolute."))?
+        Err(ErrorKind::Execution(ExecutionError::UnabsoluteExec(exec.into())))?
     } else if dir.contains("..") {
-        Err(format!("'{dir}': {}PATH{} variable must be absolute.", *BOLD, *RESET))?
+        Err(ErrorKind::Execution(ExecutionError::UnabsolutePath(exec.into())))?
     }
 
     let path = format!("{}{}/{}", root, dir, exec);
@@ -425,7 +366,7 @@ fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,String> {
     let path_direct = obtain_path(Path::new(&path_direct), exec)?;
 
     if path.is_dir() | path_direct.is_dir() {
-        Err(format!("'{exec}': Directories are not executable."))?
+        Err(ErrorKind::Execution(ExecutionError::DirectoryNotExecutable(exec.into())))?
     } else if let Ok(path) = path.read_link() {
         if let Some(path) = path.as_os_str().to_str() {
             return dest_exists(root, dir, path);
@@ -439,12 +380,12 @@ fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,String> {
     Ok(path.exists() | path_direct.exists())
 }
 
-fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf,String> {
+fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf,ErrorKind> {
     match Path::canonicalize(&path) {
         Ok(path) => Ok(path), 
         Err(err) => match err.kind() {
-            ErrorKind::NotFound => Ok(path.to_path_buf()),
-            _ => Err(format!("'{exec}': {err}"))? 
+            std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),
+            _ => Err(ErrorKind::IOError(exec.into(), err.kind()))?,
         }
     }
 }

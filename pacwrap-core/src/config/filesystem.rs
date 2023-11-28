@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use crate::exec::args::ExecutionArgs;
 use crate::config::InsVars;
 
@@ -10,26 +12,33 @@ mod to_root;
 mod dir;
 mod sys;
 
-pub struct Error {
-    error: String,
-    mod_name: String,
-    critical: bool
+pub enum Condition {
+    Success,
+    SuccessWarn(String),
+    Nothing
 }
 
-impl Error {
-    pub fn new(name: impl Into<String>, err: impl Into<String>, crit: bool) -> Self {
-        Self { error: err.into(), mod_name: name.into(), critical: crit }
-    }
+#[derive(Debug, Clone)]
+pub enum BindError {
+    Fail(String),
+    Warn(String),
+}
 
-    pub fn error(&self) -> &String { &self.error }
-    pub fn module(&self) -> &String { &self.mod_name }
-    pub fn critical(&self) -> &bool { &self.critical }
+impl Display for BindError {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::Fail(error) => write!(fmter, "{}", error),
+            Self::Warn(error) => write!(fmter, "{}", error),
+ 
+        }
+    }
 }
 
 #[typetag::serde(tag = "mount")]
 pub trait Filesystem: DynClone {
-    fn check(&self, vars: &InsVars) -> Result<(), Error>;
+    fn check(&self, vars: &InsVars) -> Result<(), BindError>;
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars);
+    fn module(&self) -> &'static str;
 }
 
 clone_trait_object!(Filesystem);

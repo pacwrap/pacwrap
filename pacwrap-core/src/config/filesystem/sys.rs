@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::exec::args::ExecutionArgs;
 use crate::config::InsVars;
-use crate::config::filesystem::{Filesystem, Error};
+use crate::config::filesystem::{Filesystem, BindError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SYSFS {
@@ -14,12 +14,13 @@ struct SYSFS {
 
 #[typetag::serde]
 impl Filesystem for SYSFS {
-    fn check(&self, _vars: &InsVars) -> Result<(),Error> {  
+    fn check(&self, _vars: &InsVars) -> Result<(), BindError> {  
         for dir in self.path.iter() {
             if ! Path::new(&format!("/sys/{}",dir)).exists() {
-                Err(Error::new("SYSFS", format!("/sys/{} is inaccessible.", dir), true))?
+                Err(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
             }
         }
+
         Ok(())
     }
     
@@ -27,6 +28,10 @@ impl Filesystem for SYSFS {
         for dir in self.path.iter() { 
             args.robind(format!("/sys/{}", dir), format!("/sys/{}", dir));
         }
+    }
+
+    fn module(&self) -> &'static str {
+        "SUSFS"
     }
 }
 

@@ -2,11 +2,10 @@ use indexmap::IndexSet;
 use lazy_static::lazy_static;
 use std::fmt::Write;
 
-use pacwrap_core::utils::{Arguments, 
+use pacwrap_core::{utils::{Arguments, 
     arguments::Operand,
-    print_help_error, 
     is_color_terminal, 
-    is_truecolor_terminal};
+    is_truecolor_terminal}, ErrorKind};
 
 lazy_static! {
     static ref HELP_ALL: Vec<HelpTopic> = 
@@ -19,24 +18,22 @@ lazy_static! {
         HelpTopic::Copyright].into();
 }
 
-pub fn help(mut args: &mut Arguments) {
-    match ascertain_help(&mut args) {
-        Ok(help) => {
-            let mut buffer = String::new();
+pub fn help(mut args: &mut Arguments) -> Result<(), ErrorKind> {
+    let help = ascertain_help(&mut args)?;
+    let mut buffer = String::new();
 
-            for topic in help.0 {
-                topic.write(&mut buffer, help.1).unwrap(); 
-            }
-
-            match help.1 {
-                HelpLayout::Console => print!("\x1b[?7l{buffer}\x1b[?7h"), _ => print!("{buffer}"),
-            }
-        },
-        Err(err) => print_help_error(err),
+    for topic in help.0 {
+        topic.write(&mut buffer, help.1).unwrap(); 
     }
+
+    match help.1 {
+        HelpLayout::Console => print!("\x1b[?7l{buffer}\x1b[?7h"), _ => print!("{buffer}"),
+    }
+
+    Ok(())
 }
 
-fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout), String> {
+fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout), ErrorKind> {
     let mut layout = match is_color_terminal() {
         true => &HelpLayout::Console, false => &HelpLayout::Dumb,
     };
@@ -108,7 +105,7 @@ fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, 
                 => topic.extend(HELP_ALL.iter()),
             Operand::ShortPos('h', topic) 
                 | Operand::LongPos("help", topic) 
-                => Err(format!("Topic '{topic}' is not available."))?,
+                => Err(ErrorKind::TopicUnavailable(topic.to_string()))?,
            _ => Err(args.invalid_operand())?,
         }
     }
@@ -432,7 +429,7 @@ fn copyright(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Erro
 {tab}{tab}the terms of the GNU General Public License v3.\n")
 }
 
-pub fn print_version(mut args: &mut Arguments) {
+pub fn print_version(mut args: &mut Arguments) -> Result<(), ErrorKind> {
     let name = env!("CARGO_PKG_NAME"); 
     let version = env!("CARGO_PKG_VERSION"); 
     let suffix = env!("PACWRAP_BUILDSTAMP");
@@ -471,4 +468,5 @@ Github: https://github.com/sapphirusberyl/pacwrap
 This program may be freely redistributed under
 the terms of the GNU General Public License v3 only.\n");
     }
+    Ok(())
 }

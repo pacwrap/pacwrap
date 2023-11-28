@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use pacmanconf;
 use serde::{Serialize, Deserialize};
 
-use crate::constants::{self, LOCATION, BAR_GREEN, RESET, BOLD, ARROW_RED};
+use crate::constants::{BAR_GREEN, RESET, BOLD, ARROW_RED, CACHE_DIR, DATA_DIR, CONFIG_DIR};
 use crate::sync::dl_event::DownloadCallback;
 use crate::utils::{print_warning, print_error};
 use crate::config::{InsVars,
@@ -13,7 +13,7 @@ use crate::config::{InsVars,
     cache::InstanceCache};
 
 lazy_static! {
-    static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman.conf", constants::LOCATION.get_config())).unwrap(); 
+    static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman.conf", *CONFIG_DIR)).unwrap(); 
     static ref DEFAULT_SIGLEVEL: SigLevel = signature(&PACMAN_CONF.sig_level, SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL);
     static ref DEFAULT_ALPM_CONF: AlpmConfigData = AlpmConfigData::new();
 }
@@ -73,10 +73,10 @@ fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> 
     let root = insvars.root();   
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
-    handle.set_cachedirs(vec![format!("{}/pkg", LOCATION.get_cache())].iter()).unwrap();
-    handle.set_gpgdir(format!("{}/pacman/gnupg", LOCATION.get_data())).unwrap();
+    handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
+    handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).unwrap();
     handle.set_parallel_downloads(PACMAN_CONF.parallel_downloads.try_into().unwrap_or(1));
-    handle.set_logfile(format!("{}/pacwrap.log", LOCATION.get_data())).unwrap();
+    handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).unwrap();
     handle.set_check_space(PACMAN_CONF.check_space);
     handle = register_remote(handle, remotes); 
     handle
@@ -100,7 +100,7 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
 fn synchronize_database(cache: &InstanceCache, force: bool) {
      match cache.obtain_base_handle() {
         Some(ins) => {
-            let db_path = format!("{}/pacman/", constants::LOCATION.get_data());
+            let db_path = format!("{}/pacman/", *DATA_DIR);
             let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
             println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
@@ -117,7 +117,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             for i in cache.registered().iter() {
                 let ins: &InstanceHandle = cache.get_instance(i).unwrap();
                 let vars: &InsVars = ins.vars();
-                let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), "pacwrap");
+                let src = &format!("{}/pacman/sync/{}.db",*DATA_DIR, "pacwrap");
                 let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), "pacwrap");
                 
                 if let Err(error) = filesystem::create_hard_link(src, dest) {
@@ -125,7 +125,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
                 }
 
                 for repo in PACMAN_CONF.repos.iter() {
-                    let src = &format!("{}/pacman/sync/{}.db",constants::LOCATION.get_data(), repo.name);
+                    let src = &format!("{}/pacman/sync/{}.db",*DATA_DIR, repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
                     if let Err(error) = filesystem::create_hard_link(src, dest) {
                         print_warning(error);
