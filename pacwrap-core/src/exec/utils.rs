@@ -2,7 +2,7 @@ use std::{process::{Child, Command, Stdio}, io::Error, env::var};
 
 use crate::{constants::{BWRAP_EXECUTABLE, self}, 
     config::InstanceHandle, 
-    utils::handle_process};
+    utils::handle_process, ErrorKind};
 
 pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> { 
     let dist_img = option_env!("PACWRAP_DIST_IMG").unwrap_or("/usr/lib/pacwrap/runtime");
@@ -11,7 +11,7 @@ pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> {
     Command::new(BWRAP_EXECUTABLE)
     .env_clear()
     .stdin(Stdio::piped())
-    .arg("--bind").arg(ins.vars().root()).arg("/mnt")
+    .arg("--bind").arg(&ins.vars().root()).arg("/mnt")
     .arg("--tmpfs").arg("/tmp")
     .arg("--tmpfs").arg("/etc")
     .arg("--ro-bind").arg(format!("{}/lib", dist_img)).arg("/lib64")
@@ -47,8 +47,8 @@ pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> {
     .spawn()
 }
 
-pub fn execute_in_container(ins: &InstanceHandle, arguments: Vec<&str>) {
-    handle_process(fakeroot_container(ins, arguments))
+pub fn execute_in_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<(), ErrorKind> {
+    handle_process(&*BWRAP_EXECUTABLE, fakeroot_container(ins, arguments))
 }
 
 pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child, Error> {  

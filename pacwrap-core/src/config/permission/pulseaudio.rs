@@ -34,7 +34,7 @@ impl Permission for PULSEAUDIO {
         args.robind(&self.socket, default_socket());
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "PULSEAUDIO"
     }
 }

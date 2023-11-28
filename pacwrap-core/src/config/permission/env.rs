@@ -32,29 +32,31 @@ impl Permission for ENV {
 
     fn register(&self, args: &mut ExecutionArgs) {        
         if self.var != "" {
-            let set = set_env(&self.var, &self.set);
+            let set = env_var(&self.var, &self.set);
             args.env(&self.var, set);         
         }
 
         for v in self.variables.iter() {
-            let set = set_env(&v.var, &v.set);
+            let set = env_var(&v.var, &v.set);
             args.env(&v.var, set);
         }
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "ENV"
     }
 }
 
-fn set_env(var: &String, set: &String) -> String {
-     if set != "" { return set.to_owned(); }
+fn env_var(var: &String, set: &String) -> String {
+     if set != "" { 
+        return set.to_owned(); 
+    }
     
      match env::var(&var) { 
         Ok(env) => env, 
         Err(_) => {
             print_warning(format!("Environment variable {} is unset.", var));
-            String::new()
+            "".into()
         }
     } 
 }

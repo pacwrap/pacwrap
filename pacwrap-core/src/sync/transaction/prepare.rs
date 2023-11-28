@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{config::InstanceHandle, sync};
 use super::{Transaction, 
     TransactionType, 
@@ -68,18 +66,13 @@ impl Transaction for Prepare {
             TransactionState::PrepareForeign => {
                 if ! ag.flags().contains(TransactionFlags::FORCE_DATABASE) { 
                     if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) { 
-                        if ag.updated()
-                            .iter()
-                            .filter(|a| inshandle.metadata()
-                                .dependencies()
-                                .contains(&Rc::from(**a)))
-                                .count() > 0 {
-                                    return Ok(TransactionState::StageForeign)
-                            }
-
-                            return Ok(TransactionState::Stage)
+                        if ag.deps_updated(inshandle) {
+                            return Ok(TransactionState::StageForeign)
                         }
+
+                        return Ok(TransactionState::Stage)
                     }
+                }
 
                 Ok(TransactionState::StageForeign)
             }

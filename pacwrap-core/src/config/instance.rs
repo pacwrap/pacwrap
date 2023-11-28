@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
 use std::borrow::Cow;
-use std::fmt::Display;
+use std::fmt::{Display, Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::vec::Vec;
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,13 @@ impl <'a>InstanceHandle<'a> {
     }
 }
 
+impl <'a>Debug for InstanceHandle<'a> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmter, "{:?}", self.vars())?;
+        write!(fmter, "{:?}", self.config())
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InstanceRuntime {
     #[serde(default)]  
@@ -104,7 +111,15 @@ impl InstanceRuntime {
     pub fn retain_session(&self) -> &bool { &self.retain_session }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+impl Debug for InstanceRuntime {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        writeln!(fmter, "allow_forking:       {}", self.allow_forking)?;
+        writeln!(fmter, "retain_session:      {}", self.retain_session)?;
+        writeln!(fmter, "enable_userns:       {}", self.enable_userns)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum InstanceType {
     LINK,
     BASE,

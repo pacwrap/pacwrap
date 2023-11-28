@@ -1,12 +1,13 @@
 use std::io::Error;
 use std::path::Path;
-use std::process::{Child, exit};
+use std::process::Child;
 use std::env::var;
 use std::os::unix::net::UnixStream;
 use std::fmt::Display;
 
 use nix::unistd::isatty;
 
+use crate::ErrorKind;
 use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
 
 pub use arguments::Arguments;
@@ -24,10 +25,10 @@ pub fn print_error(message: impl Into<String> + Display) {
     eprintln!("{}error:{} {}", *BOLD_RED, *RESET, &message);
 } 
 
-pub fn env_var(env: &str) -> String {
+pub fn env_var(env: &'static str) -> Result<String, ErrorKind> {
     match var(env) {
-        Ok(var) => var,
-        Err(_) => { print_error(format!("${} is not set.", env)); exit(2); }
+        Ok(var) => Ok(var),
+        Err(_) => Err(ErrorKind::EnvVarUnset(env))
     }
 }
 
@@ -35,23 +36,10 @@ pub fn check_socket(socket: &String) -> bool {
     match UnixStream::connect(&Path::new(socket)) { Ok(_) => true, Err(_) => false, }
 }
 
-pub fn print_help_error(args: impl Into<String>) {
-    print_error(args.into());
-    println!("Try 'pacwrap -h' for more information on valid operational parameters.");
-    exit(1);
-}
-
-#[allow(dead_code)]
-pub fn print_help_msg(args: impl Into<String>) {
-    println!("Notice: {} ", args.into());
-    println!("Try 'pacwrap -h' for more information on valid operational parameters.");
-    exit(1);
-}
-
-pub fn handle_process(result: Result<Child, Error>) {
+pub fn handle_process(name: &str, result: Result<Child, Error>) -> Result<(), ErrorKind> {
     match result {
-        Ok(child) => wait_on_process(child),
-        Err(_) => print_error("Failed to spawn child process."),
+        Ok(child) => Ok(wait_on_process(child)),
+        Err(error) => Err(ErrorKind::IOError(name.into(), error.kind())),
     }
 }
 

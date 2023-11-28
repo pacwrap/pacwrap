@@ -44,7 +44,7 @@ impl Transaction for Commit {
         if let Err(_) = ready {
             match self.state { 
                 TransactionState::Commit(_) => ready?,
-                TransactionState::CommitForeign => return state_transition(&self.state, handle),
+                TransactionState::CommitForeign => return state_transition(&self.state, handle, false),
                 _ => unreachable!()
             }
         } 
@@ -72,14 +72,13 @@ impl Transaction for Commit {
                         1 => Err(Error::AgentError),
                         0 => {
                             if self.keyring {
-                                ag.keyring_update(inshandle);
+                                ag.keyring_update(inshandle)?;
                             }
 
                             handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
                             handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
-                            //ag.set_updated(instance.clone());
                             ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
-                            state_transition(&self.state, handle)
+                            state_transition(&self.state, handle, true)
                         }, 
                         _ => Err(Error::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(0))))?,  
                     },
@@ -103,7 +102,7 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
         summary(handle.alpm());
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            return Some(state_transition(state, handle)); 
+            return Some(state_transition(state, handle, false)); 
         } 
 
         if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
@@ -111,7 +110,7 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
             let query = format!("Proceed with {action}?");
 
             if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
-                return Some(state_transition(state, handle));
+                return Some(state_transition(state, handle, false));
             }
         } 
     }
@@ -120,11 +119,11 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
     None
 }
 
-fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle) -> Result<TransactionState> {
+fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle, updated: bool) -> Result<TransactionState> {
     handle.alpm_mut().trans_release().ok();
  
     Ok(match state {
-        TransactionState::Commit(_) => TransactionState::Complete,
+        TransactionState::Commit(_) => TransactionState::Complete(updated),
         TransactionState::CommitForeign => TransactionState::Stage,
         _ => unreachable!()
     })

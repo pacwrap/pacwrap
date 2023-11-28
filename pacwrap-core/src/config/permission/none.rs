@@ -10,7 +10,13 @@ pub struct NONE;
 
 #[typetag::serde]
 impl Permission for NONE {
-    fn check(&self) -> Result<Option<Condition>, PermError> { Ok(Some(Success)) }
+    fn check(&self) -> Result<Option<Condition>, PermError> { 
+        Ok(Some(Success)) 
+    }
+
     fn register(&self, _: &mut ExecutionArgs) {}
-    fn module(&self) -> &str { "NONE" }
+
+    fn module(&self) -> &'static str { 
+        "NONE" 
+    }
 }

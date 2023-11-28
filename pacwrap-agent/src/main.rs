@@ -9,7 +9,7 @@ fn main() {
 
     match param {
         Operand::Value("transact") => agent::transact(),
-        _ => print_error(arguments.invalid_operand())
+        _ => print_error(arguments.invalid_operand().to_string())
     }
 }
 

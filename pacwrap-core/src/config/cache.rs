@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::fs::read_dir;
 
-use crate::constants::LOCATION;
+use crate::ErrorKind;
+use crate::constants::DATA_DIR;
 use crate::config::{self, InstanceHandle};
 use crate::utils::print_warning;
-
 use super::instance::InstanceType;
 
 pub struct InstanceCache<'a> {
-    instances: HashMap<&'a str,InstanceHandle<'a>>,
+    instances: HashMap<&'a str, InstanceHandle<'a>>,
     registered: Vec<&'a str>,
     registered_base: Vec<&'a str>,
     registered_dep: Vec<&'a str>,
@@ -33,7 +33,7 @@ impl <'a>InstanceCache<'a> {
                 let config = match config::provide_handle(ins) {
                     Ok(ins) => ins, 
                     Err(error) => { 
-                        print_warning(error); 
+                        print_warning(error.to_string()); 
                         return false
                     }
                 };
@@ -78,23 +78,28 @@ impl <'a>InstanceCache<'a> {
     }
 }
 
-pub fn populate<'a>() -> Result<InstanceCache<'a>, String> {
+pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>, ErrorKind> {
     let mut cache = InstanceCache::new();
 
-    for name in roots()? {
-        if cache.map(&name) {      
-            cache.registered.push(name);      
-        } 
+    for name in vec {
+        if cache.map(&name) {
+            cache.registered.push(&name);
+        }
     }
 
     Ok(cache)
 }
 
-fn roots<'a>() -> Result<Vec<&'a str>, String> { 
-    match read_dir(format!("{}/root", LOCATION.get_data())) {
+pub fn populate<'a>() -> Result<InstanceCache<'a>, ErrorKind> {
+    populate_from(&roots()?)
+}
+
+fn roots<'a>() -> Result<Vec<&'a str>, ErrorKind> { 
+    match read_dir(format!("{}/root", *DATA_DIR)) {
         Ok(dir) => Ok(dir.filter(|f| match f { 
             Ok(f) => match f.metadata() {
-                Ok(meta) => meta.is_dir(), Err(_) => false, 
+                Ok(meta) => meta.is_dir() | meta.is_symlink(), 
+                Err(_) => false, 
             }, 
             Err(_) => false })
         .map(|s| match s {
@@ -110,6 +115,6 @@ fn roots<'a>() -> Result<Vec<&'a str>, String> {
                 false => Some(e)
             })
         .collect()),
-        Err(error) => Err(format!("'{}/root': {error}", LOCATION.get_data())),
+        Err(error) => Err(ErrorKind::IOError(format!("'{}/root", *DATA_DIR), error.kind())),
     }
 }

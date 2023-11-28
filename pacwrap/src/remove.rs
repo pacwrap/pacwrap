@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use pacwrap_core::{log::Logger,
     sync::transaction::TransactionType,
-    utils::{arguments::Operand, print_help_error},
-    utils::arguments::Arguments,
+    utils::arguments::Operand,
+    utils::arguments::{Arguments, InvalidArgument},
     config::cache,
-    sync::transaction::{TransactionFlags, TransactionAggregator}};
+    sync::transaction::{TransactionFlags, TransactionAggregator}, ErrorKind};
 
-pub fn remove(mut args: &mut Arguments) {
+pub fn remove(mut args: &mut Arguments) -> Result<(), ErrorKind> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let action = {
         let mut recursive = 0;
@@ -24,15 +24,13 @@ pub fn remove(mut args: &mut Arguments) {
         TransactionType::Remove(recursive > 0 , cascade, recursive > 1) 
     };
     
-    if let Err(e) = aggregator(action, &mut args, &mut logger) {
-        print_help_error(e);
-    }
+    engage_aggregator(action, &mut args, &mut logger)
 }
 
-fn aggregator<'a>(
+fn engage_aggregator<'a>(
     action_type: TransactionType, 
     args: &'a mut Arguments, 
-    log: &'a mut Logger) -> Result<(), String> { 
+    log: &'a mut Logger) -> Result<(), ErrorKind> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str,Vec<&'a str>> = HashMap::new();
@@ -40,8 +38,8 @@ fn aggregator<'a>(
 
     args.set_index(1);
 
-    if let Operand::None = args.next().unwrap_or_default() {
-        Err("Operation not specified.")?
+    if let Operand::None = args.next().unwrap_or_default() { 
+        Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
     }
 
     while let Some(arg) = args.next() {
@@ -82,7 +80,7 @@ fn aggregator<'a>(
     }
         
     if let None = current_target {
-        Err("Target not specified")?
+        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
     }
 
     Ok(TransactionAggregator::new(&cache::populate()?, 

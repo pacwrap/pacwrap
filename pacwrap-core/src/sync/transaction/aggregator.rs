@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::process::exit;
 
+use crate::ErrorKind;
 use crate::constants::ARROW_GREEN;
 use crate::config::InstanceType;
 use crate::exec::utils::execute_in_container;
@@ -16,11 +17,6 @@ use super::{
     TransactionState,
     TransactionType,
     TransactionFlags, TransactionMetadata};
-
-#[derive(Debug)]
-pub enum Error {
-    LinkerUninitialised,
-}
 
 pub struct TransactionAggregator<'a> {
     queried: Vec<&'a str>,
@@ -57,7 +53,7 @@ impl <'a>TransactionAggregator<'a> {
         }
     }
 
-    pub fn aggregate(mut self) -> Result<(),String> {
+    pub fn aggregate(mut self) -> Result<(), ErrorKind> {
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
                 if refresh {
@@ -88,7 +84,7 @@ impl <'a>TransactionAggregator<'a> {
                 let linker = self.fs_sync().unwrap();
 
                 linker.prepare(file.len());
-                linker.engage(file);
+                linker.engage(file)?;
                 linker.finish();
             }
         
@@ -124,7 +120,7 @@ impl <'a>TransactionAggregator<'a> {
         }
     }
 
-    pub fn transact(&mut self, inshandle: &InstanceHandle) { 
+    pub fn transact(&mut self, inshandle: &'a InstanceHandle) { 
         let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
             Some(some) => some.clone(), None => Vec::new(),
         };
@@ -138,7 +134,10 @@ impl <'a>TransactionAggregator<'a> {
         loop {  
             let result = match act.engage(self, &mut handle, inshandle) {
                 Ok(result) => {
-                    if let TransactionState::Complete = result {
+                    if let TransactionState::Complete(updated) = result {
+                        if updated {
+                            self.updated.push(inshandle.vars().instance());
+                        }
                         handle.release();
                         break;
                     }
@@ -155,21 +154,22 @@ impl <'a>TransactionAggregator<'a> {
         }
     }
 
-    pub fn keyring_update(&mut self, inshandle: &InstanceHandle) {
-        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"));
-        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"));
+    pub fn keyring_update(&mut self, inshandle: &InstanceHandle) -> Result<(), ErrorKind> {
+        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"))?;
+        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"))?;
         self.keyring = true;
+        Ok(())
     }
 
-    pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) { 
+    pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) -> Result<(), ErrorKind> { 
         if let ROOT = inshandle.metadata().container_type() {
-            return;
+            return Ok(());
         }
 
         let fs_sync = self.fs_sync().unwrap();
 
         fs_sync.prepare_single();
-        fs_sync.engage(&vec![inshandle.vars().instance()]);
+        fs_sync.engage(&vec![inshandle.vars().instance()])
     }
 
     pub fn cache(&self) -> &InstanceCache { 
@@ -180,8 +180,14 @@ impl <'a>TransactionAggregator<'a> {
         &self.action 
     }
 
-    pub fn updated(&self) -> &Vec<&'a str> { 
-        &self.updated 
+    pub fn deps_updated(&self, inshandle: &InstanceHandle<'a>) -> bool { 
+        for ins in inshandle.metadata().dependencies() {
+            if self.updated.contains(&&**ins) {
+                return true
+            }
+        }
+
+        false
     }
 
     pub fn is_keyring_synced(&self) -> bool { 
@@ -196,10 +202,10 @@ impl <'a>TransactionAggregator<'a> {
         &mut self.logger
     }
 
-    pub fn fs_sync(&mut self) -> Result<&mut FileSystemStateSync<'a>, Error> { 
+    pub fn fs_sync(&mut self) -> Result<&mut FileSystemStateSync<'a>, ErrorKind> { 
         match self.filesystem_state.as_mut() {
             Some(linker) => Ok(linker),
-            None => Err(Error::LinkerUninitialised),
+            None => Err(ErrorKind::LinkerUninitialized),
         }
     }
 }

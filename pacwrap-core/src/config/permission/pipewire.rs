@@ -32,7 +32,7 @@ impl Permission for PIPEWIRE {
         args.robind(&self.socket, default_socket());
     }
 
-    fn module(&self) -> &str {
+    fn module(&self) -> &'static str {
         "PIPEWIRE"
     }
 }

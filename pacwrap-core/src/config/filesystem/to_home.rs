@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::constants::HOME;
 use crate::exec::args::ExecutionArgs;
 use crate::config::InsVars;
-use crate::config::filesystem::{Filesystem, Error, default_permission, is_default_permission};
+use crate::config::filesystem::{Filesystem, BindError, default_permission, is_default_permission};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TO_HOME {
@@ -29,20 +29,20 @@ struct Mount {
 
 #[typetag::serde]
 impl Filesystem for TO_HOME {
-    fn check(&self, _vars: &InsVars) -> Result<(), Error> {
+    fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
         if self.path.len() > 0 {
             if let Err(e) = check_mount(&self.permission, &self.path[0]) {
                 return Err(e);
             }
         } else {
             if self.filesystem.len() == 0 {
-                Err(Error::new("TO_HOME", format!("Filesystem paths are undeclared."), false))?
+                Err(BindError::Warn(format!("Filesystem paths are undeclared.")))?
             }
         }
 
         for m in self.filesystem.iter() { 
             if m.path.len() == 0 {
-                Err(Error::new("TO_HOME", format!("Filesystem paths are undeclared."), false))?
+                Err(BindError::Warn(format!("Filesystem paths are undeclared.")))? 
             }
 
             if let Err(e) = check_mount(&m.permission, &m.path[0]) {
@@ -61,6 +61,10 @@ impl Filesystem for TO_HOME {
         for m in self.filesystem.iter() { 
             bind_filesystem(args,vars, &m.permission, &m.path);
         }
+    }
+
+    fn module(&self) -> &'static str {
+        "TO_HOME"
     }
 }
 
@@ -81,15 +85,15 @@ fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, p
     }
 }
 
-fn check_mount(permission: &String, path: &String) -> Result<(), Error> {
+fn check_mount(permission: &String, path: &String) -> Result<(), BindError> {
     let per = permission.to_lowercase(); 
         
     if per != "ro" && per != "rw" {
-        Err(Error::new("TO_HOME", format!("{} is an invalid permission.", permission), true))? 
+        Err(BindError::Fail(format!("{} is an invalid permission.", permission)))?
     }
 
     if ! Path::new(&format!("{}/{}", *HOME, &path)).exists() {
-        Err(Error::new("TO_HOME", format!("~/{} not found.", path), true))?
+        Err(BindError::Fail(format!("~/{} not found.", path)))?
     }
 
     Ok(())

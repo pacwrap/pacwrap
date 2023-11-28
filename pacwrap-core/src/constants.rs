@@ -1,26 +1,30 @@
+use std::process::exit;
 use std::env::var;
 use std::process::id;
 
 use lazy_static::lazy_static;
 use nix::unistd::geteuid;
 
-use crate::utils::env_var;
+use crate::utils::{is_color_terminal, is_truecolor_terminal, print_error};
 
 pub const BWRAP_EXECUTABLE: &str = "bwrap";
+pub const DBUS_PROXY_EXECUTABLE: &str = "xdg-dbus-proxy";
 
 const PACWRAP_CONFIG_DIR: &str = "/.config/pacwrap";
 const PACWRAP_DATA_DIR: &str = "/.local/share/pacwrap";
 const PACWRAP_CACHE_DIR: &str = "/.cache/pacwrap";
 
 lazy_static! {
-    pub static ref LOCATION: LocationVars = LocationVars::new();
-    pub static ref HOME: String = env_var("HOME");
-    pub static ref USER: String = env_var("USER");
+    pub static ref HOME: &'static str = env("HOME");
+    pub static ref USER: &'static str = env("USER");
+    pub static ref CACHE_DIR: &'static str = env_default("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
+    pub static ref CONFIG_DIR: &'static str = env_default("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
+    pub static ref DATA_DIR: &'static str = env_default("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
     pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", geteuid());
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", geteuid(), &id());
-    pub static ref LOG_LOCATION: &'static str = format!("{}/pacwrap.log", LOCATION.get_data()).leak();
-    pub static ref IS_COLOR_TERMINLAL: bool = crate::utils::is_color_terminal();
-    pub static ref IS_TRUECOLOR_TERMINLAL: bool = crate::utils::is_truecolor_terminal();
+    pub static ref LOG_LOCATION: &'static str = format!("{}/pacwrap.log", *DATA_DIR).leak();
+    pub static ref IS_COLOR_TERMINLAL: bool = is_color_terminal();
+    pub static ref IS_TRUECOLOR_TERMINLAL: bool = is_truecolor_terminal();
     pub static ref BOLD: &'static str = bold();
     pub static ref RESET: &'static str = reset();
     pub static ref DIM: &'static str = dim();
@@ -33,32 +37,6 @@ lazy_static! {
     pub static ref ARROW_CYAN: &'static str = arrow_cyan();  
     pub static ref ARROW_RED: &'static str = arrow_red(); 
     pub static ref ARROW_GREEN: &'static str = arrow_green(); 
-}
-
-pub struct LocationVars {
-    data: String,
-    cache: String,
-    config: String,
-}
-
-impl LocationVars {
-    pub fn new() -> Self {
-        let mut dir = Self {
-            data: format!("{}{}", *HOME, PACWRAP_DATA_DIR),
-            cache: format!("{}{}", *HOME, PACWRAP_CACHE_DIR),
-            config: format!("{}{}", *HOME, PACWRAP_CONFIG_DIR),
-        };
-
-        if let Ok(var) = var("PACWRAP_DATA_DIR") { dir.data=var; }
-        if let Ok(var) = var("PACWRAP_CACHE_DIR") { dir.cache=var; }
-        if let Ok(var) = var("PACWRAP_CONFIG_DIR") { dir.config=var; }
-    
-        dir
-    }
-
-    pub fn get_cache(&self) -> &String { &self.cache }
-    pub fn get_data(&self) -> &String { &self.data }
-    pub fn get_config(&self) -> &String { &self.config }
 }
 
 fn arrow_red() -> &'static str {
@@ -107,4 +85,21 @@ fn bold_green() -> &'static str {
 
 fn reset() -> &'static str {
     if *IS_COLOR_TERMINLAL { "[0m" } else { "" }
+}
+
+fn env_default(env: &str, default: &str) -> &'static str {
+    match var(env) {
+        Ok(var) => var,
+        Err(_) => format!("{}{}", *HOME, default), 
+    }.leak()
+}
+
+fn env(env: &str) -> &'static str {
+    match var(env) {
+        Ok(var) => var.leak(),
+        Err(_) => { 
+            print_error(format!("${} is not set.", env)); 
+            exit(2); 
+        }
+    }
 }
