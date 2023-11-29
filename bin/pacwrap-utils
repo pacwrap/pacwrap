@@ -333,15 +333,11 @@ invoke_replication() {
 		done
 
 		for dep in ${deps[@]}; do replicate_instance $dep; done
-		
-		for depr in $deps_return; do
-			[[ ! -d "$INSTANCE_ROOT_DIR/$depr" ]] &&
-				log_error "Dependency $depr not fulfilled for $instance." 1
-		done
-	
+			
 		replicate_instance $instance
 	done
 
+	$CREATE_SCRIPT -Syu --create $REPLICATE_CMD --noconfirm
 }
 
 replicate_instance() {
@@ -353,7 +349,7 @@ replicate_instance() {
 	
 	local depend=
 	local type=$(return_type)
-	local params="c"
+	local params="-"
 
 	[[ $SWITCH == *v* ]] && params+="v"
 	[[ $type != BASE ]] && depend=$(return_dependency)
@@ -361,7 +357,7 @@ replicate_instance() {
 	case $type in
 		ROOT) params+="r";;
 		BASE)	params+="b";;	
-		DEP)	params+="d";;	
+		DEP)	params+="s";;	
 		LINK)	ln -s "$INSTANCE_ROOT_DIR/$depend" "$INSTANCE_ROOT_DIR/$instance"
 			mkdir -p "$INSTANCE_HOME_DIR/$instance"
 			echo 'PS1="'$instance'> "' > "$INSTANCE_HOME_DIR/$instance/.bashrc"
@@ -375,16 +371,10 @@ replicate_instance() {
 	local depend_params
 
 	for dep in $(return_dependencies); do
-		depend_params+="-t $dep "
+		depend_params+="--dep=$dep "
 	done
 
-	$CREATE_SCRIPT -Syu$params -t $instance $(return_packages) $foreign_targets $depend_params --noconfirm
-
-	if [[ $? == 0 ]]; then 
-		printf " %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					
-		log_to_file "Replication of $instance complete!"
-	fi
-
+	REPLICATE_CMD+="$params -t $instance $(return_packages) $foreign_targets $depend_params "
 	completed[$instance]=1
 }
 
