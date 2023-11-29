@@ -8,21 +8,25 @@ use crate::config::permission::{Condition::Success, PermError::Fail};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DEV {
-    device: String
+    devices: Vec<String>
 }
 
 #[typetag::serde]
 impl Permission for DEV {
-    fn check(&self) -> Result<Option<Condition>, PermError> {  
-        if ! Path::new(&format!("/dev/{}",self.device)).exists() {
-            Err(Fail(format!("/dev/{} is inaccessible.", self.device)))?
+    fn check(&self) -> Result<Option<Condition>, PermError> {   
+        for device in self.devices.iter() {
+            if ! Path::new(&format!("/dev/{}", device)).exists() {
+                Err(Fail(format!("/dev/{} is inaccessible.", device)))?
+            }
         }
 
         Ok(Some(Success))
     }
     
     fn register(&self, args: &mut  ExecutionArgs) { 
-        args.dev(&format!("/dev/{}", self.device));
+        for device in self.devices.iter() {
+            args.dev(&format!("/dev/{}", device));
+        }
     }
 
     fn module(&self) -> &'static str {
