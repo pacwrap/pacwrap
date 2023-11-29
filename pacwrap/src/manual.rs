@@ -105,7 +105,7 @@ fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, 
                 => topic.extend(HELP_ALL.iter()),
             Operand::ShortPos('h', topic) 
                 | Operand::LongPos("help", topic) 
-                => Err(ErrorKind::TopicUnavailable(topic.to_string()))?,
+                => Err(ErrorKind::Message(format!("Topic '{topic}' is not available.").leak()))?,
            _ => Err(args.invalid_operand())?,
         }
     }
@@ -323,7 +323,7 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 
 {sub}-u, --upgrade{reset_bold}
 {tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}-t, --target=TARGET{reset_bold} to limit
-{tab}{tab}package synhronization operations to the specified target containers. Packages applicable to 
+{tab}{tab}package synchronization operations to the specified target containers. Packages applicable to 
 {tab}{tab}a target {bold}must{reset_bold} be specified only after the target operand. 
 {tab}{tab}e.g. '-t electron element-desktop -t mozilla firefox thunderbird'
 
@@ -341,9 +341,9 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 {tab}{tab}dependency per slice or per root is supported. Filesystem and package deduplication via slices 
 {tab}{tab}and root containers is recommended, but optional.
 
-{sub}-d, --slice{reset_bold}
+{sub}-s, --slice{reset_bold}
 {tab}{tab}Slice container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
-{tab}{tab}Requires a base dependency target, and optionally sliced dependency target(s), in order to ascertain
+{tab}{tab}Requires a base dependency be specified, and one or more sliced dependencies, in order to ascertain
 {tab}{tab}foreign packages and influence ordering of downstream synchronization target(s). Container slicing 
 {tab}{tab}provides the ability to install packages in a lightweight, sliced filesytem, which aid in the 
 {tab}{tab}deduplication of common downstream package and filesystem dependencies e.g. graphics drivers, 
@@ -351,12 +351,15 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 
 {sub}-r, --root{reset_bold}
 {tab}{tab}Root container type. Specify alongside {bold}-c, --create{reset_bold} to this assign container type during creation.
-{tab}{tab}Requires a base dependency target, and optionally sliced dependency targets, in order to ascertain
-{tab}{tab}foreign packages and influence ordering of this target. These containers are ideal for installing
-{tab}{tab}software in with the least amount of filesystem and package synchronization overhead.
+{tab}{tab}Requires a base dependency be specified, and optionally one or more sliced dependencies, in order 
+{tab}{tab}to ascertain foreign packages and influence ordering of this target. These containers are ideal 
+{tab}{tab}for installing software in with the least amount of filesystem and package synchronization overhead.
 
 {sub}-t, --target=TARGET{reset_bold}
 {tab}{tab}Specify a target container for the specified operation.
+
+{sub}-d, --dep=DEPEND{reset_bold}
+{tab}{tab}Specify a dependency container for the specified operation.
 
 {sub}-o, --target-only{reset_bold}
 {tab}{tab}Apply specified operation on the specified target only.

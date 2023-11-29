@@ -1,14 +1,13 @@
 use std::{collections::HashMap, fs::File};
 use std::io::Write;
-use std::process::exit;
 
+use indexmap::IndexMap;
 use pacwrap_core::{ErrorKind,
     log::Logger,
     sync::transaction::TransactionType,
-    utils::{arguments::{Arguments, 
+    utils::arguments::{Arguments, 
         InvalidArgument, 
-        Operand}, 
-        print_error},
+        Operand},
     config::{self, 
         InstanceType, 
         InsVars, 
@@ -37,7 +36,7 @@ pub fn synchronize(mut args: &mut Arguments) -> Result<(), ErrorKind> {
 
     config::init::init();
 
-    if let Some(instype) = create(&mut args)?  {
+    if create(&mut args)  {
         if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
             if ! refresh {
                 Err(ErrorKind::Argument(InvalidArgument::UnsuppliedOperand("--refresh", "Required for container creation.")))?
@@ -46,64 +45,84 @@ pub fn synchronize(mut args: &mut Arguments) -> Result<(), ErrorKind> {
             }
         }
 
-        instantiate(instype, args.targets())?
+        instantiate(acquire_depends(args)?)?
     }
 
     engage_aggregator(action, &mut args, &mut logger)
 }
 
-fn create<'a>(args: &mut Arguments) -> Result<Option<InstanceType>, ErrorKind> {
+fn acquire_depends<'a>(args: &'a mut Arguments) -> Result<IndexMap<&'a str, (InstanceType, Vec<&'a str>)>, ErrorKind> {
+    let mut deps: IndexMap<&'a str, (InstanceType, Vec<&'a str>)> = IndexMap::new();
+    let mut current_target = "";
     let mut instype = None;
-    let mut create = false;
 
     args.set_index(1);
 
     while let Some(arg) = args.next() {
         match arg {
-            Operand::Short('c') | Operand::Long("create") => create = true, 
-            Operand::Short('b') | Operand::Long("base") => match instype { 
-                None => instype =  Some(InstanceType::BASE),
-                Some(_) => Err(ErrorKind::DuplicateType)?,
+            Operand::ShortPos('d', dep) 
+            | Operand::LongPos("dep", dep) => match deps.get_mut(current_target) {
+                Some(d) => {     
+                    if let Some(instype) = instype {
+                        if let InstanceType::BASE = instype {
+                            Err(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
+                        }
+                    }
+                         
+                    d.1.push(dep); 
+                },
+                None => Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
             },
-            Operand::Short('d') | Operand::Long("slice") => match instype {
-                None => instype = Some(InstanceType::DEP),
-                Some(_) => Err(ErrorKind::DuplicateType)?, 
-            },
-            Operand::Short('r') | Operand::Long("root") => match instype {
-                None => instype = Some(InstanceType::ROOT), 
-                Some(_) => Err(ErrorKind::DuplicateType)?,
-            },
+            Operand::Short('b') 
+            | Operand::Long("base") => instype = Some(InstanceType::BASE),
+            Operand::Short('s') 
+            | Operand::Long("slice") => instype = Some(InstanceType::DEP),
+            Operand::Short('r') 
+            | Operand::Long("root") => instype = Some(InstanceType::ROOT),
+            Operand::ShortPos('t', target) 
+                | Operand::LongPos("target", target) => match instype {
+                    Some(instype) => {
+                        current_target = target;
+                        deps.insert(current_target, (instype, vec!()));
+                    },
+                    None => Err(ErrorKind::Message("Container type not specified."))?,
+            },          
+            _ => continue,
+        }
+    }
+
+    if current_target.len() == 0 {
+        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+    }
+
+    Ok(deps)
+}
+
+
+fn create(args: &mut Arguments) -> bool {
+    args.set_index(1);
+
+    while let Some(arg) = args.next() {
+        match arg {
+            Operand::Short('c') | Operand::Long("create") => return true, 
             _ => continue,
         } 
     }
 
-    match create { 
-        true => match instype {
-            None => Err(ErrorKind::Message("Container type unspecified."))?, Some(_) => Ok(instype),
-        },
-        false => Ok(None) 
-    }
+    false
 }
 
-fn instantiate(instype: InstanceType, mut targets: Vec<&str>) -> Result<(), ErrorKind> {
-    if targets.len() == 0 {
-        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+fn instantiate<'a>(targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<(), ErrorKind> { 
+    println!("{} {}Instantiating container{}{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
+
+    for target in targets {
+        instantiate_container(target.0, target.1.0, target.1.1)?;
     }
 
-    let target = targets.remove(0);
-
-    if let InstanceType::ROOT | InstanceType::DEP = instype {
-        if target.len() == 0 {
-            Err(ErrorKind::Message("Dependencies not specified."))?         
-        }
-    }
-
-    instantiate_container(target, targets, instype)
+    Ok(())
 }
 
-fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) -> Result<(), ErrorKind> {
-    println!("{} {}Instantiating container {ins}{}", *BAR_GREEN, *BOLD, *RESET);
-
+fn instantiate_container(ins: &str, instype: InstanceType, deps: Vec<&str>) -> Result<(), ErrorKind> {
     let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
     let mut logger = Logger::new("pacwrap").init().unwrap();
     let instance = match config::provide_new_handle(ins) {
@@ -120,7 +139,7 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) -> R
 
     if let Err(err) = std::fs::create_dir(instance.vars().root()) {
         if let std::io::ErrorKind::AlreadyExists = err.kind() {
-            Err(ErrorKind::Message("Container root already exists."))?
+            Err(ErrorKind::Message(format!("Container {ins} already exists.").leak()))?
         } else {
             Err(ErrorKind::IOError(instance.vars().root().into(), err.kind()))? 
         }    
@@ -129,8 +148,7 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) -> R
     if let InstanceType::ROOT | InstanceType::BASE = instype { 
         if let Err(err) = std::fs::create_dir(instance.vars().home()) {
             if err.kind() != std::io::ErrorKind::AlreadyExists {
-                print_error(format!("'{}': {}", instance.vars().root(), err));
-                exit(1);
+                Err(ErrorKind::IOError(instance.vars().root().into(), err.kind()))?
             }
         }
 
@@ -147,7 +165,7 @@ fn instantiate_container(ins: &str, deps: Vec<&str>, instype: InstanceType) -> R
     config::save_handle(&instance).ok(); 
     logger.log(format!("Configuration file created for {ins}")).unwrap();
     drop(instance);
-    println!("{} Instantiation complete.", *ARROW_GREEN);
+    println!("{} Instantiation of {ins} complete.", *ARROW_GREEN);
     Ok(())
 }
 
@@ -167,8 +185,10 @@ fn engage_aggregator<'a>(
 
     while let Some(arg) = args.next() {
         match arg {
-                Operand::Short('d') | Operand::Long("slice")
-                | Operand::Short('r') | Operand::Long("root") 
+                Operand::Short('d') 
+                | Operand::Long("dep") | Operand::LongPos("dep", _)
+                | Operand::Short('s') | Operand::Long("slice")
+                | Operand::Short('r') | Operand::Long("root")
                 | Operand::Short('t') | Operand::Long("target") 
                 | Operand::Short('y') | Operand::Long("refresh")
                 | Operand::Short('u') | Operand::Long("upgrade") => continue,
@@ -197,20 +217,16 @@ fn engage_aggregator<'a>(
                 | Operand::LongPos("target", target) => {
                 current_target = target;
                 targets.push(target);
+
+                if base {         
+                    queue.insert(current_target.into(), vec!("base", "pacwrap-base-dist")); 
+                    base = false;  
+                }
             },
             Operand::Value(package) => if current_target != "" {
                 match queue.get_mut(current_target.into()) {
                     Some(vec) => vec.push(package.into()),
-                    None => { 
-                        let packages = if base {
-                            base = false;
-                            vec!(package, "base", "pacwrap-base-dist")
-                        } else {
-                            vec!(package)
-                        };
-
-                        queue.insert(current_target.into(), packages); 
-                    },
+                    None => { queue.insert(current_target.into(), vec!(package)); },
                 }
             },
             _ => Err(args.invalid_operand())?
