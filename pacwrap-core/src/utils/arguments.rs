@@ -52,16 +52,14 @@ impl<'a> Arguments<'a> {
                         self.operands.push(Operand::Short(operand));
                     }
                 },
-                _ => { 
-                    self.operands.push(match self.operands.last() {
-                        Some(last) => match last {
-                            Operand::Short(c) => Operand::ShortPos(*c, string),
-                            Operand::Long(s) => Operand::LongPos(*s, string),
-                            _ => Operand::Value(string),
-                        },
-                        None => Operand::Value(string),
-                    });
-                }
+                _ => self.operands.push(match self.operands.last() {
+                    Some(last) => match last {
+                        Operand::Short(c) => Operand::ShortPos(*c, string),
+                        Operand::Long(s) => Operand::LongPos(*s, string),
+                        _ => Operand::Value(string),
+                    },
+                    None => Operand::Value(string),
+                }),
             }
         }
 
