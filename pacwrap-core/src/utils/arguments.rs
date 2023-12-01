@@ -40,7 +40,7 @@ impl<'a> Arguments<'a> {
             match string { 
                 string if string.starts_with("--") => { 
                     if string.contains('=') {
-                        let value: Vec<&'a str> = string[2..].split('=').collect();
+                        let value: Vec<&'a str> = string[2..].splitn(2, '=').collect();
 
                         self.operands.extend([Operand::Long(value[0]), Operand::LongPos(value[0], value[1])]); 
                     } else {
