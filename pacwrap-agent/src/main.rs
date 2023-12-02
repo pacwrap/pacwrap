@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 mod agent;
 
 fn main() {
-    let arguments = &mut Arguments::new().parse();
+    let arguments = &mut Arguments::new().populate();
     let param = arguments.next().unwrap_or_default();
 
     match param {

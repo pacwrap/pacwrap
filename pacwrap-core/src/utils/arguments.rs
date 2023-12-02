@@ -35,7 +35,7 @@ impl<'a> Arguments<'a> {
         }
     }
 
-    pub fn parse(mut self) -> Arguments<'a> { 
+    pub fn populate(mut self) -> Arguments<'a> { 
         for string in &self.values { 
             match string { 
                 string if string.starts_with("--") => { 
