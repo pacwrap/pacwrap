@@ -8,7 +8,7 @@ mod compat;
 mod manual;
 
 fn main() {
-    let arguments = &mut Arguments::new().parse();
+    let arguments = &mut Arguments::new().populate();
     let result = match arguments.next().unwrap_or_default() {
         Operand::Short('E') | Operand::Long("exec") => exec::execute(arguments),
         Operand::Short('S') | Operand::Long("sync") => sync::synchronize(arguments), 
