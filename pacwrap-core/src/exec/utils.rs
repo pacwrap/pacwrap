@@ -2,7 +2,7 @@ use std::{process::{Child, Command, Stdio}, io::Error, env::var};
 
 use crate::{constants::{BWRAP_EXECUTABLE, self}, 
     config::InstanceHandle, 
-    utils::handle_process, ErrorKind};
+    ErrorKind};
 
 pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> { 
     let dist_img = option_env!("PACWRAP_DIST_IMG").unwrap_or("/usr/lib/pacwrap/runtime");
@@ -14,9 +14,9 @@ pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> {
     .arg("--bind").arg(&ins.vars().root()).arg("/mnt")
     .arg("--tmpfs").arg("/tmp")
     .arg("--tmpfs").arg("/etc")
+    .arg("--symlink").arg("/mnt/usr").arg("/usr") 
     .arg("--ro-bind").arg(format!("{}/lib", dist_img)).arg("/lib64")
     .arg("--ro-bind").arg(format!("{}/bin", dist_img)).arg("/bin")
-    .arg("--symlink").arg("/mnt/usr").arg("/usr")
     .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
     .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 
     .arg("--ro-bind").arg(dist_tls).arg("/etc/ssl/certs/ca-certificates.crt")
@@ -48,7 +48,14 @@ pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> {
 }
 
 pub fn execute_in_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<(), ErrorKind> {
-    handle_process(&*BWRAP_EXECUTABLE, fakeroot_container(ins, arguments))
+    match fakeroot_container(ins, arguments) {
+        Ok(child) => Ok(wait_on_process(child)),
+        Err(error) => Err(ErrorKind::ProcessInitFailure(&*BWRAP_EXECUTABLE, error.kind())),
+    }
+}
+
+fn wait_on_process(mut child: Child) { 
+    child.wait().ok(); 
 }
 
 pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child, Error> {  

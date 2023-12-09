@@ -9,7 +9,6 @@ default-run = "pacwrap"
 [dependencies]
 pacwrap-core = { path = "../pacwrap-core/", version = "0.5.0" }
 command-fds = "0.2.2"
-serde_json = "1.0"
 nix = "0.22.3, <= 0.22.3"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_yaml = "0.9"
