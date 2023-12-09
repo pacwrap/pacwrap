@@ -12,6 +12,7 @@ use nix::{sys::termios::{Termios,
     *
    ***/
 
+#[derive(Clone)]
 pub struct TermControl {
     tm: Option<Termios>,
     fd: i32 
@@ -23,7 +24,7 @@ impl TermControl {
      * if there is a valid tty at specified fd. 
      *
      * If the application is not being instantiated from a tty, 
-     * then return a zeroed struct.
+     * then return TermControl with tm set with None.
      */
 
     pub fn new(f: i32) -> Self {

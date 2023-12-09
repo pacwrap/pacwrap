@@ -1,3 +1,4 @@
+use std::os::unix::process::ExitStatusExt;
 use std::{thread, time::Duration};
 use std::process::{Command, Child, ExitStatus, exit};
 use std::fs::{File, remove_file};
@@ -12,7 +13,7 @@ use nix::sys::signal::{Signal, kill};
 use signal_hook::{consts::*, iterator::Signals};
 use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
-use serde_json::{Value, json};
+use serde_yaml::Value;
 
 use pacwrap_core::{
     ErrorKind,
@@ -35,8 +36,10 @@ use pacwrap_core::{
     utils::{TermControl, 
         arguments::{Arguments, Operand, InvalidArgument},
         env_var, 
-        print_error,
         print_warning}};
+
+const PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
+const SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
 enum ExecParams<'a> {
     Root(bool, bool, Vec<&'a str>,  InstanceHandle<'a>),
@@ -93,8 +96,6 @@ impl <'a>ExecParams<'a> {
         let handle = match container {
             Some(container) => config::provide_handle(container)?,
             None => Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?,
-
-
         };
 
         if let InstanceType::DEP = handle.metadata().container_type() {
@@ -179,83 +180,79 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
         .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
 
     match proc.spawn() {
-        Ok(c) => Ok(wait_on_process(c, read_info_json(reader, writer), *cfg.allow_forking(), jobs, tc)),
-        Err(err) => Err(ErrorKind::ExecFailure(BWRAP_EXECUTABLE, err.kind())), 
+        Ok(c) => Ok(wait_on_process(c, bwrap_json(reader, writer)?, *cfg.allow_forking(), jobs, tc))?,
+        Err(err) => Err(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
     }
 }
 
-fn read_info_json(mut reader: PipeReader, writer: PipeWriter) -> Value { 
-    let mut output = String::new();
-    drop(writer);
-    reader.read_to_string(&mut output).unwrap();           
-    match serde_json::from_str(&output) {
-        Ok(value) => value,
-        Err(_) => json!(null)
-    }
-}
-
-fn signal_trap(pids: Vec<i32>, block: bool) {
+fn signal_trap(bwrap_pid: i32) {
     let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
 
     thread::spawn(move || {
-        for _sig in signals.forever() { 
-            if block { 
-                for pid in pids.iter() {
-                    if Path::new(&format!("/proc/{}/", pid)).exists() { 
-                        kill(Pid::from_raw(*pid), Signal::SIGKILL).unwrap(); 
-                    }
-                }
+        let proc: &str = &format!("/proc/{}/", bwrap_pid); 
+        let proc = Path::new(proc);     
+
+        for _ in signals.forever() { 
+            if proc.exists() {
+                kill(Pid::from_raw(bwrap_pid), Signal::SIGKILL).unwrap();
             }
         }
     });
 }
 
-fn wait_on_process(mut process: Child, value: Value, block: bool, mut jobs: Vec<Child>, tc: TermControl) {  
-    let bwrap_pid = value["child-pid"].as_u64().unwrap_or_default();
-    let proc: &str = &format!("/proc/{}/", bwrap_pid);
-    let mut j: Vec<i32> = jobs.iter_mut()
-        .map(|j| j.id() as i32)
-        .collect::<Vec<_>>();
-
-    j.push(bwrap_pid as i32);
-    signal_trap(j, block.clone()); 
-
+fn wait_on_process(mut process: Child, bwrap_pid: i32, block: bool, mut jobs: Vec<Child>, tc: TermControl) -> Result<(), ErrorKind> {  
+    signal_trap(bwrap_pid);
+ 
     match process.wait() {
-        Ok(status) => { 
-            if block {                
-                while Path::new(proc).exists() { 
-                    thread::sleep(Duration::from_millis(250)); 
+        Ok(status) => {
+            if block {
+                let proc: &str = &format!("/proc/{}/", bwrap_pid); 
+                let proc = Path::new(proc); 
+
+                while proc.exists() {
+                    thread::sleep(PROCESS_SLEEP_DURATION);
                 }
             }
 
             for job in jobs.iter_mut() {
                 job.kill().unwrap();
-            } 
-            
-            clean_up_socket(&*DBUS_SOCKET);
-            tc.reset_terminal().unwrap();
-            process_exit(status);
+            }
+     
+            if let Err(err) = cleanup(&tc) {
+                print_warning(err);
+            }
+
+            process_exit(status)
         },
-        Err(_) => {
-            print_error(format!("bwrap process abnormally terminated."));
-            exit(2);
-        }
+        Err(error) => Err(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind()))
     }
 }
 
-fn process_exit(status: ExitStatus) {
-    match status.code() {
-        Some(o) => exit(o),
-        None => { 
-            eprint!("\nbwrap process {}\n", status); 
-            exit(2); 
-        }
+fn cleanup(tc: &TermControl) -> Result<(), ErrorKind> {
+    if let Err(errno) = tc.reset_terminal() {
+        print_warning(format!("Failed to restore termios parameters: {errno}"));
     }
+
+    clean_up_socket(&*DBUS_SOCKET)?;
+    Ok(())
+}
+
+fn process_exit(status: ExitStatus) -> Result<(), ErrorKind> {
+    let code = match status.code() {
+        Some(status) => status,
+        None => { 
+            eprint!("\nbwrap process {status}"); 
+            100+status.signal().unwrap_or(0) 
+        }
+    };
+
+    println!();
+    exit(code);
 }
 
 fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<Child, ErrorKind> {
     register_dbus(per, args)?;
-    create_socket(&*DBUS_SOCKET);
+    create_placeholder(&*DBUS_SOCKET)?;
 
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
     let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS")?;
@@ -287,39 +284,37 @@ fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) ->
 
             Ok(child)
         },
-        Err(error) => Err(ErrorKind::ExecFailure(DBUS_PROXY_EXECUTABLE, error.kind()))?
+        Err(error) => Err(ErrorKind::ProcessInitFailure(DBUS_PROXY_EXECUTABLE, error.kind()))?
     }
 }
 
 fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> Result<bool, ErrorKind> {
     if increment == &200 { 
         process_child.kill().ok();
-        clean_up_socket(&*DBUS_SOCKET);
-
+        clean_up_socket(&*DBUS_SOCKET)?;
         Err(ErrorKind::Execution(ExecutionError::SocketTimeout(socket.into())))?
     }
 
-    thread::sleep(Duration::from_micros(500));
+    thread::sleep(SOCKET_SLEEP_DURATION);
     Ok(pacwrap_core::utils::check_socket(socket))
 }
 
-fn create_socket(path: &str) {
+fn create_placeholder(path: &str) -> Result<(), ErrorKind> {
     match File::create(path) {
-        Ok(file) => drop(file),
-        Err(error) => {
-            print_error(format!("Failed to create socket '{path}': {error}"));
-            exit(2);
-        }
+        Ok(file) => Ok(drop(file)),
+        Err(error) => Err(ErrorKind::IOError(path.into(), error.kind()))
     }
 }
 
-fn clean_up_socket(path: &str) { 
+fn clean_up_socket(path: &str) -> Result<(), ErrorKind> { 
     if let Err(error) = remove_file(path) {
         match error.kind() {
-            std::io::ErrorKind::NotFound => return,
-            _ => print_error(format!("'Failed to remove socket '{path}': {error}")),
+            std::io::ErrorKind::NotFound => return Ok(()),
+            _ => Err(ErrorKind::IOError(path.into(), error.kind()))?,
         }
     }
+
+    Ok(())
 }
 
 fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbose: bool) -> Result<(), ErrorKind> {  
@@ -330,8 +325,23 @@ fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbos
     check_path(ins, &arguments, vec!("/usr/bin", "/bin"))?;
 
     match fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
-        Ok(process) => Ok(wait_on_process(process, json!(null), false, Vec::<Child>::new(), TermControl::new(0))),
-        Err(err) => Err(ErrorKind::ExecFailure(BWRAP_EXECUTABLE, err.kind())), 
+        Ok(process) => Ok(wait_on_process(process, 0, false, Vec::<Child>::new(), TermControl::new(0)))?,
+        Err(err) => Err(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
+    }
+}
+
+fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32, ErrorKind> { 
+    let mut output = String::new();
+  
+    drop(writer);
+    reader.read_to_string(&mut output).unwrap();    
+   
+    match serde_yaml::from_str::<Value>(&output) {
+        Ok(value) => match value["child-pid"].as_u64() {
+            Some(value) => Ok(value as i32), 
+            None => Err(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
+        },
+        Err(_) => Err(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
     }
 }
 
