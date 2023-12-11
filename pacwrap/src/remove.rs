@@ -36,8 +36,6 @@ fn engage_aggregator<'a>(
     let mut queue: HashMap<&'a str,Vec<&'a str>> = HashMap::new();
     let mut current_target = None;
 
-    args.set_index(1);
-
     if let Operand::None = args.next().unwrap_or_default() { 
         Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
     }
@@ -66,7 +64,7 @@ fn engage_aggregator<'a>(
             Operand::ShortPos('t', target) 
                 | Operand::LongPos("target", target) 
                 | Operand::ShortPos(_, target) => {
-                current_target = None;
+                current_target = Some(target);
                 targets.push(target);
             },
             Operand::Value(package) => if let Some(target) = current_target {
