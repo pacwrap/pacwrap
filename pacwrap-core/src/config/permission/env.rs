@@ -1,10 +1,11 @@
-use serde::{Deserialize, Serialize};
-
 use std::env;
 
-use crate::exec::args::ExecutionArgs;
-use crate::utils::print_warning;
-use crate::config::{Permission, permission::*, permission::Condition::*};
+use serde::{Deserialize, Serialize};
+
+use crate::{exec::args::ExecutionArgs,
+    utils::print_warning,
+    config::{Permission, permission::*},
+    config::permission::Condition::Success};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ENV { 

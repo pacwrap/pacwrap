@@ -2,11 +2,11 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::constants::XDG_RUNTIME_DIR;
-use crate::exec::args::ExecutionArgs;
-use crate::config::{Permission, permission::*};
-use crate::utils::check_socket;
-use crate::config::permission::{Condition::Success, PermError::Warn};
+use crate::{exec::args::ExecutionArgs,
+    config::{Permission, permission::*},
+    config::permission::{Condition::Success, PermError::Warn},
+    constants::XDG_RUNTIME_DIR,
+    utils::check_socket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PIPEWIRE {

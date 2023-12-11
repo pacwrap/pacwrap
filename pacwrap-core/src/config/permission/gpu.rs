@@ -4,9 +4,9 @@ use std::path::Path;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::{Permission, permission::*};
-use crate::config::permission::{Condition::Success, PermError::Fail};
+use crate::{exec::args::ExecutionArgs,
+    config::{Permission, permission::*},
+    config::permission::{Condition::Success, PermError::Fail}};
 
 lazy_static! {
     static ref GPU_DEV: Vec<String> = populate_dev();
@@ -39,7 +39,6 @@ impl Permission for GPU {
         "GPU"
     }
 }
-
 
 fn populate_dev() -> Vec<String> {
     let mut vec: Vec<String> = Vec::new();

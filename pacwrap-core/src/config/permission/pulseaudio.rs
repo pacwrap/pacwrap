@@ -2,13 +2,11 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::{Permission, 
-    permission::*, 
-    permission::PermError::*, 
-    permission::Condition::*};
-use crate::utils::check_socket;
-use crate::constants::XDG_RUNTIME_DIR;
+use crate::{exec::args::ExecutionArgs,
+    config::{Permission, permission::*},
+    config::permission::{Condition::Success, PermError::Warn},
+    constants::XDG_RUNTIME_DIR,
+    utils::check_socket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PULSEAUDIO {

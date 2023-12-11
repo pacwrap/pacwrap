@@ -2,9 +2,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::{Permission, permission::*};
-use crate::config::permission::{Condition::Success, PermError::Fail};
+use crate::{exec::args::ExecutionArgs,
+    config::{Permission, permission::*},
+    config::permission::{Condition::Success, PermError::Fail}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DEV {

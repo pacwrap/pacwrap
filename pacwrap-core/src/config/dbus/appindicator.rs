@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::Dbus;
+use crate::{config::Dbus, exec::args::ExecutionArgs};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct APPINDICATOR;

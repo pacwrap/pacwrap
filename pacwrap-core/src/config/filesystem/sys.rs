@@ -2,9 +2,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::InsVars;
-use crate::config::filesystem::{Filesystem, BindError};
+use crate::{exec::args::ExecutionArgs, 
+    config::InsVars, 
+    config::filesystem::{Filesystem, BindError}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SYSFS {

@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::{Permission, permission::*};
-use crate::config::permission::Condition::Success;
-
+use crate::{exec::args::ExecutionArgs,
+    config::{Permission, permission::*},
+    config::permission::Condition::Success};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NONE;
