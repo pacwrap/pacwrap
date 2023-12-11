@@ -4,11 +4,13 @@ use std::env::var;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::XDG_RUNTIME_DIR;
-use crate::utils::check_socket;
-use crate::exec::args::ExecutionArgs;
-use crate::config::{Permission, permission::*};
-use crate::config::permission::{Condition::{Success, SuccessWarn}, PermError::Fail};
+use crate::{exec::args::ExecutionArgs, 
+    config::{Permission, permission::*}, 
+    config::permission::{
+        Condition::{Success, SuccessWarn}, 
+        PermError::Fail},
+    constants::XDG_RUNTIME_DIR, 
+    utils::check_socket};
 
 lazy_static! {
     static ref WAYLAND_DISPLAY: String = env_var("WAYLAND_DISPLAY");
@@ -26,21 +28,21 @@ impl Permission for DISPLAY {
         let mut bound = None;
 
         match validate_wayland_socket() { 
-            Ok(b) => { 
-                if let Some(con) = b { bound = Some(con); }
+            Ok(b) => if let Some(con) = b { 
+                bound = Some(con);
             },
             Err(e) => Err(e)?
         }
 
         match validate_xorg_socket() { 
-            Ok(b) => {
-                if let Some(con) = b { bound = Some(con); }
+            Ok(b) => if let Some(con) = b { 
+                bound = Some(con);
             },
             Err(e) => Err(e)?
         }
 
         if let None = bound {
-            Err(Fail(format!("Expected environment variables are unspecified.")))
+            Err(Fail(format!("Expected environment variables were not found.")))
         } else {
             Ok(bound)
         }
@@ -73,6 +75,7 @@ fn validate_wayland_socket() -> Result<Option<Condition>, PermError> {
 
         return Ok(Some(Success));
     }
+
     Ok(None)
 }
 
@@ -103,6 +106,7 @@ fn validate_xorg_socket() -> Result<Option<Condition>, PermError> {
             return Ok(Some(SuccessWarn(format!("Connecting to TCP X11 socket at '{}'", *DISPLAY_ENV))));
         }
     }
+
     Ok(None)
 }
 
@@ -121,6 +125,7 @@ fn configure_xorg(args: &mut ExecutionArgs) {
     args.env("DISPLAY", &*DISPLAY_ENV);
     args.env("XAUTHORITY", &container_xauth); 
     args.robind(&*XAUTHORITY, &container_xauth);
+
     if display[0].is_empty() || display[0] == "unix" {    
         args.robind(&xorg_socket, &xorg_socket);
     }
