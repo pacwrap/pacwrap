@@ -67,7 +67,8 @@ fn engage_aggregator<'a>(
                 current_target = Some(target);
                 targets.push(target);
             },
-            Operand::Value(package) => if let Some(target) = current_target {
+            Operand::LongPos(_, package)
+            | Operand::Value(package) => if let Some(target) = current_target {
                 match queue.get_mut(target) {
                     Some(vec) => vec.push(package),
                     None => { queue.insert(target, vec!(package)); },
