@@ -223,7 +223,8 @@ fn engage_aggregator<'a>(
                     base = false;  
                 }
             },
-            Operand::Value(package) => if current_target != "" {
+            Operand::LongPos(_, package) 
+            | Operand::Value(package) => if current_target != "" {
                 match queue.get_mut(current_target.into()) {
                     Some(vec) => vec.push(package.into()),
                     None => { queue.insert(current_target.into(), vec!(package)); },
