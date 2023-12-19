@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use std::borrow::Cow;
 use std::fmt::{Display, Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
