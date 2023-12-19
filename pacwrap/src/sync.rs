@@ -123,7 +123,7 @@ fn instantiate<'a>(targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> 
 }
 
 fn instantiate_container(ins: &str, instype: InstanceType, deps: Vec<&str>) -> Result<(), ErrorKind> {
-    let deps = deps.iter().map(|a| { let a = *a; a.into() }).collect();
+    let deps = deps.iter().map(|a| (*a).into()).collect();
     let mut logger = Logger::new("pacwrap").init().unwrap();
     let instance = match config::provide_new_handle(ins) {
         Ok(mut handle) => {
@@ -164,8 +164,8 @@ fn instantiate_container(ins: &str, instype: InstanceType, deps: Vec<&str>) -> R
 
     config::save_handle(&instance).ok(); 
     logger.log(format!("Configuration file created for {ins}")).unwrap();
-    drop(instance);
     println!("{} Instantiation of {ins} complete.", *ARROW_GREEN);
+    drop(instance); 
     Ok(())
 }
 
