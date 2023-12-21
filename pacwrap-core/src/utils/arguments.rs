@@ -66,19 +66,6 @@ impl<'a> Arguments<'a> {
         self
     }
 
-    #[deprecated]
-    pub fn targets(&mut self) -> Vec<&'a str> {
-        let mut targets = Vec::new();
-
-        for op in self.into_iter() {
-            if let Operand::ShortPos('t', name) | Operand::LongPos("target", name) = op { 
-                targets.push(name); 
-            }
-        }
-         
-        targets
-    }
-    
     pub fn target(&mut self) -> Result<&'a str, ErrorKind> {
         for op in self.into_iter() {
             if let Operand::ShortPos(_, name) 
@@ -89,7 +76,7 @@ impl<'a> Arguments<'a> {
         }
 
         Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))
-    }    
+    } 
 
     pub fn set_index(&mut self, index: usize) {
         self.idx = index;
@@ -107,7 +94,7 @@ impl<'a> Arguments<'a> {
         &self.values
     }
 }
-
+ 
 impl <'a>Iterator for Arguments<'a> {
     type Item = Operand<'a>;
 

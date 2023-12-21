@@ -5,6 +5,7 @@ use crate::ErrorKind;
 use crate::constants::DATA_DIR;
 use crate::config::{self, InstanceHandle};
 use crate::utils::print_warning;
+use super::{InsVars, Instance, ConfigError};
 use super::instance::InstanceType;
 
 pub struct InstanceCache<'a> {
@@ -26,29 +27,58 @@ impl <'a>InstanceCache<'a> {
         }
     }
 
-    fn map(&mut self, ins: &'a str) -> bool {
-        match self.instances.get(ins) {
-            Some(_) => false,
-            None => {
-                let config = match config::provide_handle(ins) {
-                    Ok(ins) => ins, 
-                    Err(error) => { 
-                        print_warning(error.to_string()); 
-                        return false
-                    }
-                };
-
-                match config.metadata().container_type() {
-                    InstanceType::BASE => self.registered_base.push(ins),
-                    InstanceType::DEP => self.registered_dep.push(ins),
-                    InstanceType::ROOT => self.registered_root.push(ins),
-                    InstanceType::LINK => return false,
-                } 
-
-                self.instances.insert(ins, config);
-                true
-            }
+    pub fn add(&mut self, ins: &'a str, instype: InstanceType, deps: Vec<&'a str>) -> Result<(),ErrorKind> {
+        if let Some(_) = self.instances.get(ins) {
+            Err(ErrorKind::Config(ConfigError::AlreadyExists(ins.into())))?
         }
+
+        let deps = deps.iter().map(|a| (*a).into()).collect();          
+        let handle = match config::provide_new_handle(ins) {
+            Ok(mut handle) => { 
+                handle.metadata_mut().set(deps, vec!()); 
+                handle 
+            },
+            Err(error) => match error {          
+                ErrorKind::IOError(_, io) => match io { 
+                    std::io::ErrorKind::NotFound => { 
+                        let vars = InsVars::new(ins);         
+                        let cfg = Instance::new(instype, vec!(), deps);
+                        
+                        InstanceHandle::new(cfg, vars)
+                    },
+                    _ => Err(error)?
+                },
+                _ => Err(error)?
+            }
+        };
+
+        Ok(self.register(ins, handle)) 
+    }
+
+    fn map(&mut self, ins: &'a str) -> Result<(),ErrorKind>  {
+        if let Some(_) = self.instances.get(ins) {
+            Err(ErrorKind::Config(ConfigError::AlreadyExists(ins.into())))?
+        }
+
+        Ok(self.register(ins, match config::provide_handle(ins) {
+            Ok(ins) => ins, 
+            Err(error) => { 
+                print_warning(error.to_string()); 
+                return Ok(())
+            }
+        }))
+    }
+
+    fn register(&mut self, ins: &'a str, handle: InstanceHandle<'a>) {
+        match handle.metadata().container_type() {
+            InstanceType::BASE => self.registered_base.push(ins),
+            InstanceType::DEP => self.registered_dep.push(ins),
+            InstanceType::ROOT => self.registered_root.push(ins),
+            InstanceType::LINK => return,
+        } 
+
+        self.instances.insert(ins, handle);
+        self.registered.push(ins);
     }
 
     pub fn registered(&self) -> &Vec<&'a str> { 
@@ -82,9 +112,7 @@ pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>, ErrorK
     let mut cache = InstanceCache::new();
 
     for name in vec {
-        if cache.map(&name) {
-            cache.registered.push(&name);
-        }
+        cache.map(&name)?;
     }
 
     Ok(cache)

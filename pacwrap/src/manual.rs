@@ -426,7 +426,7 @@ fn copyright(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Erro
 
     writeln!(buf, "{head}COPYRIGHT{reset}
 
-{tab}{tab}Copyright (C) 2023 - Xavier R.M.
+{tab}{tab}Copyright (C) 2023 Xavier R.M.
 
 {tab}{tab}This program may be freely redistributed under
 {tab}{tab}the terms of the GNU General Public License v3.\n")

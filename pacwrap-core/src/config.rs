@@ -1,19 +1,20 @@
-use std::fmt::Display;
-use std::{io::Write, fmt::Formatter};
-use std::path::Path;
-use std::fs::File;
+use std::{fmt::Display, 
+    io::Write, 
+    fmt::Formatter, 
+    path::Path, 
+    fs::File};
 
-use crate::ErrorKind;
-pub use crate::config::filesystem::Filesystem;
-pub use crate::config::permission::Permission;
-pub use crate::config::dbus::Dbus;
+use crate::{ErrorKind, constants::{BOLD, RESET}};
+use self::{filesystem::BindError, permission::PermError};
 
-pub use cache::InstanceCache;
-pub use instance::{InstanceHandle, Instance, InstanceType};
-pub use vars::InsVars;
-
-use self::filesystem::BindError;
-use self::permission::PermError;
+pub use self::{cache::InstanceCache, 
+    instance::{Instance,
+        InstanceHandle, 
+        InstanceType}, 
+    vars::InsVars, 
+    filesystem::Filesystem, 
+    permission::Permission, 
+    dbus::Dbus};
 
 pub mod vars;
 pub mod filesystem;
@@ -30,6 +31,7 @@ pub enum ConfigError {
     Filesystem(&'static str, BindError),
     Save(String, String),
     Load(String, String),
+    AlreadyExists(String),
 }
 
 impl Display for ConfigError {
@@ -39,6 +41,7 @@ impl Display for ConfigError {
             Self::Permission(module, err) => write!(fmter, "Failed to register permission {}: {} ", module, err),
             Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}.yml': {error}"),
             Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}.yml': {error}"),
+            Self::AlreadyExists(ins) => write!(fmter, "Container {}{ins}{} already exists.", *BOLD, *RESET),
         }
     }
 }

@@ -70,7 +70,7 @@ pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm {
 }
 
 fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> Alpm { 
-    let root = insvars.root();   
+    let root = insvars.root();
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
     handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
