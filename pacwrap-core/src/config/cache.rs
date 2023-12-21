@@ -1,12 +1,16 @@
-use std::collections::HashMap;
-use std::fs::read_dir;
+use std::{collections::HashMap,
+    io::ErrorKind::NotFound,
+    fs::read_dir};
 
-use crate::ErrorKind;
-use crate::constants::DATA_DIR;
-use crate::config::{self, InstanceHandle};
-use crate::utils::print_warning;
-use super::{InsVars, Instance, ConfigError};
-use super::instance::InstanceType;
+use crate::{ErrorKind, 
+    constants::DATA_DIR, 
+    config::{self, InstanceHandle}, 
+    utils::print_warning};
+
+use super::{InsVars, 
+    ConfigError, 
+    Instance, 
+    instance::InstanceType};
 
 pub struct InstanceCache<'a> {
     instances: HashMap<&'a str, InstanceHandle<'a>>,
@@ -39,8 +43,8 @@ impl <'a>InstanceCache<'a> {
                 handle 
             },
             Err(error) => match error {          
-                ErrorKind::IOError(_, io) => match io { 
-                    std::io::ErrorKind::NotFound => { 
+                ErrorKind::IOError(_, kind) => match kind { 
+                    NotFound => { 
                         let vars = InsVars::new(ins);         
                         let cfg = Instance::new(instype, vec!(), deps);
                         
