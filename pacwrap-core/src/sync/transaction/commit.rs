@@ -63,9 +63,9 @@ impl Transaction for Commit {
             Ok(mut child) => {
                 let stdin = child.stdin.take().unwrap();
 
+                write_to_stdin(&*DEFAULT_ALPM_CONF, &stdin)?; 
+                write_to_stdin(ag.action(), &stdin)?; 
                 write_to_stdin(handle.metadata(), &stdin)?;
-                write_to_stdin(&*DEFAULT_ALPM_CONF, &stdin)?;
-                write_to_stdin(ag.action(), &stdin)?;
 
                 match child.wait() {
                     Ok(exit_status) => match exit_status.code().unwrap_or(0) {

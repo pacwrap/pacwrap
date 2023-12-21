@@ -2,31 +2,30 @@ use std::collections::HashSet;
 
 use alpm::{Package, Alpm, PackageReason};
 
-use super::{transaction::Error, utils::AlpmUtils};
+use super::{transaction::{Error, TransactionType}, utils::AlpmUtils};
 
 #[allow(dead_code)]
 pub struct LocalDependencyResolver<'a> {
     resolved: HashSet<&'a str>,
     packages: Vec<Package<'a>>,
-    ignored: &'a HashSet<&'a str>,
+    ignored: &'a HashSet<String>,
     handle: &'a Alpm,
     depth: isize,
-    recursive: bool,
-    cascading: bool,
-    explicit: bool,
+    flags: (bool, bool, bool),
 } 
 
 impl <'a>LocalDependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<&'a str>, recurse: bool, cascade: bool, exp: bool) -> Self {
+    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<String>, trans_type: &TransactionType) -> Self {
         Self {
             resolved: HashSet::new(),
             packages: Vec::new(),
             ignored: ignorelist,
             depth: 0,
             handle: alpm,
-            recursive: recurse,
-            cascading: cascade,
-            explicit: exp,
+            flags: match trans_type {
+                TransactionType::Remove(enumerate, cascade, explicit) => (*enumerate, *cascade, *explicit),
+                _ => panic!("Invalid transaction type for this resolver."),
+            },
         }
     }
 
@@ -47,14 +46,14 @@ impl <'a>LocalDependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(_) = self.ignored.get(pkg) {
+            if let Some(_) = self.ignored.get(*pkg) {
                 continue;
             }
 
             if let Some(pkg) = self.handle.get_local_package(pkg) {    
                 if self.depth > 0 {
                     //TODO: Implement proper explicit package handling
-                    if ! self.cascading
+                    if ! self.flags.1
                     && pkg.reason() == PackageReason::Explicit {
                         continue;
                     }
@@ -73,7 +72,7 @@ impl <'a>LocalDependencyResolver<'a> {
                 self.packages.push(pkg);
                 self.resolved.insert(pkg.name());
                 
-                if ! self.recursive {
+                if ! self.flags.0 {
                     continue;
                 }
 
@@ -82,7 +81,7 @@ impl <'a>LocalDependencyResolver<'a> {
                     .map(|pkg| pkg.name())
                     .collect::<Vec<&str>>());
 
-                if ! self.cascading {
+                if ! self.flags.1 {
                     continue;
                 }
 
@@ -97,7 +96,7 @@ impl <'a>LocalDependencyResolver<'a> {
             }             
         }
 
-        if synchronize.len() > 0 && self.recursive {
+        if synchronize.len() > 0 && self.flags.0 {
             self.check_depth()?;
             self.enumerate(&synchronize)
         } else {

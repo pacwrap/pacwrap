@@ -1,21 +1,20 @@
-use std::{rc::Rc, collections::HashSet};
+use std::collections::HashSet;
 
 use alpm::{Package, Alpm};
 
-use super::{transaction::Error,
-    utils::AlpmUtils};
+use super::{transaction::Error, utils::AlpmUtils};
 
 pub struct DependencyResolver<'a> {
     resolved: HashSet<&'a str>,
     packages: Vec<Package<'a>>,
-    keys: Vec<Rc<str>>,
-    ignored: &'a HashSet<&'a str>,
+    keys: Vec<&'a str>,
+    ignored: &'a HashSet<String>,
     handle: &'a Alpm,
     depth: isize,
 } 
 
 impl <'a>DependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<&'a str>) -> Self {
+    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<String>) -> Self {
         Self {
             resolved: HashSet::new(),
             packages: Vec::new(),
@@ -35,7 +34,7 @@ impl <'a>DependencyResolver<'a> {
         Ok(())
     }
     
-    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Vec<Rc<str>>, Vec<Package<'a>>), Error> {
+    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<Package<'a>>), Error> {
         let mut synchronize: Vec<&'a str> = Vec::new(); 
         
         for pkg in packages {
@@ -43,7 +42,7 @@ impl <'a>DependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(_) = self.ignored.get(pkg) {
+            if let Some(_) = self.ignored.get(*pkg) {
                 continue;
             }
 
@@ -72,7 +71,13 @@ impl <'a>DependencyResolver<'a> {
             self.check_depth()?;
             self.enumerate(&synchronize)
         } else {
-           Ok((self.keys, self.packages))
+            let keys = if self.keys.len() > 0 {
+                Some(self.keys.iter().map(|a| (*a).into()).collect())
+            } else {
+                None
+            };
+
+            Ok((keys, self.packages))
         }
     }
 }

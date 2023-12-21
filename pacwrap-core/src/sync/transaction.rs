@@ -1,6 +1,6 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
-use std::rc::Rc;
 
 use bitflags::bitflags;
 use alpm::{Alpm, PackageReason, TransFlag};
@@ -90,17 +90,17 @@ bitflags! {
     }
 }
 
-pub struct TransactionHandle {
-    meta: TransactionMetadata,
+pub struct TransactionHandle<'a> {
+    meta: &'a mut TransactionMetadata<'a>,
     alpm: Option<Alpm>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct TransactionMetadata {
-    foreign_pkgs: HashSet<Rc<str>>, 
-    resident_pkgs: HashSet<Rc<str>>,
-    deps: Option<Vec<Rc<str>>>,
-    queue: Vec<Rc<str>>,
+pub struct TransactionMetadata<'a> {
+    foreign_pkgs: HashSet<String>, 
+    resident_pkgs: HashSet<String>,
+    deps: Option<Vec<String>>,
+    queue: Vec<Cow<'a, str>>,
     mode: TransactionMode,
     flags: (u8, u32)
 }
@@ -183,9 +183,9 @@ impl Display for Error {
        match self {
             Self::DependentContainerMissing(u) => write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
             Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::TargetUpstream(pkg) => write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
-            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
-            Self::TargetNotAvailable(pkg) => write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
+            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET), 
+            Self::TargetNotAvailable(pkg) => write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),   
+            Self::TargetUpstream(pkg) => write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET), 
             Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
             Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
             Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
@@ -207,21 +207,21 @@ impl From<ErrorKind> for Error {
     }
 }
 
-impl <'a>TransactionMetadata {
-    fn new(q: Vec<&'a str>) -> TransactionMetadata {
+impl <'a>TransactionMetadata<'a> {
+    fn new(queue: Vec<&'a str>) -> TransactionMetadata {
         Self { 
             foreign_pkgs: HashSet::new(),
             resident_pkgs: HashSet::new(),
             deps: None,
             mode: TransactionMode::Local,
-            queue: q.iter().map(|a| Rc::from(*a)).collect(),
+            queue: queue.iter().map(|q| (*q).into()).collect::<Vec<_>>(),
             flags: (0, 0),
         }
     } 
 }
 
-impl <'a>TransactionHandle { 
-    pub fn new(alpm_handle: Alpm, metadata: TransactionMetadata) -> Self {
+impl <'a>TransactionHandle<'a> { 
+    pub fn new(alpm_handle: Alpm, metadata: &'a mut TransactionMetadata<'a>) -> Self {
         Self {
             meta: metadata,
             alpm: Some(alpm_handle),
@@ -252,32 +252,17 @@ impl <'a>TransactionHandle {
         self.meta.foreign_pkgs.extend(dep_handle.localdb()
             .pkgs()
             .iter()
-            .filter_map(|p| {
-                let pkg_name = p.name().into();
-            
-                if ! self.meta.foreign_pkgs.contains(&pkg_name) {
-                    Some(pkg_name)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<Rc<str>>>());
-
+            .map(|p| p.name().into())
+            .filter(|p| ! self.meta.foreign_pkgs.contains(p))
+            .collect::<Vec<_>>());
         self.meta.resident_pkgs.extend(self.alpm()
             .localdb()
             .pkgs()
             .iter()
-            .filter_map(|p| {
-                let pkg_name = p.name().into();
-
-                if ! self.meta.foreign_pkgs.contains(&pkg_name) 
-                && ! self.meta.resident_pkgs.contains(&pkg_name) {
-                    Some(pkg_name)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<Rc<str>>>()); 
+            .map(|a| a.name().into())
+            .filter(|p| ! self.meta.foreign_pkgs.contains(p) 
+                && ! self.meta.resident_pkgs.contains(p))
+            .collect::<Vec<_>>());
     }
 
     pub fn ignore(&mut self) {
@@ -300,78 +285,68 @@ impl <'a>TransactionHandle {
         }    
     }
 
-    pub fn prepare_add(&mut self, flags: &TransactionFlags) -> Result<()> { 
+    pub fn prepare(&mut self, trans_type: &TransactionType, flags: &TransactionFlags) -> Result<()> {
         let alpm = self.alpm.as_mut().unwrap();
         let ignored = match self.meta.mode { 
             TransactionMode::Foreign => &self.meta.resident_pkgs,
             TransactionMode::Local => &self.meta.foreign_pkgs,
         };
-
-        for queue in self.meta.queue.iter() { 
-            if let None = alpm.get_package(queue.as_ref()) { 
-                Err(Error::TargetNotAvailable(queue.to_string()))?
-            }
-
-            if ignored.contains(queue) && ! self.meta.mode.bool() {
-                if flags.contains(TransactionFlags::FORCE_DATABASE) {
-                    continue;
-                }
-            
-                Err(Error::TargetUpstream(queue.to_string()))?
-            } 
-        }
-
-        let ignored = ignored.iter()
-            .map(|i| i.as_ref())
-            .collect::<HashSet<_>>();
-        let queued = self.meta.queue.iter()
-            .map(|i| i.as_ref())
-            .collect::<Vec<_>>();
-        let packages = DependencyResolver::new(alpm, &ignored).enumerate(&queued)?;
-
-        if packages.0.len() > 0 {
-            self.meta.deps = Some(packages.0);
-        }
-
-        for pkg in packages.1 {
-            if let None = self.meta.foreign_pkgs.get(pkg.name().into()) {
-                if let TransactionMode::Foreign = self.meta.mode {
-                    continue;
-                }
-            }
-
-            alpm.trans_add_pkg(pkg).unwrap();        
-        }
-
-       Ok(())
-    }
-
-    pub fn prepare_removal(&mut self, enumerate: bool, cascade: bool, explicit: bool) -> Result<()> {  
-        let alpm = self.alpm();
-        let ignored = match self.meta.mode { 
-            TransactionMode::Foreign => &self.meta.resident_pkgs,
-            TransactionMode::Local => &self.meta.foreign_pkgs,
-        };
-
-        for queue in self.meta.queue.iter() { 
-            if let None = alpm.get_local_package(queue.as_ref()) { 
-                Err(Error::TargetNotInstalled(queue.to_string()))? 
-            }
-
-            if ignored.contains(queue) && ! self.meta.mode.bool() {
-                Err(Error::TargetUpstream(queue.to_string()))? 
-            } 
-        }
-
-        let ignored = ignored.iter()
-            .map(|i| i.as_ref())
-            .collect::<HashSet<_>>();
-        let queued = self.meta.queue.iter()
+        let queue = self.meta.queue.iter()
             .map(|i| i.as_ref())
             .collect::<Vec<_>>(); 
 
-        for pkg in LocalDependencyResolver::new(alpm, &ignored, enumerate, cascade, explicit).enumerate(&queued)? { 
-            alpm.trans_remove_pkg(pkg).unwrap(); 
+        if let TransactionMode::Local = self.meta.mode {
+            let upstream = queue.iter()
+                .map(|a| *a) 
+                .filter(|a| ignored.contains(*a))
+                .collect::<Vec<&str>>();
+
+            if ! flags.contains(TransactionFlags::FORCE_DATABASE) {
+                if ! upstream.is_empty() {
+                    Err(Error::TargetUpstream(upstream[0].to_string()))?
+                }
+            }
+        }
+        
+        match trans_type {
+            TransactionType::Remove(_,_,_) => { 
+                let not_installed = queue.iter()
+                    .map(|a| *a)  
+                    .filter(|a| alpm.get_local_package(a).is_none())
+                    .collect::<Vec<&str>>();
+
+                if ! not_installed.is_empty() {
+                    Err(Error::TargetNotInstalled(not_installed[0].to_string()))?
+                }
+
+                for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type).enumerate(&queue)? {     
+                    alpm.trans_remove_pkg(pkg).unwrap(); 
+                }
+            },
+            TransactionType::Upgrade(_,_,_) => { 
+                let not_available = queue.iter()
+                    .map(|a| *a)
+                    .filter(|a| alpm.get_package(a).is_none()) 
+                    .collect::<Vec<&str>>();
+
+                if ! not_available.is_empty() {
+                    Err(Error::TargetNotAvailable(not_available[0].to_string()))?
+                }
+
+                let packages = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
+
+                for pkg in packages.1 {
+                    if let None = self.meta.foreign_pkgs.get(pkg.name()) {
+                        if let TransactionMode::Foreign = self.meta.mode {
+                            continue;
+                        }
+                    }
+
+                    alpm.trans_add_pkg(pkg).unwrap();        
+                }
+
+                self.meta.deps = packages.0;
+            }
         }
 
         Ok(())
@@ -381,18 +356,14 @@ impl <'a>TransactionHandle {
         let depends = instance.metadata().dependencies();
         let pkgs = self.alpm
             .as_mut()
-            .unwrap().localdb()
+            .unwrap()
+            .localdb()
             .pkgs()
             .iter()
-            .filter_map(|p| {
-                if p.reason() == PackageReason::Explicit
+            .filter(|p| p.reason() == PackageReason::Explicit
                 && ! p.name().starts_with("pacwrap-")
-                && ! self.meta.foreign_pkgs.contains(p.name()) {
-                    Some(p.name().into())
-                } else {
-                    None
-                }
-            })
+                && ! self.meta.foreign_pkgs.contains(p.name()))
+            .map(|p| p.name().into())
         .collect::<Vec<_>>();
 
         if &pkgs != instance.metadata().explicit_packages() || create {
@@ -417,13 +388,9 @@ impl <'a>TransactionHandle {
     }
 
     pub fn mark_depends(&mut self) {
-        let alpm = self.alpm();
-
         if let Some(deps) = self.meta.deps.as_ref() {
-            for pkg in deps {
-                if let Some(mut pkg) = alpm.get_local_package(pkg) {
-                    pkg.set_reason(PackageReason::Depend).unwrap();
-                }
+            for mut pkg in deps.iter().filter_map(|a| self.alpm().get_local_package(a)) {
+                pkg.set_reason(PackageReason::Depend).unwrap();
             }
         }
     }
@@ -465,8 +432,8 @@ impl <'a>TransactionHandle {
         self.meta.flags = (flags.bits(), flags_alpm.bits()); 
     }
 
-    pub fn retrieve_flags(&self) -> (u8, u32) {
-        self.meta.flags
+    pub fn retrieve_flags(&self) -> (Option<TransactionFlags>, Option<TransFlag>) {
+        (TransactionFlags::from_bits(self.meta.flags.0), TransFlag::from_bits(self.meta.flags.1))
     }
 
     fn metadata(&self) -> &TransactionMetadata {

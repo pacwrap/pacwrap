@@ -1,4 +1,5 @@
 use crate::{config::InstanceHandle, sync};
+
 use super::{Transaction, 
     TransactionType, 
     TransactionState, 
@@ -29,8 +30,7 @@ impl Transaction for Prepare {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance(dep) {
                             Some(dep_handle) => {
-                                let dep_alpm = sync::instantiate_alpm(dep_handle); 
-                            
+                                let dep_alpm = sync::instantiate_alpm(dep_handle);                             
                                 handle.enumerate_foreign_pkgs(&dep_alpm); 
                                 dep_alpm.release().unwrap();
                             },

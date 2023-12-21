@@ -58,11 +58,11 @@ impl Transaction for Stage {
                     handle.alpm().sync_sysupgrade(*downgrade).unwrap();
                 }
 
-                handle.prepare_add(ag.flags())?;
+                handle.prepare(ag.action(), ag.flags())?; 
                 state_transition(&self.state, check_keyring(ag, handle, inshandle))
             },
-            TransactionType::Remove(depends, cascade, explicit) => {
-                handle.prepare_removal(*depends, *cascade, *explicit)?;
+            TransactionType::Remove(_,_,_) => { 
+                handle.prepare(ag.action(), ag.flags())?;
                 state_transition(&self.state, false)
             },
         }

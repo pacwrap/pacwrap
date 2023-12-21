@@ -125,8 +125,8 @@ impl <'a>TransactionAggregator<'a> {
             Some(some) => some.clone(), None => Vec::new(),
         };
         let alpm = sync::instantiate_alpm(&inshandle);
-        let meta = TransactionMetadata::new(queue);
-        let mut handle = TransactionHandle::new(alpm, meta);
+        let mut meta = TransactionMetadata::new(queue);
+        let mut handle = TransactionHandle::new(alpm, &mut meta);
         let mut act: Box<dyn Transaction> = TransactionState::Prepare.from(self);
         
         self.action.begin_message(&inshandle);
