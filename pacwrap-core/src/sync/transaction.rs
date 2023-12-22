@@ -1,21 +1,20 @@
-use std::borrow::Cow;
-use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
+use std::{borrow::Cow, collections::HashSet, fmt::{Display, Formatter}};
 
 use bitflags::bitflags;
 use alpm::{Alpm, PackageReason, TransFlag};
 use serde::{Deserialize, Serialize};
 
-use crate::{config, ErrorKind};
-use crate::constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED};
-use crate::sync::{
-    resolver_local::LocalDependencyResolver,
-    resolver::DependencyResolver,
-    utils::AlpmUtils};
-use crate::utils::print_error;
-use crate::config::InstanceHandle;
-use self::stage::Stage;
-use self::{
+use crate::{config,
+    config::InstanceHandle,
+    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED}, 
+    sync::{
+        resolver_local::LocalDependencyResolver,
+        resolver::DependencyResolver,
+        utils::AlpmUtils},
+    ErrorKind,
+    utils::print_error};
+
+use self::{stage::Stage,
     commit::Commit,
     prepare::Prepare, 
     uptodate::UpToDate};
@@ -140,15 +139,15 @@ impl TransactionState {
 impl TransactionType { 
     pub fn pr_offset(&self) -> usize {
         match self {
-            Self::Upgrade(_,_,_) => 1,
-            Self::Remove(_,_,_) => 0
+            Self::Upgrade(..) => 1,
+            Self::Remove(..) => 0
         }
     }
 
     fn as_str(&self) -> &str {
         match self {
-            Self::Upgrade(_,_,_) => "installation",
-            Self::Remove(_,_,_) => "removal"
+            Self::Upgrade(..) => "installation",
+            Self::Remove(..) => "removal"
         }
     }
 
@@ -158,7 +157,7 @@ impl TransactionType {
                 TransactionMode::Foreign => "Synchronizing foreign database...",
                 TransactionMode::Local => "Synchronizing resident container..."
             }, 
-            Self::Remove(_,_,_) => "Preparing package removal..."
+            Self::Remove(..) => "Preparing package removal..."
         };
 
         println!("{} {}", *ARROW_CYAN, message);
@@ -167,11 +166,11 @@ impl TransactionType {
     fn begin_message(&self, inshandle: &InstanceHandle) {
         let instance = inshandle.vars().instance();
         let message = match self {
-            Self::Upgrade(upgrade,_,_) => match upgrade { 
+            Self::Upgrade(upgrade,..) => match upgrade { 
                 true => format!("Checking {instance} for updates..."),
                 false => format!("Transacting {instance}...")
             }
-            Self::Remove(_,_,_) => format!("Transacting {instance}...")
+            Self::Remove(..) => format!("Transacting {instance}...")
         };
 
         println!("{} {}{message}{}", *BAR_CYAN, *BOLD, *RESET);
@@ -309,7 +308,7 @@ impl <'a>TransactionHandle<'a> {
         }
         
         match trans_type {
-            TransactionType::Remove(_,_,_) => { 
+            TransactionType::Remove(..) => { 
                 let not_installed = queue.iter()
                     .map(|a| *a)  
                     .filter(|a| alpm.get_local_package(a).is_none())
@@ -323,7 +322,7 @@ impl <'a>TransactionHandle<'a> {
                     alpm.trans_remove_pkg(pkg).unwrap(); 
                 }
             },
-            TransactionType::Upgrade(_,_,_) => { 
+            TransactionType::Upgrade(..) => { 
                 let not_available = queue.iter()
                     .map(|a| *a)
                     .filter(|a| alpm.get_package(a).is_none()) 
@@ -378,8 +377,8 @@ impl <'a>TransactionHandle<'a> {
 
     pub fn trans_ready(&mut self, trans_type: &TransactionType) -> Result<()> { 
         if match trans_type {
-            TransactionType::Upgrade(_,_,_) => self.alpm().trans_add().len(),
-            TransactionType::Remove(_,_,_) => self.alpm().trans_remove().len()
+            TransactionType::Upgrade(..) => self.alpm().trans_add().len(),
+            TransactionType::Remove(..) => self.alpm().trans_remove().len()
         } > 0 {
             Ok(())
         } else {

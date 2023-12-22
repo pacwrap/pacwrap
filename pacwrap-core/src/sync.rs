@@ -5,12 +5,12 @@ use lazy_static::lazy_static;
 use pacmanconf;
 use serde::{Serialize, Deserialize};
 
-use crate::constants::{BAR_GREEN, RESET, BOLD, ARROW_RED, CACHE_DIR, DATA_DIR, CONFIG_DIR};
-use crate::sync::dl_event::DownloadCallback;
-use crate::utils::{print_warning, print_error};
-use crate::config::{InsVars,
+use crate::{utils::{print_warning, print_error},
+    constants::{BAR_GREEN, RESET, BOLD, ARROW_RED, CACHE_DIR, DATA_DIR, CONFIG_DIR},
+    sync::dl_event::DownloadCallback,
+	config::{InsVars,
     InstanceHandle,
-    cache::InstanceCache};
+    cache::InstanceCache}};
 
 lazy_static! {
     static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman.conf", *CONFIG_DIR)).unwrap(); 

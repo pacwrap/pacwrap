@@ -1,22 +1,20 @@
-use std::collections::HashMap;
-use std::process::exit;
+use std::{collections::HashMap, process::exit};
 
-use crate::ErrorKind;
-use crate::constants::ARROW_GREEN;
-use crate::config::InstanceType;
-use crate::exec::utils::execute_in_container;
-use crate::log::Logger;
-use crate::sync::{self,
-    filesystem::FileSystemStateSync};
-use crate::config::{InstanceHandle, 
-    InstanceType::ROOT,
-    cache::InstanceCache};
+use crate::{ErrorKind,
+    constants::ARROW_GREEN,
+	config::InstanceType,
+	exec::utils::execute_in_container,
+	log::Logger,
+	sync::{self, filesystem::FileSystemStateSync},
+	config::{InstanceHandle, InstanceType::ROOT,cache::InstanceCache}};
+
 use super::{
     Transaction,
     TransactionHandle,
     TransactionState,
     TransactionType,
-    TransactionFlags, TransactionMetadata};
+    TransactionFlags, 
+    TransactionMetadata};
 
 pub struct TransactionAggregator<'a> {
     queried: Vec<&'a str>,
@@ -32,8 +30,7 @@ pub struct TransactionAggregator<'a> {
 }
 
 impl <'a>TransactionAggregator<'a> { 
-    pub fn new(
-        inscache: &'a InstanceCache, 
+    pub fn new(inscache: &'a InstanceCache, 
         queue: HashMap<&'a str, Vec<&'a str>>, 
         log: &'a mut Logger, 
         action_flags: TransactionFlags, 
