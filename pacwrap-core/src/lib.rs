@@ -1,9 +1,9 @@
 use std::process::exit;
 use std::fmt::{Display, Formatter};
 
-use config::ConfigError;
-use exec::ExecutionError;
-use utils::arguments::InvalidArgument;
+use crate::{config::ConfigError, 
+    exec::ExecutionError, 
+    utils::arguments::InvalidArgument};
 
 use crate::{constants::{BOLD, RESET}, 
     utils::{print_error, print_warning}};

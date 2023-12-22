@@ -1,6 +1,4 @@
-use std::process::exit;
-use std::env::var;
-use std::process::id;
+use std::{env::var, process::id, process::exit};
 
 use lazy_static::lazy_static;
 use nix::unistd::geteuid;
