@@ -45,7 +45,7 @@ esac
 
 # Cleanup and prepare container runtime
 
-./dist/tools/clean.sh runtime 0> /dev/null
+./dist/tools/clean.sh runtime
 mkdir -p $DEST_DIR$LIB_DIR $DEST_DIR$BIN_DIR
 
 # Validate preparation environment
