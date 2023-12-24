@@ -52,7 +52,6 @@ pub fn is_color_terminal() -> bool {
     is_dumb && isatty(0).is_ok() && isatty(1).is_ok()
 }
 
-
 pub fn is_truecolor_terminal() -> bool {
     let colorterm = match var("COLORTERM") {
         Ok(value) => {
@@ -64,6 +63,10 @@ pub fn is_truecolor_terminal() -> bool {
     };
 
     is_color_terminal() && colorterm
+}
+
+pub fn read_le_32(vec: &Vec<u8>, pos: usize) -> u32 {
+    ((vec[pos+0] as u32) << 0) + ((vec[pos+1] as u32) << 8) + ((vec[pos+2] as u32) << 16) + ((vec[pos+3] as u32) << 24) 
 }
 
 fn wait_on_process(mut child: Child) { 

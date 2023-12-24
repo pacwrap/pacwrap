@@ -1,19 +1,16 @@
-use std::rc::Rc;
-
 use alpm::Progress;
 use dialoguer::console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use crate::constants::{BOLD, RESET};
-
-use super::{utils::whitespace, transaction::{TransactionType, TransactionMode}};
+use crate::{constants::{BOLD, RESET}, sync::transaction::{TransactionType, TransactionMode}};
+use super::whitespace;
 
 #[derive(Clone)]
 pub struct ProgressEvent {
     progress: ProgressBar,
     offset: usize,
     style: ProgressStyle,
-    current: Rc<str>,
+    current: String,
 }
 
 impl ProgressEvent {
@@ -60,7 +57,7 @@ pub fn condensed(progress: Progress, pkgname: &str, percent: i32, howmany: usize
         let progress_name: String = name(progress,pkgname);
         let whitespace = whitespace(total.to_string().len(), pos.to_string().len());
 
-        if this.current.as_ref() != "" {
+        if this.current != "" {
             this.progress = ProgressBar::new(howmany as u64);
             this.progress.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *BOLD, *RESET, *BOLD, *RESET)); 
             this.progress.set_style(this.style.clone());
@@ -95,7 +92,7 @@ fn name(progress: Progress, pkgname: &str) -> String {
     }
 }
 
-fn ident(progress: Progress, pkgname: &str) -> Rc<str> {
+fn ident(progress: Progress, pkgname: &str) -> String {
     match progress {
         Progress::KeyringStart => "keyring",
         Progress::IntegrityStart => "integrity",

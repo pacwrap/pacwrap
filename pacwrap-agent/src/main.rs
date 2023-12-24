@@ -1,5 +1,4 @@
 use pacwrap_core::utils::{print_error, Arguments, arguments::Operand};
-use serde::{Serialize, Deserialize};
 
 mod agent;
 
@@ -9,14 +8,6 @@ fn main() {
 
     match param {
         Operand::Value("transact") => agent::transact(),
-        _ => print_error(arguments.invalid_operand().to_string())
+        _ => print_error("Direct execution of this binary is unsupported.") 
     }
-}
-
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Test {
-    string: String,
-    version_major: i16,
-    version_minor: i16,
 }

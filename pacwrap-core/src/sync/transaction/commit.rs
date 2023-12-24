@@ -1,24 +1,28 @@
-use std::process::ChildStdin;
+use std::{fs::File, path::Path};
 
 use alpm::Alpm;
 use dialoguer::console::Term;
 use serde::Serialize;
-use crate::{exec::utils::execute_agent, sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation, self}};
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
-use crate::constants::{RESET, BOLD, DIM};
+use crate::{exec::utils::execute_agent, 
+    sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation, self}, 
+    ErrorKind, 
+    utils::prompt::prompt,
+    constants::{PACWRAP_AGENT_FILE, RESET, BOLD, DIM},
+    config::InstanceHandle,
+};
 
-use crate::utils::prompt::prompt;
-use crate::config::InstanceHandle;
 use super::{Transaction, 
     TransactionState, 
     TransactionHandle, 
     TransactionAggregator,
     TransactionFlags,
+    TransactionParameters,
     Result, 
     Error};
 
-#[allow(dead_code)]
+
 pub struct Commit {
     state: TransactionState,
     keyring: bool,
@@ -53,56 +57,72 @@ impl Transaction for Commit {
             erroneous_preparation(error)?
         }
 
-        if let Some(result) = confirm(&self.state, ag, handle) {
+        let result = confirm(&self.state, ag, handle);
+        let download = result.1.unwrap_or((0,0));
+
+        if let Some(result) = result.0 {
             return result;
         }
 
-        handle.set_alpm(None);
-  
-        match execute_agent(inshandle) {
-            Ok(mut child) => {
-                let stdin = child.stdin.take().unwrap();
+        handle.set_alpm(None); 
+        write_agent_params(ag, handle, download)?; 
+ 
+        let mut agent = match execute_agent(inshandle) {
+            Ok(child) => child,
+            Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,      
+        };
 
-                write_to_stdin(&*DEFAULT_ALPM_CONF, &stdin)?; 
-                write_to_stdin(ag.action(), &stdin)?; 
-                write_to_stdin(handle.metadata(), &stdin)?;
+        match agent.wait() {
+            Ok(exit_status) => match exit_status.code().unwrap_or(-1) {
+                0 => {
+                    if self.keyring {
+                        ag.keyring_update(inshandle)?;
+                    }
 
-                match child.wait() {
-                    Ok(exit_status) => match exit_status.code().unwrap_or(0) {
-                        1 => Err(Error::AgentError),
-                        0 => {
-                            if self.keyring {
-                                ag.keyring_update(inshandle)?;
-                            }
-
-                            handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
-                            handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
-                            ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
-                            state_transition(&self.state, handle, true)
-                        }, 
-                        _ => Err(Error::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(0))))?,  
-                    },
-                    Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
-                }
+                    handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
+                    handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
+                    ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
+                    state_transition(&self.state, handle, true)
+                },
+                1 => Err(Error::TransactionFailureAgent),
+                2 => Err(Error::ParameterAcquisitionFailure),
+                3 => Err(Error::DeserializationFailure), 
+                4 => Err(Error::InvalidMagicNumber),
+                5 => Err(Error::AgentVersionMismatch),
+                _ => Err(Error::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(-1))))?,  
             },
-            Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,     
+            Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
         }
     } 
 }
 
-fn write_to_stdin<T: for<'de> Serialize>(input: &T, stdin: &ChildStdin) -> Result<()> { 
-    match ciborium::into_writer::<T, &ChildStdin>(input, stdin) {
+fn write_agent_params(ag: &TransactionAggregator, handle: &TransactionHandle, download: (u64, usize)) -> Result<()> {
+    let f = match File::create(Path::new(*PACWRAP_AGENT_FILE)) {
+        Ok(f) => f,
+        Err(error) => Err(ErrorKind::IOError((*PACWRAP_AGENT_FILE).into(), error.kind()))?
+    };
+
+    serialize(&TransactionParameters::new(*ag.action(), *handle.get_mode(), download.0, download.1), &f)?;  
+    serialize(&*DEFAULT_ALPM_CONF, &f)?; 
+    serialize(handle.metadata(), &f)?; 
+    Ok(())
+}
+
+fn serialize<T: for<'de> Serialize>(input: &T, file: &File) -> Result<()> { 
+    match bincode::serialize_into::<&File, T>(file, input) {
         Ok(()) => Ok(()),
         Err(error) => Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error))),
     }
 }
 
-fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> Option<Result<TransactionState>> {
+fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> (Option<Result<TransactionState>>, Option<(u64, usize)>) {
+    let mut download = None;
+
     if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
-        summary(handle.alpm());
+        download = Some(summary(handle.alpm()));
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            return Some(state_transition(state, handle, false)); 
+            return (Some(state_transition(state, handle, false)), None); 
         } 
 
         if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
@@ -110,13 +130,13 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
             let query = format!("Proceed with {action}?");
 
             if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
-                return Some(state_transition(state, handle, false));
+                return (Some(state_transition(state, handle, false)), None);
             }
         } 
     }
 
     handle.alpm_mut().trans_release().ok();
-    None
+    (None, download)
 }
 
 fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle, updated: bool) -> Result<TransactionState> {
@@ -129,8 +149,7 @@ fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle
     })
 }
 
-#[allow(unused_variables)]
-fn summary(handle: &Alpm) { 
+fn summary(handle: &Alpm) -> (u64, usize) { 
     let mut installed_size_old: i64 = 0;
     let mut installed_size: i64 = 0;
     let mut download: i64 = 0;
@@ -184,8 +203,8 @@ fn summary(handle: &Alpm) {
 
     if download > 0 {
         println!("{}Total Download Size{}: {}", *BOLD, *RESET, download.to_byteunit(SI));
-        //handle.set_dl_cb(DownloadCallback::new(download as u64, files_to_download), dl_event::download_event);
     }
 
     println!();
+    (download as u64, files_to_download)
 }

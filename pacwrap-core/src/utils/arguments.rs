@@ -154,5 +154,3 @@ impl Display for InvalidArgument {
         }
     }
 }
-
-

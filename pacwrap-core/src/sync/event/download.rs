@@ -5,7 +5,7 @@ use dialoguer::console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;
 
-use super::utils::whitespace;
+use super::whitespace;
 
 lazy_static!{
    static ref INIT: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg}")
@@ -92,7 +92,8 @@ pub fn download_event(file: &str, download: AnyDownloadEvent, this: &mut Downloa
                     this.files_done += 1;
          
                     total.set_message(format!("Total ({}{}/{})", 
-                        whitespace(this.total_files_len, this.files_done.to_string().len()), 
+                        whitespace(this.total_files_len, 
+                            this.files_done.to_string().len()), 
                         this.files_done, 
                         this.total_files)); 
                     
