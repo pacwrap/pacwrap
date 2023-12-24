@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, fmt::{Display, Formatter}};
+use std::{borrow::Cow, collections::HashSet, fmt::{Display, Formatter}, fs::remove_file};
 
 use bitflags::bitflags;
 use alpm::{Alpm, PackageReason, TransFlag};
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config,
     config::InstanceHandle,
-    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED}, 
+    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED, PACWRAP_AGENT_FILE}, 
     sync::{
         resolver_local::LocalDependencyResolver,
         resolver::DependencyResolver,
@@ -29,8 +29,15 @@ mod stage;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub static MAGIC_NUMBER: u32 = 663445956;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Error {
-    AgentError,
+    TransactionFailureAgent,
+    ParameterAcquisitionFailure,
+    DeserializationFailure,
+    InvalidMagicNumber,
+    AgentVersionMismatch,
     NothingToDo,
     DependentContainerMissing(String),
     RecursionDepthExceeded(isize),
@@ -102,6 +109,19 @@ pub struct TransactionMetadata<'a> {
     queue: Vec<Cow<'a, str>>,
     mode: TransactionMode,
     flags: (u8, u32)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TransactionParameters {
+    magic: u32,
+    ver_major: u8,
+    ver_minor: u8,
+    ver_patch: u8,
+    bytes: u64,
+    files: u64,
+    action: TransactionType,
+    mode: TransactionMode, 
+ 
 }
 
 impl TransactionMode {
@@ -188,6 +208,10 @@ impl Display for Error {
             Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
             Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
             Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
+            Self::DeserializationFailure => write!(fmter, "Deserialization of input parameters failed."),
+            Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
+            Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
+            Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."), 
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
             _ => write!(fmter, "Nothing to do."),
         }
@@ -396,14 +420,16 @@ impl <'a>TransactionHandle<'a> {
 
     fn release_on_fail(self, error: Error) {
         match error {
-            Error::AgentError => (), _ => print_error(error),
+            Error::TransactionFailureAgent => (), _ => print_error(error),
         }
 
+        remove_file(*PACWRAP_AGENT_FILE).ok();
         println!("{} Transaction failed.", *ARROW_RED);
         drop(self);
     }
 
     pub fn release(self) {
+        remove_file(*PACWRAP_AGENT_FILE).ok();
         drop(self);
     }
     
@@ -437,5 +463,36 @@ impl <'a>TransactionHandle<'a> {
 
     fn metadata(&self) -> &TransactionMetadata {
         &self.meta
+    }
+}
+
+impl TransactionParameters {
+    fn new(t_type: TransactionType, t_mode: TransactionMode, dl_size: u64, amount: usize) -> Self {
+        Self {
+            magic: MAGIC_NUMBER,
+            ver_major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
+            ver_minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
+            ver_patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
+            bytes: dl_size,
+            files: amount as u64,
+            action: t_type,
+            mode: t_mode,
+        }
+    }
+
+    pub fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    pub fn files(&self) -> usize {
+        self.files as usize
+    }
+
+    pub fn mode(&self) -> TransactionMode {
+        self.mode
+    }
+
+    pub fn action(&self) -> TransactionType {
+        self.action
     }
 }

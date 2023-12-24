@@ -18,6 +18,7 @@ lazy_static! {
     pub static ref CACHE_DIR: &'static str = env_default("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
     pub static ref CONFIG_DIR: &'static str = env_default("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
     pub static ref DATA_DIR: &'static str = env_default("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
+    pub static ref PACWRAP_AGENT_FILE: &'static str = format!("/run/user/{}/pacwrap_agent_{}", geteuid(), &id()).leak(); 
     pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", geteuid());
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", geteuid(), &id());
     pub static ref LOG_LOCATION: &'static str = format!("{}/pacwrap.log", *DATA_DIR).leak();

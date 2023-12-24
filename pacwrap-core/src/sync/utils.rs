@@ -60,18 +60,6 @@ impl AlpmUtils for Alpm {
     }
 }
 
-pub fn whitespace(total: usize, current: usize) -> String {
-    let difference = total-current;
-    let mut whitespace = String::new();
-    if difference > 0 {
-        for _ in 0..difference {
-            whitespace.push_str(" ");
-        } 
-    }
-
-    whitespace
-}
-
 pub fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Result<()> {
     match error.0 {
         CommitResult::FileConflict(file) => {

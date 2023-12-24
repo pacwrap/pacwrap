@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::{utils::{print_warning, print_error},
     constants::{BAR_GREEN, RESET, BOLD, ARROW_RED, CACHE_DIR, DATA_DIR, CONFIG_DIR},
-    sync::dl_event::DownloadCallback,
+    sync::event::download::{DownloadCallback, download_event},
 	config::{InsVars,
     InstanceHandle,
     cache::InstanceCache}};
@@ -18,9 +18,7 @@ lazy_static! {
     static ref DEFAULT_ALPM_CONF: AlpmConfigData = AlpmConfigData::new();
 }
 
-pub mod progress_event;
-pub mod dl_event;
-pub mod query_event;
+pub mod event;
 pub mod utils;
 pub mod transaction;
 pub mod filesystem;
@@ -104,7 +102,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
             println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
-            handle.set_dl_cb(DownloadCallback::new(0, 0), dl_event::download_event);
+            handle.set_dl_cb(DownloadCallback::new(0, 0), download_event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {
                 print_error(format!("Unable to initialize transaction: {}.",err.to_string()));

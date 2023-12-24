@@ -1,6 +1,6 @@
-use std::{process::{Child, Command, Stdio}, io::Error, env::var};
+use std::{process::{Child, Command}, io::Error, env::var};
 
-use crate::{constants::{BWRAP_EXECUTABLE, self}, 
+use crate::{constants::{BWRAP_EXECUTABLE, self, PACWRAP_AGENT_FILE}, 
     config::InstanceHandle, 
     ErrorKind};
 
@@ -10,11 +10,11 @@ pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> {
 
     Command::new(BWRAP_EXECUTABLE)
     .env_clear()
-    .stdin(Stdio::piped())
     .arg("--bind").arg(&ins.vars().root()).arg("/mnt")
     .arg("--tmpfs").arg("/tmp")
     .arg("--tmpfs").arg("/etc")
-    .arg("--symlink").arg("/mnt/usr").arg("/usr") 
+    .arg("--symlink").arg("/mnt/usr").arg("/usr")
+    .arg("--ro-bind").arg(*PACWRAP_AGENT_FILE).arg("/tmp/agent_params")
     .arg("--ro-bind").arg(format!("{}/lib", dist_img)).arg("/lib64")
     .arg("--ro-bind").arg(format!("{}/bin", dist_img)).arg("/bin")
     .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")

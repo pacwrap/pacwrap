@@ -1,84 +1,53 @@
-use std::fmt;
-use std::fs::{self, File, Metadata};
-use std::os::unix::fs::symlink;
-use std::os::unix::prelude::MetadataExt;
-use std::path::Path;
-use std::sync::Arc;
-use std::sync::mpsc::{Sender, self, Receiver};
+use std::{fs::{self, File, Metadata},
+    io::Read,
+    os::unix::fs::symlink,
+    os::unix::prelude::MetadataExt,
+    path::Path,
+    sync::{Arc, mpsc::{Sender, self, Receiver}},
+    collections::{HashMap, HashSet}};
 
 use dialoguer::console::Term;
-use rayon::prelude::*;
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::{prelude::*, {ThreadPool, ThreadPoolBuilder}};
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle, ProgressDrawTarget};
-use serde::{Serialize, Deserialize, Deserializer, Serializer, de::Visitor};
+use serde::{Serialize, Deserialize};
 use walkdir::WalkDir;
-use std::collections::{HashMap, HashSet};
 
-use crate::ErrorKind;
-use crate::config::{InstanceHandle, InstanceCache, InstanceType::*};
-use crate::constants::{RESET, BOLD, ARROW_CYAN, BAR_GREEN, DATA_DIR};
-use crate::utils::{print_warning, print_error};
+use crate::{ErrorKind,
+    config::{InstanceHandle, InstanceCache, InstanceType::*},
+    constants::{RESET, BOLD, ARROW_CYAN, BAR_GREEN, DATA_DIR},
+    utils::{print_warning, print_error, read_le_32}};
 
-impl Serialize for FileType {
-    fn serialize<D: Serializer>(&self, serializer: D) -> Result<D::Ok, D::Error> 
-    where D: serde::Serializer {
-        serializer.serialize_i64(self.as_integer())
-    }
-}
-
-
-impl <'de>Deserialize<'de> for FileType {
-    fn deserialize<D: Deserializer<'de>>(serializer: D) -> Result<Self, D::Error> 
-    where D: serde::Deserializer<'de> {
-        serializer.deserialize_i64(FileTypeVisitor)
-    }
-}
-
-struct FileTypeVisitor;
-
-impl<'de> Visitor<'de> for FileTypeVisitor {
-    type Value = FileType;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "an integer between `0` and `2`")
-    }
-
-    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-    where E: serde::de::Error, {
-        let value = v.into();
-
-        if let FileType::Invalid(v) = value {
-            Err(E::invalid_value(serde::de::Unexpected::Signed(v), &self))?
-        }
-
-        Ok(value)
-    }
-}
+static VERSION: u32 = 1;
+static MAGIC_NUMBER: u32 = 408948530;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct FileSystemState {
+    magic: u32,
+    version: u32,
     files: IndexMap<Arc<str>, (FileType, Arc<str>)>
 }
 
 impl FileSystemState {
     fn new() -> Self {
         Self {
-            files: IndexMap::new()
+            magic: MAGIC_NUMBER,
+            version: VERSION,
+            files: IndexMap::new(),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 enum FileType {
     HardLink,
     SymLink,
     Directory,
-    Invalid(i64),
+    Invalid(i8),
 }
 
-impl From<i64> for FileType {
-    fn from(integer: i64) -> Self {
+impl From<i8> for FileType {
+    fn from(integer: i8) -> Self {
         match integer {
             2 => Self::Directory,
             1 => Self::SymLink,
@@ -100,23 +69,11 @@ impl From<Metadata> for FileType {
     }
 }
 
-impl FileType {
-    fn as_integer(&self) -> i64 {
-        match self {
-            Self::Directory => 2,
-            Self::SymLink => 1,
-            Self::HardLink => 0,
-            Self::Invalid(i) => *i,
-        }
-    }
-}
-
 enum SyncMessage {
     LinkComplete(Arc<str>),
     SaveState(Arc<str>, FileSystemState),
 }
 
-#[allow(dead_code)]
 pub struct FileSystemStateSync<'a> {
     state_map: HashMap<Arc<str>, FileSystemState>, 
     state_map_prev: HashMap<Arc<str>, FileSystemState>,
@@ -228,37 +185,51 @@ impl <'a>FileSystemStateSync<'a> {
             return st.clone()
         }
 
+        let mut header_buffer = vec![0; 8];     
         let path = format!("{}/state/{}.dat", *DATA_DIR, instance);
-        let file = match File::open(&path) { 
+        let mut file = match File::open(&path) { 
             Ok(file) => file,
-            Err(err) => {
-                let state = FileSystemState::new(); 
-      
+            Err(err) => { 
                 if err.kind() != std::io::ErrorKind::NotFound {
-                    print_warning(format!("Reading '{}': {}", path, err.kind()));
+                    print_error(format!("'{}': {}", path, err.kind()));
                 }
 
-                self.state_map_prev.insert(instance.clone(), state.clone()); 
-                return state
+                return self.blank_state(instance);  
             },
         };
 
-        match ciborium::from_reader::<FileSystemState, File>(file) {
+        if let Err(error) = file.read_exact(&mut header_buffer) {
+            print_error(format!("'{}{instance}{}.dat': {error}", *BOLD, *RESET));
+            return self.blank_state(instance);
+        }
+
+        let magic = read_le_32(&header_buffer, 0);
+        let version = read_le_32(&header_buffer, 4);
+
+        if magic != MAGIC_NUMBER {
+            print_warning(format!("'{}{instance}{}.dat': Magic number mismatch ({MAGIC_NUMBER} != {magic})", *BOLD, *RESET));
+            return self.blank_state(instance); 
+        } else if version != VERSION { 
+            return self.blank_state(instance);  
+        }
+
+        match bincode::deserialize_from::<&File, FileSystemState>(&file) {
             Ok(state) => { 
                 self.state_map_prev.insert(instance.clone(), state.clone());
                 state
             },
             Err(err) => { 
-                let state = FileSystemState::new();
-
-                if let ciborium::de::Error::Semantic(_, error) = err {
-                    print_error(format!("Deserialization failure occurred with '{}{instance}{}.dat': {error}", *BOLD, *RESET)); 
-                }
-
-                self.state_map_prev.insert(instance.clone(), state.clone()); 
-                state
+                print_error(format!("Deserialization failure occurred with '{}{instance}{}.dat': {}", *BOLD, *RESET, err.as_ref())); 
+                return self.blank_state(instance);   
             }
         }
+    }
+
+    fn blank_state(&mut self, instance: &Arc<str>) -> FileSystemState {
+        let state = FileSystemState::new();
+
+        self.state_map_prev.insert(instance.clone(), state.clone());   
+        state 
     }
 
     fn write(&mut self, tx: Sender<()>, ds: FileSystemState, dep: Arc<str>) {
@@ -272,7 +243,7 @@ impl <'a>FileSystemStateSync<'a> {
         };
 
         self.pool().unwrap().spawn(move ||{ 
-            if let Err(err) = ciborium::into_writer(&ds, output) {
+            if let Err(err) = bincode::serialize_into(output, &ds) {
                 print_error(format!("Serialization failure occurred with '{}{dep}{}.dat': {}", *BOLD, *RESET, err.to_string())); 
             }
 
