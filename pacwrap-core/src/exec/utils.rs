@@ -5,7 +5,7 @@ use crate::{constants::{BWRAP_EXECUTABLE, self, PACWRAP_AGENT_FILE},
     ErrorKind};
 
 pub fn execute_agent(ins: &InstanceHandle) -> Result<Child,Error> { 
-    let dist_img = option_env!("PACWRAP_DIST_IMG").unwrap_or("/usr/lib/pacwrap/runtime");
+    let dist_img = option_env!("PACWRAP_DIST_IMG").unwrap_or("/usr/share/pacwrap/runtime");
     let dist_tls = option_env!("PACWRAP_DIST_TLS").unwrap_or("/etc/ca-certificates/extracted/tls-ca-bundle.pem"); 
 
     Command::new(BWRAP_EXECUTABLE)

@@ -24,7 +24,7 @@ RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 DIST_RUNTIME="./dist/runtime"
 DIST_BASE="./dist/pacwrap-base-dist"
-DIST_REPO="./dist/dist-repo"
+DIST_REPO="./dist/repo"
 
 runtime() {
 	if [[ -d "$DIST_RUNTIME" ]]; then

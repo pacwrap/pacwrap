@@ -1,4 +1,6 @@
+/.*
 /*.sh
+/assets/*
 /target
 /dist/repo
 /dist/runtime
