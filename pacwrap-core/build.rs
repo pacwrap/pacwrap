@@ -3,7 +3,7 @@ use std::env::var;
 fn dist_repo() -> String {
     match var("PACWRAP_DIST_REPO") {
         Ok(var) => var,
-        Err(_) => "file:///usr/share/pacwrap/dist-repo".into(),
+        Err(_) => "/usr/share/pacwrap/repo".into(),
     }
 }
 

@@ -11,7 +11,7 @@ conflicts=('pacwrap-base-dist')
 depends=('fakeroot' 'fakechroot' 'flatpak-xdg-utils')
 
 source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
-sha512sums=('96e4cfde8f56eaff18d5b807564f3fa8b2a1b72d115210c7f3de44a8651dfecb3a6b862fcf3b622e0ecc4bd28fb7726fb9a0dee163e3871895a1975830e88dea')
+sha512sums=('49cb46392f8f1f776e9ef0bd4a1ebd236ded41f5d4e410262829ee2f4df7c3c10ebf8bc71797b07ef0323b3bbaf02ce8ea0154f4e8c0a3d457809ef5939ceb84')
 
 package() {
   cd "${srcdir}"

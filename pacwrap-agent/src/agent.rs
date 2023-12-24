@@ -1,4 +1,4 @@
-use std::{fs::{self, File}, process::exit, os::unix::prelude::FileExt, env};
+use std::{fs::{self, File}, process::exit, io::ErrorKind::NotFound, os::unix::prelude::FileExt, env};
 
 use serde::Deserialize;
 
@@ -97,8 +97,10 @@ fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParamet
     handle.mark_depends();
 
     if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/etc/ld.so.cache") {
-        print_warning(format!("Failed to propagate ld.so.cache: {}", error));
-    }
+        match error.kind() {
+            NotFound => (),_ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)), 
+        }
+   }
 
     Ok(())
 }

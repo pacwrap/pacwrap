@@ -1,19 +1,30 @@
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [package]
 name = "pacwrap"
 version = "0.5.0"
+authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
+license ="GPL-3.0-only"
+readme = "README.md"
 edition = "2021"
 default-run = "pacwrap"
+
+description = "Facilitates the creation, management, and execution of unprivileged, sandboxed containers utilizing bubblewrap and libalpm."
+homepage = "https://pacwrap.sapphirus.org/"
+repository = "https://git.sapphirus.org/pacwrap/pacwrap"
 
 [dependencies]
 pacwrap-core = { path = "../pacwrap-core/", version = "0.5.0" }
 command-fds = "0.2.2"
 nix = "0.22.3, <= 0.22.3"
-serde = { version = "1.0", features = ["derive", "rc"] }
-serde_yaml = "0.9"
+
+# Container runtime
 os_pipe = "1.1.4"
 signal-hook = "0.3.15"
 lazy_static = "1.4.0"
-alpm = { version = "2.2.2", features = ["checkver"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_yaml = "0.9"
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
+
+# Packaging
+alpm = { version = "2.2.2", features = ["checkver"] }

@@ -23,4 +23,4 @@ echo "Preparing repo.."
 echo "Packaging.."
 ./dist/tools/package.sh pacwrap-base-dist $1 $2
 echo "Building repo.."
-repose pacwrap -vzfr ./dist/dist-repo/
+repose pacwrap -vzfr ./dist/repo/
