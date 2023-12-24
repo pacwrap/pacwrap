@@ -1,6 +1,6 @@
 # pacwrap
 
-<img align="left" src="./assets/logo.svg">
+<img align="left" src="../assets/logo.svg">
 
 A package management front-end which utilises libalpm to facilitate the creation of unprivileged, userspace containers with parallelised, filesystem-agnostic deduplication. Sandboxing of unprivileged namespace containers is provided via bubblewrap to execute package transactions and launch applications inside of these containers.
 

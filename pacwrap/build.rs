@@ -27,13 +27,6 @@ fn release(debug: bool) -> &'static str {
     }
 }
 
-fn dist_repo() -> String {
-    match var("PACWRAP_DIST_REPO") {
-        Ok(var) => var,
-        Err(_) => "file:///usr/share/pacwrap/dist-repo".into(),
-    }
-}
-
 fn is_debug() -> bool {
     var("DEBUG").unwrap().parse().unwrap()
 }
@@ -42,7 +35,6 @@ fn main() {
     let debug: bool = is_debug();
 
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_REPO");
-    println!("cargo:rustc-env=PACWRAP_DIST_REPO={}", dist_repo());
     println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", head());
     println!("cargo:rustc-env=PACWRAP_BUILDTIME={}", time(debug));
     println!("cargo:rustc-env=PACWRAP_BUILD={}", release(debug));
