@@ -46,7 +46,7 @@ impl <'a>InstanceCache<'a> {
                 ErrorKind::IOError(_, kind) => match kind { 
                     NotFound => { 
                         let vars = InsVars::new(ins);         
-                        let cfg = Instance::new(instype, vec!(), deps);
+                        let cfg = Instance::new(instype, deps, vec!());
                         
                         InstanceHandle::new(cfg, vars)
                     },

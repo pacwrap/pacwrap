@@ -18,9 +18,9 @@ pub struct Instance<'a> {
 }
 
 impl <'a>Instance<'a> { 
-    pub fn new(ctype: InstanceType, pkg: Vec<Cow<'a, str>>, deps: Vec<Cow<'a, str>>) -> Self {
+    pub fn new(ctype: InstanceType, deps: Vec<Cow<'a, str>>, pkgs: Vec<Cow<'a, str>>) -> Self {
         Self {
-            metadata: InstanceMetadata::new(ctype,pkg,deps),
+            metadata: InstanceMetadata::new(ctype,deps,pkgs),
             runtime: InstanceRuntime::new(), 
         }
     }
@@ -33,10 +33,10 @@ pub struct InstanceHandle<'a> {
 }
 
 impl <'a>InstanceHandle<'a> {
-    pub fn new(ins: Instance<'a>, v: InsVars<'a>) -> Self {
+    pub fn new(ins: Instance<'a>, ins_vars: InsVars<'a>) -> Self {
         Self {
             instance: ins,
-            vars: v,
+            vars: ins_vars,
         }
     }
 
@@ -172,11 +172,11 @@ pub struct InstanceMetadata<'a> {
 }
 
 impl <'a>InstanceMetadata<'a> {
-    fn new(ctype: InstanceType, deps: Vec<Cow<'a, str>>, pkg: Vec<Cow<'a, str>>) -> Self {
+    fn new(ctype: InstanceType, deps: Vec<Cow<'a, str>>, pkgs: Vec<Cow<'a, str>>) -> Self {
         Self {
             container_type: ctype,
             dependencies: deps,
-            explicit_packages: pkg,
+            explicit_packages: pkgs,
             meta_version: time_as_seconds(),
         }
     }
