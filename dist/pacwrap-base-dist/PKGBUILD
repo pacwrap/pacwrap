@@ -1,24 +1,26 @@
 # Maintainer: Xavier R.M. (sapphirus at azorium dot net)
 
 pkgname=('pacwrap-base-dist')
-pkgver=0.5.0
+pkgver=0.5.2
 pkgrel=1
 pkgdesc="Distribution package to configure Arch Linux for use with pacwrap."
 arch=('any')
 url="https://pacwrap.sapphirus.org/"
 license=('GPLv3-only')
-conflicts=('pacwrap-base-dist')
-depends=('fakeroot' 'fakechroot' 'flatpak-xdg-utils')
 
 source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
 sha512sums=('49cb46392f8f1f776e9ef0bd4a1ebd236ded41f5d4e410262829ee2f4df7c3c10ebf8bc71797b07ef0323b3bbaf02ce8ea0154f4e8c0a3d457809ef5939ceb84')
 
 package() {
+  conflicts=('pacwrap-base-dist')
+  depends=('fakeroot' 'fakechroot' 'flatpak-xdg-utils')
+
   cd "${srcdir}"
 
 	local pacman_hooks=('20-systemd-sysusers'
 			    '30-systemd-tmpfiles' 
-			    '30-systemd-daemon-reload'
+			    '30-systemd-daemon-reload-system'
+			    '30-systemd-daemon-reload-user'
 			    '30-systemd-sysctl'
 			    '30-systemd-catalog'
 			    '30-systemd-update'
@@ -30,8 +32,8 @@ package() {
 	for pacman_hook in ${pacman_hooks[@]}; do
 		ln -s /dev/null "${pkgdir}/etc/pacman.d/hooks/${pacman_hook}.hook"; done
 	
-  ln -s ../../../usr/lib/flatpak-xdg-utils/xdg-open "${pkgdir}/usr/local/bin/"
-	ln -s ../../../usr/lib/flatpak-xdg-utils/xdg-email "${pkgdir}/usr/local/bin/"
+  ln -s /usr/lib/flatpak-xdg-utils/xdg-open "${pkgdir}/usr/local/bin/"
+	ln -s /usr/lib/flatpak-xdg-utils/xdg-email "${pkgdir}/usr/local/bin/"
 
   install -Dm 644 "dist_src/0-pacwrap-dist.hook" "${pkgdir}/usr/share/libalpm/hooks/0-pacwrap-dist.hook" 
   install -Dm 644 "dist_src/42-trust-permission.hook" "${pkgdir}/usr/share/libalpm/hooks/42-trust-permission.hook"

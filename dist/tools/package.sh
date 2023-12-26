@@ -23,6 +23,6 @@ tar acvf $1-$2-$3.tar.zst dist_src
 SUM=($(sha512sum $1-$2-$3.tar.zst))
 cp PKGBUILD PKGBUILD.tmp
 sed -e "s/sha512sums=(.*)/sha512sums=('${SUM[0]}')/g;s/pkgver=.*/pkgver=$2/g;s/pkgrel=.*/pkgrel=$3/g" < "PKGBUILD.tmp" > "PKGBUILD"
-makepkg -scf --config ../config/makepkg.conf 
+makepkg -scf --config ../config/makepkg.conf 0 > /dev/null 
 cp $1-$2-$3-any.pkg.tar.zst ../repo/
 rm PKGBUILD.tmp
