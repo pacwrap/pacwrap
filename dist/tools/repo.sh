@@ -18,9 +18,9 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-echo "Preparing repo.."
 ./dist/tools/clean.sh repo
-echo "Packaging.."
 ./dist/tools/package.sh pacwrap-base-dist $1 $2
-echo "Building repo.."
-repose pacwrap -vzfr ./dist/repo/
+
+if [[ ! -z "$PACWRAP_DIST_REPO" ]]; then
+  repose pacwrap -vzfr ./dist/repo/
+fi
