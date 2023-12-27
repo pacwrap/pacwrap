@@ -1,7 +1,7 @@
 # Maintainer: Xavier R.M. (sapphirus at azorium dot net)
 
 pkgname=('pacwrap-base-dist')
-pkgver=0.5.2
+pkgver=0.5.3
 pkgrel=1
 pkgdesc="Distribution package to configure Arch Linux for use with pacwrap."
 arch=('any')
@@ -9,7 +9,7 @@ url="https://pacwrap.sapphirus.org/"
 license=('GPLv3-only')
 
 source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
-sha512sums=('49cb46392f8f1f776e9ef0bd4a1ebd236ded41f5d4e410262829ee2f4df7c3c10ebf8bc71797b07ef0323b3bbaf02ce8ea0154f4e8c0a3d457809ef5939ceb84')
+sha512sums=('79b91f3051df9ab971544a30c0b5c3a06b70c979629ef8cc54c2964da67cc352281de94dbd55a1ede6df0e1d9e562ac90584e725d44dce2999f5855aa7b60e23')
 
 package() {
   conflicts=('pacwrap-base-dist')

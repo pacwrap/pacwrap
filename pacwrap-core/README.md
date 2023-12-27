@@ -1,3 +1,3 @@
-# pacwrap-core - core library
+# pacwrap-core
 
-Core library providing core functionality for pacwrap.
+Core library providing the core functionality for pacwrap.
