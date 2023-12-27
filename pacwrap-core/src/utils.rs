@@ -8,7 +8,7 @@ use std::fmt::Display;
 use nix::unistd::isatty;
 
 use crate::ErrorKind;
-use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
+use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET, TERM, COLORTERM};
 
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
@@ -44,25 +44,17 @@ pub fn handle_process(name: &str, result: Result<Child, Error>) -> Result<(), Er
 }
 
 pub fn is_color_terminal() -> bool {
-    let is_dumb = match var("TERM") {
-        Ok(value) => value.to_lowercase() != "dumb",
-        Err(_) => false,
-    };
+    let value = *TERM;
+    let is_dumb = ! value.is_empty() && value.to_lowercase() != "dumb";
 
     is_dumb && isatty(0).is_ok() && isatty(1).is_ok()
 }
 
 pub fn is_truecolor_terminal() -> bool {
-    let colorterm = match var("COLORTERM") {
-        Ok(value) => {
-            let value = value.to_lowercase();
+    let value = COLORTERM.to_lowercase();
 
-            value == "truecolor" || value == "24bit"
-        }
-        Err(_) => false,
-    };
+    is_color_terminal() && value == "truecolor" || value == "24bit"
 
-    is_color_terminal() && colorterm
 }
 
 pub fn read_le_32(vec: &Vec<u8>, pos: usize) -> u32 {

@@ -1,7 +1,7 @@
 use std::{env::var, process::id, process::exit};
 
 use lazy_static::lazy_static;
-use nix::unistd::geteuid;
+use nix::unistd::{geteuid, getegid};
 
 use crate::utils::{is_color_terminal, is_truecolor_terminal, print_error};
 
@@ -13,14 +13,23 @@ const PACWRAP_DATA_DIR: &str = "/.local/share/pacwrap";
 const PACWRAP_CACHE_DIR: &str = "/.cache/pacwrap";
 
 lazy_static! {
+    pub static ref UID: u32 = geteuid().as_raw();
+    pub static ref GID: u32 = getegid().as_raw();
     pub static ref HOME: &'static str = env("HOME");
     pub static ref USER: &'static str = env("USER");
+    pub static ref TERM: &'static str = env_opt("TERM");
+    pub static ref COLORTERM: &'static str = env_opt("COLORTERM");
+    pub static ref LANG: &'static str = env_opt("LAMG");
+    pub static ref WAYLAND_DISPLAY: &'static str = env_opt("WAYLAND_DISPLAY");
+    pub static ref X11_DISPLAY: &'static str = env_opt("DISPLAY"); 
+    pub static ref XAUTHORITY: &'static str = env_opt("XAUTHORITY");
     pub static ref CACHE_DIR: &'static str = env_default("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
     pub static ref CONFIG_DIR: &'static str = env_default("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
     pub static ref DATA_DIR: &'static str = env_default("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
-    pub static ref PACWRAP_AGENT_FILE: &'static str = format!("/run/user/{}/pacwrap_agent_{}", geteuid(), &id()).leak(); 
-    pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", geteuid());
-    pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", geteuid(), &id());
+    pub static ref PACWRAP_AGENT_FILE: &'static str = format!("/run/user/{}/pacwrap_agent_{}", *UID, &id()).leak(); 
+    pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", *UID);
+    pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", *UID, &id());
+    pub static ref WAYLAND_SOCKET: String = format!("{}{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
     pub static ref LOG_LOCATION: &'static str = format!("{}/pacwrap.log", *DATA_DIR).leak();
     pub static ref IS_COLOR_TERMINLAL: bool = is_color_terminal();
     pub static ref IS_TRUECOLOR_TERMINLAL: bool = is_truecolor_terminal();
@@ -86,13 +95,6 @@ fn reset() -> &'static str {
     if *IS_COLOR_TERMINLAL { "[0m" } else { "" }
 }
 
-fn env_default(env: &str, default: &str) -> &'static str {
-    match var(env) {
-        Ok(var) => var,
-        Err(_) => format!("{}{}", *HOME, default), 
-    }.leak()
-}
-
 fn env(env: &str) -> &'static str {
     match var(env) {
         Ok(var) => var.leak(),
@@ -101,4 +103,17 @@ fn env(env: &str) -> &'static str {
             exit(2); 
         }
     }
+}
+
+fn env_opt(env: &str) -> &'static str {
+    match var(env) {
+        Ok(var) => var.leak(), Err(_) => "",
+    }
+}
+
+fn env_default(env: &str, default: &str) -> &'static str {
+    match var(env) {
+        Ok(var) => var,
+        Err(_) => format!("{}{}", *HOME, default), 
+    }.leak()
 }

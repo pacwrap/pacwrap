@@ -19,12 +19,12 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 user() {
-	if [[ "$(cat /etc/passwd | grep 1000:1000)" ]]; then
+	local uid=$PACWRAP_REAL_UID
+	local gid=$PACWRAP_REAL_GID
+
+	if [[ "$(cat /etc/passwd | grep $uid:$gid)" ]]; then
 		return
 	fi
-
-	local uid=$(id -u)
-	local gid=$(id -g)
 
 	echo "Creating dummy user.."
 	echo "user:x:$uid:$gid::/:/usr/bin/nologin" >> /etc/passwd
