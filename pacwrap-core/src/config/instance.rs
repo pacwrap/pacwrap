@@ -18,7 +18,7 @@ pub struct Instance<'a> {
 }
 
 impl <'a>Instance<'a> { 
-    pub fn new(ctype: InstanceType, deps: Vec<Cow<'a, str>>, pkgs: Vec<Cow<'a, str>>) -> Self {
+    pub fn new(ctype: InstanceType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
         Self {
             metadata: InstanceMetadata::new(ctype,deps,pkgs),
             runtime: InstanceRuntime::new(), 
@@ -172,18 +172,18 @@ pub struct InstanceMetadata<'a> {
 }
 
 impl <'a>InstanceMetadata<'a> {
-    fn new(ctype: InstanceType, deps: Vec<Cow<'a, str>>, pkgs: Vec<Cow<'a, str>>) -> Self {
+    fn new(ctype: InstanceType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
         Self {
             container_type: ctype,
-            dependencies: deps,
-            explicit_packages: pkgs,
+            dependencies: deps.iter().map(|a| (*a).into()).collect(),
+            explicit_packages: pkgs.iter().map(|a| (*a).into()).collect(),
             meta_version: time_as_seconds(),
         }
     }
 
-    pub fn set(&mut self, deps: Vec<Cow<'a, str>>, pkg: Vec<Cow<'a, str>>) {
-        self.dependencies = deps;
-        self.explicit_packages = pkg;
+    pub fn set(&mut self, deps: Vec<&'a str>, pkgs: Vec<&'a str>) {
+        self.dependencies = deps.iter().map(|a| (*a).into()).collect();
+        self.explicit_packages = pkgs.iter().map(|a| (*a).into()).collect();
         self.meta_version = time_as_seconds();
     }
 
@@ -191,12 +191,12 @@ impl <'a>InstanceMetadata<'a> {
         &self.container_type 
     }
 
-    pub fn dependencies(&self) -> &Vec<Cow<'a, str>> { 
-        &self.dependencies
+    pub fn dependencies(&'a self) -> Vec<&'a str> { 
+        self.dependencies.iter().map(|a| a.as_ref()).collect()
     }
     
-    pub fn explicit_packages(&self) -> &Vec<Cow<'a, str>> { 
-        &self.explicit_packages 
+    pub fn explicit_packages(&'a self) -> Vec<&'a str> { 
+        self.explicit_packages.iter().map(|a| a.as_ref()).collect()
     }
 }
 

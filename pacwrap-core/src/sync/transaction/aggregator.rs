@@ -107,11 +107,8 @@ impl <'a>TransactionAggregator<'a> {
             }
 
             if let Some(inshandle) = self.cache.get_instance(ins) {
-                self.transaction(&inshandle.metadata()
-                    .dependencies()
-                    .iter().map(|a| a.as_ref())
-                    .collect());
                 self.queried.push(ins);
+                self.transaction(&inshandle.metadata().dependencies());
                 self.transact(inshandle);
             }
         }
@@ -179,7 +176,7 @@ impl <'a>TransactionAggregator<'a> {
 
     pub fn deps_updated(&self, inshandle: &InstanceHandle<'a>) -> bool { 
         for ins in inshandle.metadata().dependencies() {
-            if self.updated.contains(&&**ins) {
+            if self.updated.contains(&ins) {
                 return true
             }
         }
