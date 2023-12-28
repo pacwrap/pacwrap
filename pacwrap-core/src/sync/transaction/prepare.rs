@@ -24,7 +24,7 @@ impl Transaction for Prepare {
     fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
         match self.state {
             TransactionState::Prepare => {
-                let deps = inshandle.metadata().dependencies();
+                let deps: Vec<&str> = inshandle.metadata().dependencies();
        
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {

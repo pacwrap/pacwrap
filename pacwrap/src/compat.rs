@@ -10,19 +10,17 @@ fn save_configuration() -> Result<(), ErrorKind> {
 
 fn print_configuration(instance: &str) -> Result<(),ErrorKind> {
     let ins = config::provide_new_handle(instance)?;
-    let depends = ins.metadata().dependencies();
-    let pkgs = ins.metadata().explicit_packages();
     let mut pkgs_string = String::new();
     let mut depends_string = String::new();
 
     println!("INSTANCE_CONFIG[{},0]={}", instance, ins.metadata().container_type());   
 
-    for i in depends.iter() {
+    for i in ins.metadata().dependencies() {
         depends_string.push_str(&format!("{} ", i));    
     }
     println!("INSTANCE_CONFIG[{},1]=\"{}\"", instance, depends_string);
 
-    for i in pkgs.iter() {
+    for i in ins.metadata().explicit_packages() {
         pkgs_string.push_str(&format!("{} ", i));
     }
 

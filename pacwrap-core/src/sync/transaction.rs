@@ -377,6 +377,7 @@ impl <'a>TransactionHandle<'a> {
 
     fn apply_configuration(&mut self, instance: &InstanceHandle, create: bool) {
         let depends = instance.metadata().dependencies();
+        let explicit_packages: Vec<&str> = instance.metadata().explicit_packages();
         let pkgs = self.alpm
             .as_mut()
             .unwrap()
@@ -386,16 +387,14 @@ impl <'a>TransactionHandle<'a> {
             .filter(|p| p.reason() == PackageReason::Explicit
                 && ! p.name().starts_with("pacwrap-")
                 && ! self.meta.foreign_pkgs.contains(p.name()))
-            .map(|p| p.name().into())
-        .collect::<Vec<_>>();
+            .map(|p| p.name())
+        .collect();
 
-        if &pkgs != instance.metadata().explicit_packages() || create {
+        if pkgs != explicit_packages || create {
             let mut instance = instance.clone();
-            let depends = depends.clone();
 
             instance.metadata_mut().set(depends, pkgs);
             config::save_handle(&instance).ok();  
-            drop(instance);
         }
     }
 

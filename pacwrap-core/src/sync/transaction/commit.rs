@@ -5,7 +5,7 @@ use dialoguer::console::Term;
 use serde::Serialize;
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
-use crate::{exec::utils::execute_agent, 
+use crate::{exec::transaction_agent, 
     sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation, self}, 
     ErrorKind, 
     utils::prompt::prompt,
@@ -67,7 +67,7 @@ impl Transaction for Commit {
         handle.set_alpm(None); 
         write_agent_params(ag, handle, download)?; 
  
-        let mut agent = match execute_agent(inshandle) {
+        let mut agent = match transaction_agent(inshandle) {
             Ok(child) => child,
             Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,      
         };

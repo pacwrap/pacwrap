@@ -111,7 +111,7 @@ impl <'a>FileSystemStateSync<'a> {
     }
 
     pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<(), ErrorKind> {
-        let (tx, rx) = self.link(&containers, mpsc::channel())?; 
+        let (tx, rx) = self.link(containers, mpsc::channel())?; 
         
         drop(tx); 
         while let Ok(()) = rx.recv() {}
@@ -130,13 +130,8 @@ impl <'a>FileSystemStateSync<'a> {
                 Some(ins) => ins,
                 None => Err(ErrorKind::InstanceNotFound(ins.to_string()))?
             };
-            let deps = inshandle.metadata()
-                .dependencies()
-                .iter()
-                .map(|a| a.as_ref())
-                .collect();
           
-            write_chan = self.link(&deps, write_chan)?;
+            write_chan = self.link(&inshandle.metadata().dependencies(), write_chan)?;
             
             if let ROOT = inshandle.metadata().container_type() {
                 self.link_instance(inshandle, tx.clone())?; 
@@ -269,14 +264,13 @@ impl <'a>FileSystemStateSync<'a> {
     fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), ErrorKind> {
         let mut map = Vec::new(); 
         let mut prev = Vec::new();
-        let deps = inshandle.metadata().dependencies(); 
         let instance: Arc<str> = inshandle.vars().instance().into();
         let root: Arc<str> = inshandle.vars().root().into();
         let state = FileSystemState::new();
  
-        for dep in deps {
+        for dep in inshandle.metadata().dependencies() {
             let dephandle = self.cache.get_instance(dep).unwrap();
-            let state = match self.state_map.get(dep.as_ref().into()) { 
+            let state = match self.state_map.get(dep) { 
                 Some(state) => state.clone(),
                 None => FileSystemState::new()
             };
