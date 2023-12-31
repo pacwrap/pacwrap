@@ -19,7 +19,7 @@ fn main() {
         Operand::Short('h') | Operand::Long("help") => manual::help(arguments),
         Operand::Short('V') | Operand::Long("version") => manual::print_version(arguments),
         Operand::Long("compat") => compat::compat(arguments),
-        _ => Err(arguments.invalid_operand()),
+        _ => arguments.invalid_operand(),
     };
 
     if let Err(error) = result {

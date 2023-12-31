@@ -1,11 +1,15 @@
 use indexmap::IndexSet;
 use lazy_static::lazy_static;
-use std::fmt::Write;
+use std::fmt::{Write, Formatter, Display};
 
-use pacwrap_core::{utils::{Arguments, 
+use pacwrap_core::{err, 
+    impl_error,
+    Error,
+    ErrorTrait,
+    utils::{Arguments, 
     arguments::Operand,
     is_color_terminal, 
-    is_truecolor_terminal}, ErrorKind};
+    is_truecolor_terminal}};
 
 lazy_static! {
     static ref HELP_ALL: Vec<HelpTopic> = 
@@ -18,7 +22,24 @@ lazy_static! {
         HelpTopic::Copyright].into();
 }
 
-pub fn help(mut args: &mut Arguments) -> Result<(), ErrorKind> {
+#[derive(Debug)]
+enum ErrorKind {
+    InvalidTopic(String),
+}
+
+impl_error!(ErrorKind);
+
+impl Display for ErrorKind {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::InvalidTopic(err) => write!(fmter, "Topic '{}' is not available.", err),
+        }?;
+
+        write!(fmter, "\nTry 'pacwrap -h' for more information on valid operational parameters.")
+    }
+}
+
+pub fn help(mut args: &mut Arguments) -> Result<(), Error> {
     let help = ascertain_help(&mut args)?;
     let mut buffer = String::new();
 
@@ -33,7 +54,7 @@ pub fn help(mut args: &mut Arguments) -> Result<(), ErrorKind> {
     Ok(())
 }
 
-fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout), ErrorKind> {
+fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout), Error> {
     let mut layout = match is_color_terminal() {
         true => &HelpLayout::Console, false => &HelpLayout::Dumb,
     };
@@ -105,8 +126,8 @@ fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, 
                 => topic.extend(HELP_ALL.iter()),
             Operand::ShortPos('h', topic) 
                 | Operand::LongPos("help", topic) 
-                => Err(ErrorKind::Message(format!("Topic '{topic}' is not available.").leak()))?,
-           _ => Err(args.invalid_operand())?,
+                => err!(ErrorKind::InvalidTopic(topic.into()))?,
+           _ => args.invalid_operand()?,
         }
     }
 
@@ -432,7 +453,7 @@ fn copyright(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Erro
 {tab}{tab}terms of the GNU General Public License v3 only.\n")
 }
 
-pub fn print_version(mut args: &mut Arguments) -> Result<(), ErrorKind> {
+pub fn print_version(mut args: &mut Arguments) -> Result<(), Error> {
     let name = env!("CARGO_PKG_NAME"); 
     let version = env!("CARGO_PKG_VERSION"); 
     let suffix = env!("PACWRAP_BUILDSTAMP");

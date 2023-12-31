@@ -4,9 +4,10 @@ use pacwrap_core::{config,
     constants::{RESET, BOLD_GREEN},
     utils::arguments::{Operand, InvalidArgument},
     utils::arguments::Arguments,
-    ErrorKind};
+    error::*, 
+    err};
 
-pub fn query(arguments: &mut Arguments) -> Result<(), ErrorKind> {
+pub fn query(arguments: &mut Arguments) -> Result<()> {
     let mut target = "";
     let mut explicit = false;
     let mut quiet = false;
@@ -16,12 +17,12 @@ pub fn query(arguments: &mut Arguments) -> Result<(), ErrorKind> {
             Operand::Short('e') | Operand::Long("explicit") => explicit = true,
             Operand::Short('q') | Operand::Long("quiet") => quiet = true,
             Operand::LongPos("target", t) | Operand::ShortPos(_, t) => target = t,
-            _ => Err(arguments.invalid_operand())?,
+            _ => arguments.invalid_operand()?,
         }
     }
 
     if target.is_empty() {
-        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+        err!(InvalidArgument::TargetUnspecified)?
     }
 
     let handle = config::provide_handle(target)?;

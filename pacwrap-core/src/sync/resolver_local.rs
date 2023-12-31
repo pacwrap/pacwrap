@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use alpm::{Package, Alpm, PackageReason};
 
-use super::{transaction::{Error, TransactionType}, utils::AlpmUtils};
+use super::{transaction::{ErrorKind, TransactionType}, utils::AlpmUtils};
 
 #[allow(dead_code)]
 pub struct LocalDependencyResolver<'a> {
@@ -29,16 +29,16 @@ impl <'a>LocalDependencyResolver<'a> {
         }
     }
 
-    fn check_depth(&mut self) -> Result<(), Error> {
+    fn check_depth(&mut self) -> Result<(), ErrorKind> {
         if self.depth == 50 {
-            Err(Error::RecursionDepthExceeded(self.depth))?
+            Err(ErrorKind::RecursionDepthExceeded(self.depth))?
         }
             
         self.depth += 1;
         Ok(())
     }
     
-    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<Vec<Package<'a>>, Error> {
+    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<Vec<Package<'a>>, ErrorKind> {
         let mut synchronize: Vec<&'a str> = Vec::new();
         
         for pkg in packages {

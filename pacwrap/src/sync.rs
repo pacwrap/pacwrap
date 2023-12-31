@@ -3,7 +3,9 @@ use std::{collections::HashMap,
     io::Write};
 
 use indexmap::IndexMap;
-use pacwrap_core::{ErrorKind,
+use pacwrap_core::{err,
+    ErrorKind,
+    error::*,
     log::Logger,
     sync::transaction::TransactionType,
     utils::arguments::{Arguments, 
@@ -17,7 +19,7 @@ use pacwrap_core::{ErrorKind,
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
     constants::{BAR_GREEN, BOLD, RESET, ARROW_GREEN}};
 
-pub fn synchronize(args: &mut Arguments) -> Result<(), ErrorKind> {
+pub fn synchronize(args: &mut Arguments) -> Result<()> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap(); 
     let mut cache = cache::populate()?;
     let action = {
@@ -40,9 +42,9 @@ pub fn synchronize(args: &mut Arguments) -> Result<(), ErrorKind> {
     if create(args) { 
         if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
             if ! refresh {
-                Err(ErrorKind::Argument(InvalidArgument::UnsuppliedOperand("--refresh", "Required for container creation.")))?
+                err!(InvalidArgument::UnsuppliedOperand("--refresh", "Required for container creation."))?
             } else if ! upgrade {
-                Err(ErrorKind::Argument(InvalidArgument::UnsuppliedOperand("--upgrade", "Required for container creation.")))?
+                err!(InvalidArgument::UnsuppliedOperand("--upgrade", "Required for container creation."))?
             }
         }
 
@@ -52,7 +54,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<(), ErrorKind> {
     engage_aggregator(&cache, action, args, &mut logger)
 }
 
-fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (InstanceType, Vec<&'a str>)>, ErrorKind> {
+fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (InstanceType, Vec<&'a str>)>> {
     let mut deps: IndexMap<&'a str, (InstanceType, Vec<&'a str>)> = IndexMap::new();
     let mut current_target = "";
     let mut instype = None;
@@ -64,13 +66,13 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
                 Some(d) => {
                     if let Some(instype) = instype {
                         if let InstanceType::BASE = instype {
-                            Err(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
+                            err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
                         }
                     }
      
                     d.1.push(dep); 
                 },
-                None => Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+                None => err!(InvalidArgument::TargetUnspecified)?
             },
             Operand::Short('b') 
             | Operand::Long("base") => instype = Some(InstanceType::BASE),
@@ -84,7 +86,7 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
                         current_target = target;
                         deps.insert(current_target, (instype, vec!()));
                     },
-                    None => Err(ErrorKind::Message("Container type not specified."))?,
+                    None => err!(ErrorKind::Message("Container type not specified."))?,
             },          
             _ => continue,
         }
@@ -96,12 +98,12 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
         } 
             
         if dep.1.1.is_empty() {
-            Err(ErrorKind::Message("Dependencies not specified."))?
+        err!(ErrorKind::Message("Dependencies not specified."))?
         }
     }
 
     if current_target.len() == 0 {
-        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+        err!(InvalidArgument::TargetUnspecified)?
     }
 
     Ok(deps)
@@ -118,13 +120,13 @@ fn create(args: &mut Arguments) -> bool {
     return false;
 }
 
-fn instantiate<'a>(cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<(), ErrorKind> { 
+fn instantiate<'a>(cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<()> { 
     println!("{} {}Instantiating container{}{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for target in targets {
         for dep in target.1.1.iter() {
             if let None = cache.get_instance(dep) {
-                Err(ErrorKind::DependencyNotFound((*dep).into(), target.0.into()))?
+                err!(ErrorKind::DependencyNotFound((*dep).into(), target.0.into()))?
             }
         }
 
@@ -132,26 +134,26 @@ fn instantiate<'a>(cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (In
 
         match cache.get_instance(target.0) {
             Some(ins) => instantiate_container(ins)?,
-            None => Err(ErrorKind::InstanceNotFound(target.0.into()))?
+            None => err!(ErrorKind::InstanceNotFound(target.0.into()))?
         }
     }
 
     Ok(())
 }
 
-fn instantiate_container<'a>(handle: &'a InstanceHandle<'a>) -> Result<(), ErrorKind> {
+fn instantiate_container<'a>(handle: &'a InstanceHandle<'a>) -> Result<()> {
     let mut logger = Logger::new("pacwrap").init().unwrap();
     let ins = handle.vars().instance();
     let instype = handle.metadata().container_type();
 
     if let Err(err) = std::fs::create_dir(handle.vars().root()) {
-        Err(ErrorKind::IOError(handle.vars().root().into(), err.kind()))? 
+        err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))? 
     }
 
     if let InstanceType::ROOT | InstanceType::BASE = instype { 
         if let Err(err) = std::fs::create_dir(handle.vars().home()) {
             if err.kind() != std::io::ErrorKind::AlreadyExists {
-                Err(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
+                err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
             }
         }
 
@@ -159,9 +161,9 @@ fn instantiate_container<'a>(handle: &'a InstanceHandle<'a>) -> Result<(), Error
         
         match File::create(&bashrc) {
             Ok(mut f) => if let Err(error) = write!(f, "PS1=\"$USER> \"") {
-                Err(ErrorKind::IOError(bashrc, error.kind()))?
+                err!(ErrorKind::IOError(bashrc, error.kind()))?
             },
-            Err(error) => Err(ErrorKind::IOError(bashrc.clone(), error.kind()))?
+            Err(error) => err!(ErrorKind::IOError(bashrc.clone(), error.kind()))?
         }; 
     }
 
@@ -175,7 +177,7 @@ fn engage_aggregator<'a>(
     cache: &InstanceCache<'a>,
     action_type: TransactionType, 
     args: &'a mut Arguments, 
-    log: &'a mut Logger) -> Result<(), ErrorKind> { 
+    log: &'a mut Logger) -> Result<()> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str ,Vec<&'a str>> = HashMap::new();
@@ -183,7 +185,7 @@ fn engage_aggregator<'a>(
     let mut base = false;
 
     if let Operand::None = args.next().unwrap_or_default() {
-        Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
+        err!(InvalidArgument::OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -219,7 +221,7 @@ fn engage_aggregator<'a>(
             Operand::ShortPos('t', target) 
                 | Operand::LongPos("target", target) => { 
                 if let None = cache.get_instance(target) {
-                    Err(ErrorKind::InstanceNotFound(target.into()))?
+                    err!(ErrorKind::InstanceNotFound(target.into()))?
                 }
 
                 current_target = target;
@@ -237,14 +239,14 @@ fn engage_aggregator<'a>(
                     None => { queue.insert(current_target.into(), vec!(package)); },
                 }
             },
-            _ => Err(args.invalid_operand())?
+            _ => args.invalid_operand()?
         }
     }
 
     let current_target = match action_flags.intersects(TransactionFlags::TARGET_ONLY) {
         true => {
             if current_target == "" && ! action_flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
-                Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+                err!(InvalidArgument::TargetUnspecified)?
             }
 
             Some(current_target)
@@ -252,7 +254,7 @@ fn engage_aggregator<'a>(
         false => {
             if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
                 if ! upgrade && ! refresh {
-                    Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
+                    err!(InvalidArgument::OperationUnspecified)?
                 }
             }
        

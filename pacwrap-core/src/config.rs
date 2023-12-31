@@ -1,10 +1,10 @@
 use std::{fmt::Display, 
-    io::Write, 
+    io::{Write, ErrorKind::NotFound}, 
     fmt::Formatter, 
     path::Path, 
     fs::File};
 
-use crate::{ErrorKind, constants::{BOLD, RESET}};
+use crate::{err, impl_error, ErrorKind, error::*, constants::{BOLD, RESET}};
 use self::{filesystem::BindError, permission::PermError};
 
 pub use self::{cache::InstanceCache, 
@@ -32,7 +32,10 @@ pub enum ConfigError {
     Save(String, String),
     Load(String, String),
     AlreadyExists(String),
+    ConfigNotFound(String),
 }
+
+impl_error!(ConfigError);
 
 impl Display for ConfigError {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -42,6 +45,7 @@ impl Display for ConfigError {
             Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}.yml': {error}"),
             Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}.yml': {error}"),
             Self::AlreadyExists(ins) => write!(fmter, "Container {}{ins}{} already exists.", *BOLD, *RESET),
+            Self::ConfigNotFound(ins) => write!(fmter, "Configuration '{}{ins}{}.yml' not found.", *BOLD, *RESET)
         }
     }
 }
@@ -52,54 +56,51 @@ impl From<ConfigError> for String {
     }
 }
 
-pub fn save_handle(ins: &InstanceHandle) -> Result<(), ErrorKind> {   
+pub fn save_handle(ins: &InstanceHandle) -> Result<()> {   
     let mut f = match File::create(Path::new(ins.vars().config_path())) {
         Ok(f) => f,
-        Err(error) => Err(ErrorKind::IOError(ins.vars().config_path().into(), error.kind()))?
+        Err(error) => err!(ErrorKind::IOError(ins.vars().config_path().into(), error.kind()))?
     };
     let config = match serde_yaml::to_string(&ins.instance()) {
         Ok(file) => file,
-        Err(error) => Err(ErrorKind::Config(ConfigError::Save(ins.vars().instance().into(), error.to_string())))? 
+        Err(error) => err!(ConfigError::Save(ins.vars().instance().into(), error.to_string()))? 
     };
     
     match write!(f, "{}", config) {
         Ok(_) => Ok(()),
-        Err(error) => Err(ErrorKind::IOError(ins.vars().config_path().into(), error.kind())) 
+        Err(error) => err!(ErrorKind::IOError(ins.vars().config_path().into(), error.kind())) 
     }
 }
 
 #[inline]
-pub fn provide_handle(instance: &str) -> Result<InstanceHandle, ErrorKind> { 
+pub fn provide_handle(instance: &str) -> Result<InstanceHandle> { 
     let vars = InsVars::new(instance);
 
     if ! Path::new(vars.root()).exists() {  
-        Err(ErrorKind::InstanceNotFound(instance.into()))?
+        err!(ErrorKind::InstanceNotFound(instance.into()))?
     }
 
     handle(instance, vars)
 }
 
 #[inline]
-pub fn provide_new_handle(instance: &str) -> Result<InstanceHandle, ErrorKind> {
+pub fn provide_new_handle(instance: &str) -> Result<InstanceHandle> {
     handle(instance, InsVars::new(instance))
 }
 
-fn handle<'a>(instance: &str, vars: InsVars<'a>) -> Result<InstanceHandle<'a>, ErrorKind> {
+fn handle<'a>(instance: &str, vars: InsVars<'a>) -> Result<InstanceHandle<'a>> {
     match File::open(vars.config_path()) {
         Ok(file) => {
             let config = match serde_yaml::from_reader(&file) {
                 Ok(file) => file,
-                Err(error) => Err(ErrorKind::Config(ConfigError::Load(vars.instance().into(), error.to_string())))?
+                Err(error) => err!(ConfigError::Load(vars.instance().into(), error.to_string()))?
             };
 
             Ok(InstanceHandle::new(config, vars))
         },
-        Err(error) => {
-            let path = match error.kind() {
-                std::io::ErrorKind::NotFound => format!("{instance}.yml"), _ => vars.config_path().into(),
-            };
-
-            Err(ErrorKind::IOError(path, error.kind()))
+        Err(error) => match error.kind() {
+            NotFound => err!(ConfigError::ConfigNotFound(instance.into()))?,
+            _ => err!(ErrorKind::IOError(vars.config_path().into(), error.kind()))?,
         }
     }
 }

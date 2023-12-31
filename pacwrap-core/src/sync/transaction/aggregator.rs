@@ -1,6 +1,8 @@
-use std::{collections::HashMap, process::exit};
+use std::collections::HashMap;
 
-use crate::{ErrorKind,
+use crate::{err,
+    ErrorKind,
+    error::*,
     constants::ARROW_GREEN,
 	config::InstanceType,
 	exec::utils::execute_in_container,
@@ -50,11 +52,11 @@ impl <'a>TransactionAggregator<'a> {
         }
     }
 
-    pub fn aggregate(mut self) -> Result<(), ErrorKind> {
+    pub fn aggregate(mut self) -> Result<()> {
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
                 if refresh {
-                    sync::synchronize_database(self.cache, force); 
+                    sync::synchronize_database(self.cache, force)?; 
                 }
 
                 upgrade
@@ -67,11 +69,11 @@ impl <'a>TransactionAggregator<'a> {
 
         if let Some(inshandle) = target { 
             if let InstanceType::BASE | InstanceType::DEP = inshandle.metadata().container_type() {
-                self.transact(inshandle); 
+                self.transact(inshandle)?; 
             }
         } else if upgrade {
-            self.transaction(self.cache.registered_base());
-            self.transaction(self.cache.registered_dep());
+            self.transaction(self.cache.registered_base())?;
+            self.transaction(self.cache.registered_dep())?;
         }
 
         if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) 
@@ -90,17 +92,17 @@ impl <'a>TransactionAggregator<'a> {
 
         if let Some(inshandle) = target {
             if let InstanceType::ROOT = inshandle.metadata().container_type() {
-                self.transact(inshandle); 
+                self.transact(inshandle)?; 
             }
         } else if upgrade {
-            self.transaction(self.cache.registered_root());
+            self.transaction(self.cache.registered_root())?;
         }
 
         println!("{} Transaction complete.", *ARROW_GREEN);
         Ok(())
     }
 
-    pub fn transaction(&mut self, containers: &Vec<&'a str>) {
+    pub fn transaction(&mut self, containers: &Vec<&'a str>) -> Result<()> {
         for ins in containers.iter() { 
             if self.queried.contains(ins) {
                 continue;
@@ -108,13 +110,15 @@ impl <'a>TransactionAggregator<'a> {
 
             if let Some(inshandle) = self.cache.get_instance(ins) {
                 self.queried.push(ins);
-                self.transaction(&inshandle.metadata().dependencies());
-                self.transact(inshandle);
+                self.transaction(&inshandle.metadata().dependencies())?;
+                self.transact(inshandle)?;
             }
         }
+
+        Ok(())
     }
 
-    pub fn transact(&mut self, inshandle: &'a InstanceHandle) { 
+    pub fn transact(&mut self, inshandle: &'a InstanceHandle) -> Result<()> { 
         let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
             Some(some) => some.clone(), None => Vec::new(),
         };
@@ -132,30 +136,31 @@ impl <'a>TransactionAggregator<'a> {
                         if updated {
                             self.updated.push(inshandle.vars().instance());
                         }
+
                         handle.release();
-                        break;
+                        return Ok(())
                     }
                     
                     result
                 },
-                Err(result) => { 
-                    handle.release_on_fail(result);
-                    exit(1);
-                }
+                Err(result) => {
+                    handle.release();
+                    return err!(result)
+                } 
             };
                
             act = result.from(self);
         }
     }
 
-    pub fn keyring_update(&mut self, inshandle: &InstanceHandle) -> Result<(), ErrorKind> {
+    pub fn keyring_update(&mut self, inshandle: &InstanceHandle) -> Result<()> {
         execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"))?;
         execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"))?;
         self.keyring = true;
         Ok(())
     }
 
-    pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) -> Result<(), ErrorKind> { 
+    pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) -> Result<()> { 
         if let ROOT = inshandle.metadata().container_type() {
             return Ok(());
         }
@@ -196,10 +201,10 @@ impl <'a>TransactionAggregator<'a> {
         &mut self.logger
     }
 
-    pub fn fs_sync(&mut self) -> Result<&mut FileSystemStateSync<'a>, ErrorKind> { 
+    pub fn fs_sync(&mut self) -> Result<&mut FileSystemStateSync<'a>> { 
         match self.filesystem_state.as_mut() {
             Some(linker) => Ok(linker),
-            None => Err(ErrorKind::LinkerUninitialized),
+            None => err!(ErrorKind::LinkerUninitialized),
         }
     }
 }

@@ -1,16 +1,18 @@
-use std::process::exit;
-
 use alpm::{Alpm,  SigLevel, Usage};
 use lazy_static::lazy_static;
 use pacmanconf;
 use serde::{Serialize, Deserialize};
 
-use crate::{utils::{print_warning, print_error},
-    constants::{BAR_GREEN, RESET, BOLD, ARROW_RED, CACHE_DIR, DATA_DIR, CONFIG_DIR},
+use crate::{err,
+    error::*,
+    utils::print_warning,
+    constants::{BAR_GREEN, RESET, BOLD, CACHE_DIR, DATA_DIR, CONFIG_DIR},
     sync::event::download::{DownloadCallback, download_event},
 	config::{InsVars,
     InstanceHandle,
     cache::InstanceCache}};
+
+use self::transaction::ErrorKind;
 
 lazy_static! {
     static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/pacman.conf", *CONFIG_DIR)).unwrap(); 
@@ -95,7 +97,7 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     handle
 }
 
-fn synchronize_database(cache: &InstanceCache, force: bool) {
+fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
      match cache.obtain_base_handle() {
         Some(ins) => {
             let db_path = format!("{}/pacman/", *DATA_DIR);
@@ -105,9 +107,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
             handle.set_dl_cb(DownloadCallback::new(0, 0), download_event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {
-                print_error(format!("Unable to initialize transaction: {}.",err.to_string()));
-                println!("{} Transaction failed.", *ARROW_RED);
-                std::process::exit(1);
+                err!(ErrorKind::InitializationFailure(err.to_string()))?
             }
            
             Alpm::release(handle).unwrap();  
@@ -129,12 +129,11 @@ fn synchronize_database(cache: &InstanceCache, force: bool) {
                         print_warning(error);
                     }
                 }
-            } 
+            }
+
+            Ok(())
         },
-        None => {
-            print_error("No compatible containers available to synchronize remote database.");
-            exit(2)
-        }
+        None => err!(ErrorKind::NoCompatibleRemotes), 
     }
 }
 

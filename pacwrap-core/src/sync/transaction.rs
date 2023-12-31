@@ -6,13 +6,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config,
     config::InstanceHandle,
-    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, ARROW_RED, PACWRAP_AGENT_FILE}, 
+    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, PACWRAP_AGENT_FILE, ARROW_RED}, 
     sync::{
         resolver_local::LocalDependencyResolver,
         resolver::DependencyResolver,
-        utils::AlpmUtils},
-    ErrorKind,
-    utils::print_error};
+        utils::AlpmUtils}, 
+    Error, 
+    ErrorTrait, 
+    impl_error};
 
 use self::{stage::Stage,
     commit::Commit,
@@ -27,12 +28,12 @@ mod prepare;
 mod uptodate;
 mod stage;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, ErrorKind>;
 
 pub static MAGIC_NUMBER: u32 = 663445956;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum Error {
+#[derive(Clone, Debug)]
+pub enum ErrorKind {
     TransactionFailureAgent,
     ParameterAcquisitionFailure,
     DeserializationFailure,
@@ -48,6 +49,8 @@ pub enum Error {
     TransactionFailure(String),
     InitializationFailure(String),
     InternalError(String),
+    NoCompatibleRemotes,
+    IOError(String, std::io::ErrorKind), 
 }
 
 pub enum TransactionState {
@@ -173,7 +176,7 @@ impl TransactionType {
 
     fn action_message(&self, state: TransactionMode) {
         let message = match self {
-            Self::Upgrade(_,_,_) => match state {
+            Self::Upgrade(..) => match state {
                 TransactionMode::Foreign => "Synchronizing foreign database...",
                 TransactionMode::Local => "Synchronizing resident container..."
             }, 
@@ -197,9 +200,12 @@ impl TransactionType {
     }
 }
 
-impl Display for Error {
+impl_error!(ErrorKind);
+
+impl Display for ErrorKind {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
        match self {
+            Self::IOError(ins, error) => write!(fmter, "'{ins}': {error}"), 
             Self::DependentContainerMissing(u) => write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
             Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
             Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET), 
@@ -211,22 +217,26 @@ impl Display for Error {
             Self::DeserializationFailure => write!(fmter, "Deserialization of input parameters failed."),
             Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
             Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
+            Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
             Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."), 
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
-            _ => write!(fmter, "Nothing to do."),
-        }
+            Self::NothingToDo => write!(fmter, "Nothing to do."),
+            _ => Ok(()),
+        }?;
+
+        write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
     }
 }
 
-impl From<Error> for String {
-    fn from(error: Error) -> Self {
-        error.into()
+impl From<Error> for ErrorKind {
+    fn from(error: Error) -> ErrorKind {
+        Self::InternalError(error.downcast::<ErrorKind>().unwrap().to_string())
     }
 }
 
-impl From<ErrorKind> for Error {
+impl From<ErrorKind> for String {
     fn from(error: ErrorKind) -> Self {
-        Self::InternalError(error.into())
+        error.into()
     }
 }
 
@@ -326,7 +336,7 @@ impl <'a>TransactionHandle<'a> {
 
             if ! flags.contains(TransactionFlags::FORCE_DATABASE) {
                 if ! upstream.is_empty() {
-                    Err(Error::TargetUpstream(upstream[0].to_string()))?
+                    Err(ErrorKind::TargetUpstream(upstream[0].to_string()))?
                 }
             }
         }
@@ -339,7 +349,7 @@ impl <'a>TransactionHandle<'a> {
                     .collect::<Vec<&str>>();
 
                 if ! not_installed.is_empty() {
-                    Err(Error::TargetNotInstalled(not_installed[0].to_string()))?
+                    Err(ErrorKind::TargetNotInstalled(not_installed[0].to_string()))?
                 }
 
                 for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type).enumerate(&queue)? {     
@@ -353,7 +363,7 @@ impl <'a>TransactionHandle<'a> {
                     .collect::<Vec<&str>>();
 
                 if ! not_available.is_empty() {
-                    Err(Error::TargetNotAvailable(not_available[0].to_string()))?
+                    Err(ErrorKind::TargetNotAvailable(not_available[0].to_string()))?
                 }
 
                 let packages = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
@@ -395,6 +405,7 @@ impl <'a>TransactionHandle<'a> {
 
             instance.metadata_mut().set(depends, pkgs);
             config::save_handle(&instance).ok();  
+            drop(instance);
         }
     }
 
@@ -405,7 +416,7 @@ impl <'a>TransactionHandle<'a> {
         } > 0 {
             Ok(())
         } else {
-            Err(Error::NothingToDo)
+            Err(ErrorKind::NothingToDo)
         }
     }
 
@@ -415,16 +426,6 @@ impl <'a>TransactionHandle<'a> {
                 pkg.set_reason(PackageReason::Depend).unwrap();
             }
         }
-    }
-
-    fn release_on_fail(self, error: Error) {
-        match error {
-            Error::TransactionFailureAgent => (), _ => print_error(error),
-        }
-
-        remove_file(*PACWRAP_AGENT_FILE).ok();
-        println!("{} Transaction failed.", *ARROW_RED);
-        drop(self);
     }
 
     pub fn release(self) {
