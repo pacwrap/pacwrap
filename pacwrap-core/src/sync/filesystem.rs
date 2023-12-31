@@ -13,7 +13,9 @@ use indicatif::{ProgressBar, ProgressStyle, ProgressDrawTarget};
 use serde::{Serialize, Deserialize};
 use walkdir::WalkDir;
 
-use crate::{ErrorKind,
+use crate::{err,
+    ErrorKind,
+    Error,
     config::{InstanceHandle, InstanceCache, InstanceType::*},
     constants::{RESET, BOLD, ARROW_CYAN, BAR_GREEN, DATA_DIR},
     utils::{print_warning, print_error, read_le_32}};
@@ -110,7 +112,7 @@ impl <'a>FileSystemStateSync<'a> {
         }
     }
 
-    pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<(), ErrorKind> {
+    pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<(), Error> {
         let (tx, rx) = self.link(containers, mpsc::channel())?; 
         
         drop(tx); 
@@ -118,7 +120,7 @@ impl <'a>FileSystemStateSync<'a> {
         Ok(())
     }
   
-    fn link(&mut self, containers: &Vec<&'a str>, mut write_chan: (Sender<()>, Receiver<()>)) -> Result<(Sender<()>, Receiver<()>), ErrorKind> { 
+    fn link(&mut self, containers: &Vec<&'a str>, mut write_chan: (Sender<()>, Receiver<()>)) -> Result<(Sender<()>, Receiver<()>), Error> { 
         let (tx, rx): (Sender<SyncMessage>, Receiver<SyncMessage>) = mpsc::channel();
 
         for ins in containers { 
@@ -128,7 +130,7 @@ impl <'a>FileSystemStateSync<'a> {
 
             let inshandle = match self.cache.get_instance(ins) {
                 Some(ins) => ins,
-                None => Err(ErrorKind::InstanceNotFound(ins.to_string()))?
+                None => err!(ErrorKind::InstanceNotFound(ins.to_string()))?
             };
           
             write_chan = self.link(&inshandle.metadata().dependencies(), write_chan)?;
@@ -246,7 +248,7 @@ impl <'a>FileSystemStateSync<'a> {
         });
     } 
 
-    fn obtain_slice(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), ErrorKind> {
+    fn obtain_slice(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
         let instance: Arc<str> = inshandle.vars().instance().into();
         let root = inshandle.vars().root().into();
        
@@ -261,7 +263,7 @@ impl <'a>FileSystemStateSync<'a> {
         }))
     }
 
-    fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), ErrorKind> {
+    fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
         let mut map = Vec::new(); 
         let mut prev = Vec::new();
         let instance: Arc<str> = inshandle.vars().instance().into();
@@ -291,10 +293,10 @@ impl <'a>FileSystemStateSync<'a> {
         }))
     }
 
-    fn pool(&self) -> Result<&ThreadPool, ErrorKind> {
+    fn pool(&self) -> Result<&ThreadPool, Error> {
         match self.pool.as_ref() {
           Some(pool) =>  Ok(pool),
-          None => Err(ErrorKind::ThreadPoolUninitialized)
+          None => err!(ErrorKind::ThreadPoolUninitialized)
         }
     }
 

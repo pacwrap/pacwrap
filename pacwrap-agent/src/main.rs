@@ -1,13 +1,18 @@
-use pacwrap_core::utils::{print_error, Arguments, arguments::Operand};
+use pacwrap_core::{err, Error, utils::{Arguments, arguments::Operand}};
 
+use crate::error::AgentError;
+
+mod error;
 mod agent;
 
 fn main() {
     let arguments = &mut Arguments::new().populate();
     let param = arguments.next().unwrap_or_default();
-
-    match param {
-        Operand::Value("transact") => agent::transact(),
-        _ => print_error("Direct execution of this binary is unsupported.") 
+    let result = match param {
+        Operand::Value("transact") => agent::transact(), _ => err!(AgentError::DirectExecution) 
+    };
+ 
+    if let Err(error) = result {
+        error.handle();
     }
 }

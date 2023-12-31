@@ -1,74 +1,68 @@
-use std::{fs::{self, File}, process::exit, io::ErrorKind::NotFound, os::unix::prelude::FileExt, env};
+use std::{fs::{self, File}, io::ErrorKind::NotFound, os::unix::prelude::FileExt, env};
 
 use serde::Deserialize;
 
-use pacwrap_core::{sync::{self, AlpmConfigData,
+use pacwrap_core::{err,
+    Error,
+    sync::{self, AlpmConfigData,
         utils::{erroneous_transaction, 
             erroneous_preparation}, 
             transaction::{TransactionHandle,
             TransactionType,
             TransactionMetadata,
             TransactionParameters,
-            Error, 
-            Result, MAGIC_NUMBER}, 
-    event::{download::{DownloadCallback, download_event}, progress::{ProgressEvent, callback}, query::questioncb}}, 
-    utils::{print_error, print_warning, read_le_32}, constants::{RESET, BOLD}};
+            ErrorKind, 
+            MAGIC_NUMBER}, 
+    event::{download::{DownloadCallback, download_event}, 
+            progress::{ProgressEvent, callback}, 
+            query::questioncb}}, 
+    utils::{print_warning, read_le_32}};
 
-pub fn transact() {
+use crate::error::AgentError;
+
+static AGENT_PARAMS: &'static str = "/tmp/agent_params";
+
+pub fn transact() -> Result<(), Error> {
     let mut header_buffer = vec![0; 7]; 
-    let mut file = match File::open("/tmp/agent_params") {
+    let mut file = match File::open(AGENT_PARAMS) {
         Ok(file) => file,
-        Err(_) => {
+        Err(error) => {
             if let Ok(var) = env::var("SHELL") {
                 if ! var.is_empty() {
-                    print_error("Direct execution of this binary is unsupported.");
+                    err!(AgentError::DirectExecution)?
                 }
             }
 
-            exit(2);
+            err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
         },
     }; 
 
     if let Err(error) = file.read_exact_at(&mut header_buffer, 0) {
-        print_error(format!("'{}/tmp/agent_params{}': {error}", *BOLD, *RESET));
-        exit(3);
+        err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
     }
+    
+    decode_header(&header_buffer)?;
 
-    let magic = read_le_32(&header_buffer, 0);
-    let major: u8 = env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap();
-    let minor: u8 = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap();
-    let patch: u8 = env!("CARGO_PKG_VERSION_PATCH").parse().unwrap();
-
-    if magic != MAGIC_NUMBER {
-        print_error(format!("Magic number {magic} != {MAGIC_NUMBER}"));
-        exit(4);
-    }
-
-    if major != header_buffer[4] || minor != header_buffer[5] || patch != header_buffer[6] {
-        print_error(format!("{major}.{minor}.{patch} != {}.{}.{}", header_buffer[4], header_buffer[5], header_buffer[6]));
-        exit(5); 
-    }
-
-    let params: TransactionParameters = deserialize(&mut file); 
-    let alpm_remotes: AlpmConfigData = deserialize(&mut file); 
-    let mut metadata: TransactionMetadata = deserialize(&mut file); 
+    let params: TransactionParameters = deserialize(&mut file)?; 
+    let alpm_remotes: AlpmConfigData = deserialize(&mut file)?; 
+    let mut metadata: TransactionMetadata = deserialize(&mut file)?; 
     let alpm = sync::instantiate_alpm_agent(&alpm_remotes);
     let mut handle = TransactionHandle::new(alpm, &mut metadata);
 
     if let Err(error) = conduct_transaction(&mut handle, params) {
-        print_error(error);
-        handle.alpm_mut().trans_release().ok();
-        exit(1);
+        err!(error)?
     } 
+
+    Ok(())
 }
 
-fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
+fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<(), ErrorKind> {
     let flags = handle.retrieve_flags(); 
     let mode = agent.mode();
     let action = agent.action();
 
     if let Err(error) = handle.alpm_mut().trans_init(flags.1.unwrap()) {
-        Err(Error::InitializationFailure(error.to_string().into()))?
+        Err(ErrorKind::InitializationFailure(error.to_string().into()))?
     }
 
     handle.ignore();  
@@ -100,17 +94,31 @@ fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParamet
         match error.kind() {
             NotFound => (),_ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)), 
         }
-   }
+    }
 
     Ok(())
 }
 
-fn deserialize<T: for<'de> Deserialize<'de>>(stdin: &mut File) -> T {
+fn decode_header(buffer: &Vec<u8>) -> Result<(), Error> {
+    let magic = read_le_32(&buffer, 0);
+    let major: (u8, u8) = (env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(), buffer[4]);
+    let minor: (u8, u8) = (env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(), buffer[5]);
+    let patch: (u8, u8) = (env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(), buffer[6]);
+
+    if magic != MAGIC_NUMBER {
+        err!(AgentError::InvalidMagic(magic, MAGIC_NUMBER))?
+    }
+
+    if major.0 != major.1 || minor.0 != minor.1 || patch.0 != patch.1 {
+        err!(AgentError::InvalidVersion(major.0,minor.0,patch.0,major.1,minor.1,patch.1))?;
+    }
+
+    Ok(())
+}
+
+fn deserialize<T: for<'de> Deserialize<'de>>(stdin: &mut File) -> Result<T, Error> {
     match bincode::deserialize_from::<&mut File, T>(stdin) {
-        Ok(meta) => meta,
-        Err(error) => { 
-            print_error(format!("Deserilization error: {}", error.as_ref()));
-            exit(3);
-        }
+        Ok(meta) => Ok(meta),
+        Err(error) => err!(AgentError::DeserializationError(error.as_ref().to_string()))
     }
 }

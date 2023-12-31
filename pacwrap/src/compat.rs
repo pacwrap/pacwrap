@@ -1,14 +1,17 @@
 use std::process::Command;
 
-use pacwrap_core::{config, 
-    utils::{handle_process, 
-        arguments::{Arguments, Operand}}, ErrorKind}; 
+use pacwrap_core::{config,
+    exec::utils::handle_process,
+    utils::arguments::{Arguments, Operand}, 
+    ErrorKind, 
+    error::*, 
+    err}; 
 
-fn save_configuration() -> Result<(), ErrorKind> {
-    Err(ErrorKind::Message("This function has been deprecated."))?
+fn save_configuration() -> Result<()> {
+    err!(ErrorKind::Message("This function has been deprecated."))?
 }
 
-fn print_configuration(instance: &str) -> Result<(),ErrorKind> {
+fn print_configuration(instance: &str) -> Result<()> {
     let ins = config::provide_new_handle(instance)?;
     let mut pkgs_string = String::new();
     let mut depends_string = String::new();
@@ -28,15 +31,15 @@ fn print_configuration(instance: &str) -> Result<(),ErrorKind> {
     Ok(())
 }
 
-pub fn compat(args: &mut Arguments) -> Result<(), ErrorKind> {
+pub fn compat(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
         Operand::Short('s') | Operand::Long("save") => save_configuration(),
         Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()?),
-        _ => Err(args.invalid_operand())
+        _ => args.invalid_operand()
     }
 }
 
-pub fn execute_bash(executable: &str, args: &mut Arguments) -> Result<(), ErrorKind> { 
+pub fn execute_bash(executable: &str, args: &mut Arguments) -> Result<()> { 
     handle_process(&executable, Command::new(&executable)
         .args(args.values())
         .spawn())

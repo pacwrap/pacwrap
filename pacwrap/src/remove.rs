@@ -4,10 +4,12 @@ use pacwrap_core::{log::Logger,
     sync::transaction::TransactionType,
     utils::arguments::Operand,
     utils::arguments::{Arguments, InvalidArgument},
+    sync::transaction::{TransactionFlags, TransactionAggregator}, 
     config::cache,
-    sync::transaction::{TransactionFlags, TransactionAggregator}, ErrorKind};
+    error::*, 
+    err};
 
-pub fn remove(mut args: &mut Arguments) -> Result<(), ErrorKind> {
+pub fn remove(mut args: &mut Arguments) -> Result<()> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let action = {
         let mut recursive = 0;
@@ -30,14 +32,14 @@ pub fn remove(mut args: &mut Arguments) -> Result<(), ErrorKind> {
 fn engage_aggregator<'a>(
     action_type: TransactionType, 
     args: &'a mut Arguments, 
-    log: &'a mut Logger) -> Result<(), ErrorKind> { 
+    log: &'a mut Logger) -> Result<()> { 
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str,Vec<&'a str>> = HashMap::new();
     let mut current_target = None;
 
     if let Operand::None = args.next().unwrap_or_default() { 
-        Err(ErrorKind::Argument(InvalidArgument::OperationUnspecified))?
+        err!(InvalidArgument::OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -74,12 +76,12 @@ fn engage_aggregator<'a>(
                     None => { queue.insert(target, vec!(package)); },
                 }
             },
-            _ => Err(args.invalid_operand())?,
+            _ => args.invalid_operand()?,
         }
     }
         
     if let None = current_target {
-        Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?
+        err!(InvalidArgument::TargetUnspecified)?
     }
 
     Ok(TransactionAggregator::new(&cache::populate()?, 

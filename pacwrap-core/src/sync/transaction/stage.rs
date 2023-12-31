@@ -2,7 +2,6 @@ use alpm::TransFlag;
 
 use crate::config::InstanceType;
 use crate::config::InstanceHandle;
-use super::Error;
 use super::Result;
 use super::TransactionMode;
 use super::{Transaction, 
@@ -10,7 +9,8 @@ use super::{Transaction,
     TransactionState, 
     TransactionHandle, 
     TransactionAggregator, 
-    TransactionFlags};
+    TransactionFlags,
+    ErrorKind};
 
 pub struct Stage {
     state: TransactionState,
@@ -44,7 +44,7 @@ impl Transaction for Stage {
 
     fn engage(&self, ag: &mut TransactionAggregator,  handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> { 
         if let Err(error) = handle.alpm().trans_init(self.flags) {
-            Err(Error::InitializationFailure(error.to_string().into()))?
+            Err(ErrorKind::InitializationFailure(error.to_string().into()))?
         }
 
         ag.action().action_message(self.mode);

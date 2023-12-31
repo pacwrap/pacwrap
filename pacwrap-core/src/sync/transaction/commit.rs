@@ -7,7 +7,6 @@ use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
 use crate::{exec::transaction_agent, 
     sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation, self}, 
-    ErrorKind, 
     utils::prompt::prompt,
     constants::{PACWRAP_AGENT_FILE, RESET, BOLD, DIM},
     config::InstanceHandle,
@@ -20,7 +19,7 @@ use super::{Transaction,
     TransactionFlags,
     TransactionParameters,
     Result, 
-    Error};
+    ErrorKind};
 
 
 pub struct Commit {
@@ -69,7 +68,7 @@ impl Transaction for Commit {
  
         let mut agent = match transaction_agent(inshandle) {
             Ok(child) => child,
-            Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,      
+            Err(error) => Err(ErrorKind::TransactionFailure(format!("Execution of agent failed: {}", error)))?,      
         };
 
         match agent.wait() {
@@ -84,14 +83,14 @@ impl Transaction for Commit {
                     ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
                     state_transition(&self.state, handle, true)
                 },
-                1 => Err(Error::TransactionFailureAgent),
-                2 => Err(Error::ParameterAcquisitionFailure),
-                3 => Err(Error::DeserializationFailure), 
-                4 => Err(Error::InvalidMagicNumber),
-                5 => Err(Error::AgentVersionMismatch),
-                _ => Err(Error::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(-1))))?,  
+                1 => Err(ErrorKind::TransactionFailureAgent),
+                2 => Err(ErrorKind::ParameterAcquisitionFailure),
+                3 => Err(ErrorKind::DeserializationFailure), 
+                4 => Err(ErrorKind::InvalidMagicNumber),
+                5 => Err(ErrorKind::AgentVersionMismatch),
+                _ => Err(ErrorKind::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(-1))))?,  
             },
-            Err(error) => Err(Error::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
+            Err(error) => Err(ErrorKind::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
         }
     } 
 }
@@ -111,7 +110,7 @@ fn write_agent_params(ag: &TransactionAggregator, handle: &TransactionHandle, do
 fn serialize<T: for<'de> Serialize>(input: &T, file: &File) -> Result<()> { 
     match bincode::serialize_into::<&File, T>(file, input) {
         Ok(()) => Ok(()),
-        Err(error) => Err(Error::TransactionFailure(format!("Agent data serialization failed: {}", error))),
+        Err(error) => Err(ErrorKind::TransactionFailure(format!("Agent data serialization failed: {}", error))),
     }
 }
 

@@ -15,15 +15,16 @@ use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
 use serde_yaml::Value;
 
-use pacwrap_core::{
+use pacwrap_core::{err,
     ErrorKind,
+    error::*,
     exec::{ExecutionError,
         args::ExecutionArgs, 
-        utils::fakeroot_container,
+        fakeroot_container,
     },
     constants::{self,
+        DEFAULT_PATH,
         BWRAP_EXECUTABLE, 
-        XDG_RUNTIME_DIR,
         DBUS_PROXY_EXECUTABLE,
         DBUS_SOCKET},
     config::{self, 
@@ -42,8 +43,8 @@ const PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
 const SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
 enum ExecParams<'a> {
-    Root(bool, bool, Vec<&'a str>,  InstanceHandle<'a>),
-    Container(bool, bool, Vec<&'a str>, InstanceHandle<'a>),
+    Root(i8, bool, Vec<&'a str>,  InstanceHandle<'a>),
+    Container(i8, bool, Vec<&'a str>, InstanceHandle<'a>),
 }
 
 /*
@@ -52,7 +53,7 @@ enum ExecParams<'a> {
  */
 
 impl <'a>ExecParams<'a> {
-    fn parse(args: &'a mut Arguments) -> Result<Self, ErrorKind> {
+    fn parse(args: &'a mut Arguments) -> Result<Self> {
         let runtime = args.values()
             .iter()
             .filter_map(|f| {
@@ -71,7 +72,7 @@ impl <'a>ExecParams<'a> {
             })
             .skip(1)
             .collect(); 
-        let mut verbose = false;
+        let mut verbosity: i8 = 0;
         let mut shell = false;
         let mut root = false;
         let mut container = None;
@@ -80,7 +81,7 @@ impl <'a>ExecParams<'a> {
             match arg {
                 Operand::Short('r') | Operand::Long("root") => root = true,
                 Operand::Short('s') | Operand::Long("shell") => shell = true,
-                Operand::Short('v') | Operand::Long("verbose") => verbose = true,
+                Operand::Short('v') | Operand::Long("verbose") => verbosity += 1,
                 Operand::ShortPos('E', str) 
                     | Operand::ShortPos('s', str)
                     | Operand::ShortPos('r', str)
@@ -95,36 +96,35 @@ impl <'a>ExecParams<'a> {
 
         let handle = match container {
             Some(container) => config::provide_handle(container)?,
-            None => Err(ErrorKind::Argument(InvalidArgument::TargetUnspecified))?,
+            None => err!(InvalidArgument::TargetUnspecified)?,
         };
 
         if let InstanceType::DEP = handle.metadata().container_type() {
-            Err(ErrorKind::Message("Execution upon sliced filesystems is not supported."))?
+            err!(ErrorKind::Message("Execution upon sliced filesystems is not supported."))?
         }
 
         Ok(match root {
-            true => Self::Root(verbose, shell, runtime, handle),
-            false => Self::Container(verbose, shell, runtime, handle),
+            true => Self::Root(verbosity, shell, runtime, handle),
+            false => Self::Container(verbosity, shell, runtime, handle),
         })
     }
 }
 
-pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<(), ErrorKind> {
+pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
     match ExecParams::parse(args)? {
-        ExecParams::Root(verbose, true, _, handle) => execute_fakeroot_container(&handle, vec!("bash"), verbose),
-        ExecParams::Root(verbose,  false, args, handle) => execute_fakeroot_container(&handle, args, verbose),
-        ExecParams::Container(verbose, true, _, handle) => execute_container(&handle, vec!("bash"), true, verbose),
-        ExecParams::Container(verbose, false, args, handle) => execute_container(&handle, args, false, verbose),
+        ExecParams::Root(verbosity, true, _, handle) => execute_fakeroot_container(&handle, vec!("bash"), verbosity),
+        ExecParams::Root(verbosity,  false, args, handle) => execute_fakeroot_container(&handle, args, verbosity),
+        ExecParams::Container(verbosity, true, _, handle) => execute_container(&handle, vec!("bash"), true, verbosity),
+        ExecParams::Container(verbosity, false, args, handle) => execute_container(&handle, args, false, verbosity),
     }
 }
 
-fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, verbose: bool) -> Result<(), ErrorKind> {
+fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, verbosity: i8) -> Result<()> {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
     let vars = ins.vars();
-
-    
+ 
     if ! cfg.allow_forking() { 
         exec_args.push_env("--die-with-parent"); 
     }
@@ -151,16 +151,18 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
     register_filesystems(cfg.filesystem(), &vars, &mut exec_args)?;
     register_permissions(cfg.permissions(), &mut exec_args)?;
    
-    //TODO: Implement separate abstraction for path vars.
+    let path = match exec_args.get_var("PATH") {
+        Some(var) => var.as_str(), None => { exec_args.env("PATH", DEFAULT_PATH); DEFAULT_PATH },
+    };
+    let path_vec: Vec<&str> = path.split(":").collect();
 
-    exec_args.env("PATH", "/usr/local/bin:/usr/bin/:/bin:");
-    exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
-
-    if verbose {
+    if verbosity == 1 {
+        println!("Arguments:\t     {arguments:?}\n{ins:?}");
+    } else if verbosity > 1 {
         println!("Arguments:\t     {arguments:?}\n{ins:?}\n{exec_args:?}");
     }
 
-    check_path(ins, &arguments, vec!("/usr/local/bin/", "/usr/bin", "/bin"))?;
+    check_path(ins, &arguments, path_vec)?;
 
     let (reader, writer) = os_pipe::pipe().unwrap();
     let fd = writer.as_raw_fd();
@@ -181,7 +183,7 @@ fn execute_container(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, ve
 
     match proc.spawn() {
         Ok(c) => Ok(wait_on_process(c, bwrap_json(reader, writer)?, *cfg.allow_forking(), jobs, tc))?,
-        Err(err) => Err(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
+        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
     }
 }
 
@@ -200,7 +202,7 @@ fn signal_trap(bwrap_pid: i32) {
     });
 }
 
-fn wait_on_process(mut process: Child, bwrap_pid: i32, block: bool, mut jobs: Vec<Child>, tc: TermControl) -> Result<(), ErrorKind> {  
+fn wait_on_process(mut process: Child, bwrap_pid: i32, block: bool, mut jobs: Vec<Child>, tc: TermControl) -> Result<()> {  
     signal_trap(bwrap_pid);
  
     match process.wait() {
@@ -219,16 +221,16 @@ fn wait_on_process(mut process: Child, bwrap_pid: i32, block: bool, mut jobs: Ve
             }
      
             if let Err(err) = cleanup(&tc) {
-                print_warning(err);
+                err.warn();
             }
 
             process_exit(status)
         },
-        Err(error) => Err(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind()))
+        Err(error) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind()))
     }
 }
 
-fn cleanup(tc: &TermControl) -> Result<(), ErrorKind> {
+fn cleanup(tc: &TermControl) -> Result<()> {
     if let Err(errno) = tc.reset_terminal() {
         print_warning(format!("Failed to restore termios parameters: {errno}"));
     }
@@ -237,20 +239,18 @@ fn cleanup(tc: &TermControl) -> Result<(), ErrorKind> {
     Ok(())
 }
 
-fn process_exit(status: ExitStatus) -> Result<(), ErrorKind> {
-    let code = match status.code() {
+fn process_exit(status: ExitStatus) -> Result<()> {
+    exit(match status.code() {
         Some(status) => status,
         None => { 
             eprint!("\nbwrap process {status}"); 
+            println!();  
             100+status.signal().unwrap_or(0) 
         }
-    };
-
-    println!();
-    exit(code);
+    });
 }
 
-fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<Child, ErrorKind> {
+fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<Child> {
     register_dbus(per, args)?;
     create_placeholder(&*DBUS_SOCKET)?;
 
@@ -284,53 +284,53 @@ fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) ->
 
             Ok(child)
         },
-        Err(error) => Err(ErrorKind::ProcessInitFailure(DBUS_PROXY_EXECUTABLE, error.kind()))?
+        Err(error) => err!(ErrorKind::ProcessInitFailure(DBUS_PROXY_EXECUTABLE, error.kind()))?
     }
 }
 
-fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> Result<bool, ErrorKind> {
+fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> Result<bool> {
     if increment == &200 { 
         process_child.kill().ok();
         clean_up_socket(&*DBUS_SOCKET)?;
-        Err(ErrorKind::Execution(ExecutionError::SocketTimeout(socket.into())))?
+        err!(ExecutionError::SocketTimeout(socket.into()))?
     }
 
     thread::sleep(SOCKET_SLEEP_DURATION);
     Ok(pacwrap_core::utils::check_socket(socket))
 }
 
-fn create_placeholder(path: &str) -> Result<(), ErrorKind> {
+fn create_placeholder(path: &str) -> Result<()> {
     match File::create(path) {
         Ok(file) => Ok(drop(file)),
-        Err(error) => Err(ErrorKind::IOError(path.into(), error.kind()))
+        Err(error) => err!(ErrorKind::IOError(path.into(), error.kind()))
     }
 }
 
-fn clean_up_socket(path: &str) -> Result<(), ErrorKind> { 
+fn clean_up_socket(path: &str) -> Result<()> { 
     if let Err(error) = remove_file(path) {
         match error.kind() {
             std::io::ErrorKind::NotFound => return Ok(()),
-            _ => Err(ErrorKind::IOError(path.into(), error.kind()))?,
+            _ => err!(ErrorKind::IOError(path.into(), error.kind()))?,
         }
     }
 
     Ok(())
 }
 
-fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbose: bool) -> Result<(), ErrorKind> {  
-    if verbose {
-        println!("Arguments:\t     {arguments:?}\n{ins:?}");
+fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbosity: i8) -> Result<()> {  
+    if verbosity > 0 {
+        println!("Arguments:\t     {arguments:?}\n{ins:?}\n");
     }
 
     check_path(ins, &arguments, vec!("/usr/bin", "/bin"))?;
 
     match fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
         Ok(process) => Ok(wait_on_process(process, 0, false, Vec::<Child>::new(), TermControl::new(0)))?,
-        Err(err) => Err(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
+        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
     }
 }
 
-fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32, ErrorKind> { 
+fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32> { 
     let mut output = String::new();
   
     drop(writer);
@@ -339,15 +339,15 @@ fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32, ErrorKi
     match serde_yaml::from_str::<Value>(&output) {
         Ok(value) => match value["child-pid"].as_u64() {
             Some(value) => Ok(value as i32), 
-            None => Err(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
+            None => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
         },
-        Err(_) => Err(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
+        Err(_) => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
     }
 }
 
-fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&'static str>) -> Result<(), ErrorKind> {
+fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<()> {
     if args.len() == 0 {
-        Err(ErrorKind::Execution(ExecutionError::RuntimeArguments))?
+        err!(ExecutionError::RuntimeArguments)?
     }
 
     let exec = *args.get(0).unwrap();
@@ -356,18 +356,18 @@ fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&'static str>) -
     for dir in path {
         match Path::new(&format!("{}/{}",root,dir)).try_exists() {
             Ok(_) => if dest_exists(root, dir, exec)? { return Ok(()) },
-            Err(error) => Err(ErrorKind::Execution(ExecutionError::InvalidPathVar(dir, error.kind())))?
+            Err(error) => err!(ExecutionError::InvalidPathVar(dir.into(), error.kind()))?
         }
     }
 
-    Err(ErrorKind::Execution(ExecutionError::ExecutableUnavailable(exec.into())))?
+    err!(ExecutionError::ExecutableUnavailable(exec.into()))?
 }
 
-fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,ErrorKind> {
+fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool> {
     if exec.contains("..") {
-        Err(ErrorKind::Execution(ExecutionError::UnabsoluteExec(exec.into())))?
+        err!(ExecutionError::UnabsoluteExec(exec.into()))?
     } else if dir.contains("..") {
-        Err(ErrorKind::Execution(ExecutionError::UnabsolutePath(exec.into())))?
+        err!(ExecutionError::UnabsolutePath(exec.into()))?
     }
 
     let path = format!("{}{}/{}", root, dir, exec);
@@ -376,7 +376,7 @@ fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,ErrorKind> {
     let path_direct = obtain_path(Path::new(&path_direct), exec)?;
 
     if path.is_dir() | path_direct.is_dir() {
-        Err(ErrorKind::Execution(ExecutionError::DirectoryNotExecutable(exec.into())))?
+        err!(ExecutionError::DirectoryNotExecutable(exec.into()))?
     } else if let Ok(path) = path.read_link() {
         if let Some(path) = path.as_os_str().to_str() {
             return dest_exists(root, dir, path);
@@ -390,12 +390,12 @@ fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool,ErrorKind> {
     Ok(path.exists() | path_direct.exists())
 }
 
-fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf,ErrorKind> {
+fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf> {
     match Path::canonicalize(&path) {
         Ok(path) => Ok(path), 
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),
-            _ => Err(ErrorKind::IOError(exec.into(), err.kind()))?,
+            _ => err!(ErrorKind::IOError(exec.into(), err.kind()))?,
         }
     }
 }

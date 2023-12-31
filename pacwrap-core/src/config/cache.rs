@@ -1,11 +1,10 @@
-use std::{collections::HashMap,
-    io::ErrorKind::NotFound,
-    fs::read_dir};
+use std::{collections::HashMap, fs::read_dir};
 
-use crate::{ErrorKind, 
+use crate::{err, 
+    ErrorKind,
+    error::*,
     constants::DATA_DIR, 
-    config::{self, InstanceHandle}, 
-    utils::print_warning};
+    config::{self, InstanceHandle}};
 
 use super::{InsVars, 
     ConfigError, 
@@ -31,9 +30,9 @@ impl <'a>InstanceCache<'a> {
         }
     }
 
-    pub fn add(&mut self, ins: &'a str, instype: InstanceType, deps: Vec<&'a str>) -> Result<(),ErrorKind> {
+    pub fn add(&mut self, ins: &'a str, instype: InstanceType, deps: Vec<&'a str>) -> Result<()> {
         if let Some(_) = self.instances.get(ins) {
-            Err(ErrorKind::Config(ConfigError::AlreadyExists(ins.into())))?
+            err!(ConfigError::AlreadyExists(ins.into()))?
         }
 
         let deps = deps.iter().map(|a| (*a).into()).collect();          
@@ -42,32 +41,32 @@ impl <'a>InstanceCache<'a> {
                 handle.metadata_mut().set(deps, vec!()); 
                 handle 
             },
-            Err(error) => match error {          
-                ErrorKind::IOError(_, kind) => match kind { 
-                    NotFound => { 
+            Err(err) => match err.downcast::<ConfigError>() {
+                Ok(error) => match error {
+                    ConfigError::ConfigNotFound(_) => {
                         let vars = InsVars::new(ins);         
                         let cfg = Instance::new(instype, deps, vec!());
                         
-                        InstanceHandle::new(cfg, vars)
+                        InstanceHandle::new(cfg, vars)        
                     },
-                    _ => Err(error)?
-                },
-                _ => Err(error)?
-            }
+                    _ => Err(err)?,
+                }
+                _ => Err(err)?,
+            },
         };
 
         Ok(self.register(ins, handle)) 
     }
 
-    fn map(&mut self, ins: &'a str) -> Result<(),ErrorKind>  {
+    fn map(&mut self, ins: &'a str) -> Result<()>  {
         if let Some(_) = self.instances.get(ins) {
-            Err(ErrorKind::Config(ConfigError::AlreadyExists(ins.into())))?
+            err!(ConfigError::AlreadyExists(ins.into()))?
         }
 
         Ok(self.register(ins, match config::provide_handle(ins) {
             Ok(ins) => ins, 
             Err(error) => { 
-                print_warning(error.to_string()); 
+                error.warn();
                 return Ok(())
             }
         }))
@@ -112,7 +111,7 @@ impl <'a>InstanceCache<'a> {
     }
 }
 
-pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>, ErrorKind> {
+pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>> {
     let mut cache = InstanceCache::new();
 
     for name in vec {
@@ -122,11 +121,11 @@ pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>, ErrorK
     Ok(cache)
 }
 
-pub fn populate<'a>() -> Result<InstanceCache<'a>, ErrorKind> {
+pub fn populate<'a>() -> Result<InstanceCache<'a>> {
     populate_from(&roots()?)
 }
 
-fn roots<'a>() -> Result<Vec<&'a str>, ErrorKind> { 
+fn roots<'a>() -> Result<Vec<&'a str>> { 
     match read_dir(format!("{}/root", *DATA_DIR)) {
         Ok(dir) => Ok(dir.filter(|f| match f { 
             Ok(f) => match f.metadata() {
@@ -147,6 +146,6 @@ fn roots<'a>() -> Result<Vec<&'a str>, ErrorKind> {
                 false => Some(e)
             })
         .collect()),
-        Err(error) => Err(ErrorKind::IOError(format!("'{}/root", *DATA_DIR), error.kind())),
+        Err(error) => err!(ErrorKind::IOError(format!("'{}/root", *DATA_DIR), error.kind())),
     }
 }

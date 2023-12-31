@@ -7,7 +7,7 @@ use super::{Transaction,
     TransactionAggregator, 
     TransactionFlags,
     SyncReqResult, TransactionMode, 
-    Error,
+    ErrorKind,
     Result};
 
 pub struct Prepare {
@@ -34,18 +34,18 @@ impl Transaction for Prepare {
                                 handle.enumerate_foreign_pkgs(&dep_alpm); 
                                 dep_alpm.release().unwrap();
                             },
-                            None => Err(Error::DependentContainerMissing(dep.to_string()))?,
+                            None => Err(ErrorKind::DependentContainerMissing(dep.to_string()))?,
                         }
                     }   
                 }
 
                 if let TransactionType::Upgrade(upgrade,_,_) = ag.action() {
                     if ! upgrade && handle.metadata().queue.len() == 0 {
-                        Err(Error::NothingToDo)?
+                        Err(ErrorKind::NothingToDo)?
                     }
                 } else {
                     if handle.metadata().queue.len() == 0 {
-                        Err(Error::NothingToDo)?
+                        Err(ErrorKind::NothingToDo)?
                     }  
                 }
 

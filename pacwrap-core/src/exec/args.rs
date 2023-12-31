@@ -1,19 +1,22 @@
-use std::fmt::{Formatter, Debug};
+use std::{fmt::{Formatter, Debug}, collections::HashMap};
 
 pub struct ExecutionArgs {
     bind: Vec<String>,
     dev: Vec<String>,
     env: Vec<String>,
-    dbus: Vec<String>
+    dbus: Vec<String>,
+    vars: HashMap<String, String>, 
 }
 
+//TODO: This entire structure needs to be rethought
 impl ExecutionArgs {
     pub fn new() -> Self {
         Self { 
             bind: Vec::new(), 
             dev: Vec::new(), 
             env: Vec::new(), 
-            dbus: Vec::new() 
+            dbus: Vec::new(),
+            vars: HashMap::new(),
         }
     }
 
@@ -41,9 +44,15 @@ impl ExecutionArgs {
     }
 
     pub fn env(&mut self, src: impl Into<String>, dest: impl Into<String>) {
+        let var: String = src.into();
+        let var2: String = dest.into();
+
         self.env.push("--setenv".into());
-        self.env.push(src.into());
-        self.env.push(dest.into());
+        self.env.push(var.clone());
+        self.env.push(var2.clone());
+
+        //TODO: Temporary workaround until structure is rebuilt
+        self.vars.insert(var, var2);
     }
 
     pub fn dev(&mut self, src: impl Into<String> + Copy) {
@@ -74,6 +83,11 @@ impl ExecutionArgs {
 
     pub fn get_dbus(&self) -> &Vec<String> { 
         &self.dbus 
+    }
+
+    //TODO: Temporary workaround until structure is rebuilt 
+    pub fn get_var(&self, key: &str) -> Option<&String> {
+        self.vars.get(key)
     }
 }
 
