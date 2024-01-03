@@ -1,3 +1,22 @@
+/*
+ * pacwrap-core
+ * 
+ * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * This library is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use std::{env::var, process::id};
 
 use lazy_static::lazy_static;
@@ -35,13 +54,13 @@ lazy_static! {
     pub static ref USER: &'static str = env("USER");
     pub static ref TERM: &'static str = env_opt("TERM");
     pub static ref COLORTERM: &'static str = env_opt("COLORTERM");
-    pub static ref LANG: &'static str = env_default("LAMG", "en_US.utf-8");
+    pub static ref LANG: &'static str = env_default("LAMG", "en_US.UTF-8");
     pub static ref WAYLAND_DISPLAY: &'static str = env_opt("WAYLAND_DISPLAY");
     pub static ref X11_DISPLAY: &'static str = env_opt("DISPLAY"); 
     pub static ref XAUTHORITY: &'static str = env_opt("XAUTHORITY");
-    pub static ref CACHE_DIR: &'static str = env_default("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
-    pub static ref CONFIG_DIR: &'static str = env_default("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
-    pub static ref DATA_DIR: &'static str = env_default("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
+    pub static ref CACHE_DIR: &'static str = env_default_dir("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
+    pub static ref CONFIG_DIR: &'static str = env_default_dir("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
+    pub static ref DATA_DIR: &'static str = env_default_dir("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
     pub static ref GLOBAL_CONFIG: &'static str = format_str!("{}/pacwrap.yml", PACWRAP_CONFIG_DIR); 
     pub static ref PACWRAP_AGENT_FILE: &'static str = format_str!("/run/user/{}/pacwrap_agent_{}", *UID, &id()); 
     pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", *UID);
@@ -124,7 +143,13 @@ fn env_opt(env: &str) -> &'static str {
     }
 }
 
-fn env_default(env: &str, default: &str) -> &'static str {
+fn env_default(env: &str, default: &'static str) -> &'static str {
+    match var(env) {
+        Ok(var) => var.leak(), Err(_) => default, 
+    }
+}
+
+fn env_default_dir(env: &str, default: &str) -> &'static str {
     match var(env) {
         Ok(var) => var.leak(), Err(_) => format_str!("{}{}", *HOME, default), 
     }
