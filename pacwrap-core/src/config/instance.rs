@@ -73,7 +73,9 @@ pub struct InstanceRuntime {
     #[serde(default)]  
     enable_userns: bool, 
     #[serde(default)]  
-    retain_session: bool,     
+    retain_session: bool,
+    #[serde(default = "default_true")]
+    seccomp: bool,
     #[serde(default)]  
     allow_forking: bool,    
     #[serde(skip_serializing_if = "Vec::is_empty", default)] 
@@ -92,6 +94,7 @@ impl InstanceRuntime {
         let per: Vec<Box<dyn Permission>> = Vec::from(default_per); 
  
         Self {
+            seccomp: true, 
             allow_forking: false,
             retain_session: false,
             enable_userns: false,
@@ -101,19 +104,41 @@ impl InstanceRuntime {
         }
     }
 
-    pub fn permissions(&self) -> &Vec<Box<dyn Permission>> { &self.permissions }
-    pub fn filesystem(&self) -> &Vec<Box<dyn Filesystem>> { &self.filesystems }
-    pub fn dbus(&self) -> &Vec<Box<dyn Dbus>> { &self.dbus } 
-    pub fn allow_forking(&self) -> &bool { &self.allow_forking }
-    pub fn enable_userns(&self) -> &bool { &self.enable_userns } 
-    pub fn retain_session(&self) -> &bool { &self.retain_session }
+    pub fn permissions(&self) -> &Vec<Box<dyn Permission>> { 
+        &self.permissions 
+    }
+    
+    pub fn filesystem(&self) -> &Vec<Box<dyn Filesystem>> { 
+        &self.filesystems 
+    }
+    
+    pub fn dbus(&self) -> &Vec<Box<dyn Dbus>> { 
+        &self.dbus 
+    } 
+    
+    pub fn allow_forking(&self) -> &bool { 
+        &self.allow_forking 
+    }
+    
+    pub fn enable_userns(&self) -> &bool { 
+        &self.enable_userns 
+    } 
+    
+    pub fn retain_session(&self) -> &bool { 
+        &self.retain_session 
+    }
+
+    pub fn seccomp(&self) -> &bool {
+        &self.seccomp
+    }
 }
 
 impl Debug for InstanceRuntime {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         writeln!(fmter, "allow_forking:       {}", self.allow_forking)?;
         writeln!(fmter, "retain_session:      {}", self.retain_session)?;
-        writeln!(fmter, "enable_userns:       {}", self.enable_userns)
+        writeln!(fmter, "enable_userns:       {}", self.enable_userns)?;
+        writeln!(fmter, "seccomp:             {}", self.seccomp)
     }
 }
 
@@ -205,4 +230,8 @@ fn time_as_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
+}
+
+fn default_true() -> bool {
+    true
 }

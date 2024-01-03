@@ -1,32 +1,48 @@
-use std::os::unix::process::ExitStatusExt;
-use std::{thread, time::Duration};
-use std::process::{Command, Child, ExitStatus, exit};
-use std::fs::{File, remove_file};
-use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::vec::Vec;
-use std::os::unix::io::AsRawFd;
+/*
+ * pacwrap
+ * 
+ * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
-use nix::unistd::Pid;
-use nix::sys::signal::{Signal, kill};
+use std::{os::unix::{process::ExitStatusExt, io::AsRawFd},
+    process::{Command, Child, ExitStatus, exit},
+    fs::{File, remove_file}, 
+    path::{Path, PathBuf},
+    time::Duration,
+	vec::Vec,
+    thread};
 
+use nix::{unistd::Pid, sys::signal::{Signal, kill}};
 use signal_hook::{consts::*, iterator::Signals};
-use os_pipe::{PipeReader, PipeWriter};
 use command_fds::{CommandFdExt, FdMapping};
-use serde_yaml::Value;
 
 use pacwrap_core::{err,
     ErrorKind,
     error::*,
     exec::{ExecutionError,
-        args::ExecutionArgs, 
-        fakeroot_container,
-    },
+        args::ExecutionArgs,
+        seccomp::{provide_bpf_program, configure_pbf_program},
+        utils::bwrap_json,
+        fakeroot_container},
     constants::{self,
         DEFAULT_PATH,
         BWRAP_EXECUTABLE, 
         DBUS_PROXY_EXECUTABLE,
-        DBUS_SOCKET},
+        DBUS_SOCKET,
+        XDG_RUNTIME_DIR},
     config::{self, 
         Dbus,        
         InstanceHandle, 
@@ -132,11 +148,13 @@ fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool
     if ! cfg.enable_userns() { 
         exec_args.push_env("--unshare-user"); 
         exec_args.push_env("--disable-userns"); 
+    } else {
+        print_warning("Namespace nesting has been known in the past to enable container escape vulnerabilities.");
     }
 
     match ! cfg.retain_session() { 
         true => exec_args.push_env("--new-session"),
-        false => print_warning("Retaining a console session is known to allow for sandbox escape. See CVE-2017-5226 for details."),
+        false => print_warning("Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details."),
     }
 
     match shell && *constants::IS_COLOR_TERMINLAL { 
@@ -146,15 +164,51 @@ fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool
 
     if cfg.dbus().len() > 0 { 
         jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec_args)?); 
-    } 
+    }
 
+    exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
     register_filesystems(cfg.filesystem(), &vars, &mut exec_args)?;
     register_permissions(cfg.permissions(), &mut exec_args)?;
-   
+ 
     let path = match exec_args.get_var("PATH") {
         Some(var) => var.as_str(), None => { exec_args.env("PATH", DEFAULT_PATH); DEFAULT_PATH },
     };
     let path_vec: Vec<&str> = path.split(":").collect();
+    let (reader, writer) = os_pipe::pipe().unwrap();
+    let fd = writer.as_raw_fd();
+    let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();
+    let time = std::time::SystemTime::now();
+    let sec_fd = match cfg.seccomp() {
+        true => provide_bpf_program(configure_pbf_program(cfg), &sec_reader, sec_writer).unwrap(), 
+        false => { print_warning("Disabling seccomp filtering can allow for sandbox escape."); 0 },
+    };
+
+    println!(" {} ", time.elapsed().unwrap().as_nanos());
+
+    let tc = TermControl::new(0); 
+    let mut proc = Command::new(BWRAP_EXECUTABLE);
+
+    proc.arg("--dir")
+        .arg("/tmp")
+        .args(exec_args.get_bind())
+        .arg("--dev").arg("/dev")
+        .arg("--proc").arg("/proc")
+        .args(exec_args.get_dev())
+        .arg("--unshare-all")
+        .arg("--clearenv")
+        .args(exec_args.get_env())
+        .arg("--info-fd")
+        .arg(fd.to_string());
+
+    let fd_mappings = match sec_fd {
+        0 => vec![FdMapping { parent_fd: fd, child_fd: fd }],
+        _ => {
+            proc.arg("--seccomp")
+                .arg(sec_fd.to_string()); 
+            vec![FdMapping { parent_fd: fd, child_fd: fd },
+                FdMapping { parent_fd: sec_fd, child_fd: sec_fd }]
+        },
+    };
 
     if verbosity == 1 {
         println!("Arguments:\t     {arguments:?}\n{ins:?}");
@@ -163,23 +217,7 @@ fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool
     }
 
     check_path(ins, &arguments, path_vec)?;
-
-    let (reader, writer) = os_pipe::pipe().unwrap();
-    let fd = writer.as_raw_fd();
-    let tc = TermControl::new(0);
-    let mut proc = Command::new(BWRAP_EXECUTABLE);
-      
-    proc.arg("--dir").arg("/tmp")
-        .args(exec_args.get_bind())
-        .arg("--dev").arg("/dev")
-        .arg("--proc").arg("/proc")
-        .args(exec_args.get_dev())
-        .arg("--unshare-all")
-        .arg("--clearenv")
-        .args(exec_args.get_env()).arg("--info-fd")
-        .arg(fd.to_string())
-        .args(arguments)
-        .fd_mappings(vec![FdMapping { parent_fd: fd, child_fd: fd }]).unwrap();  
+    proc.args(arguments).fd_mappings(fd_mappings).unwrap();  
 
     match proc.spawn() {
         Ok(c) => Ok(wait_on_process(c, bwrap_json(reader, writer)?, *cfg.allow_forking(), jobs, tc))?,
@@ -231,11 +269,8 @@ fn wait_on_process(mut process: Child, bwrap_pid: i32, block: bool, mut jobs: Ve
 }
 
 fn cleanup(tc: &TermControl) -> Result<()> {
-    if let Err(errno) = tc.reset_terminal() {
-        print_warning(format!("Failed to restore termios parameters: {errno}"));
-    }
-
     clean_up_socket(&*DBUS_SOCKET)?;
+    tc.reset_terminal()?;
     Ok(())
 }
 
@@ -327,21 +362,6 @@ fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbos
     match fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
         Ok(process) => Ok(wait_on_process(process, 0, false, Vec::<Child>::new(), TermControl::new(0)))?,
         Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
-    }
-}
-
-fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32> { 
-    let mut output = String::new();
-  
-    drop(writer);
-    reader.read_to_string(&mut output).unwrap();    
-   
-    match serde_yaml::from_str::<Value>(&output) {
-        Ok(value) => match value["child-pid"].as_u64() {
-            Some(value) => Ok(value as i32), 
-            None => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
-        },
-        Err(_) => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
     }
 }
 

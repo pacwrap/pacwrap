@@ -1,16 +1,39 @@
+/*
+ * pacwrap-core
+ * 
+ * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * This library is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use std::{process::{Child, Command}, fmt::{Formatter, Display}, io::Error};
 
+use command_fds::{CommandFdExt, FdMapping};
+//use os_pipe::{PipeReader, PipeWriter};
 use lazy_static::lazy_static;
 
 use crate::{impl_error,
 	to_static_str,
 	ErrorTrait,
-	constants::{LOG_LOCATION, BWRAP_EXECUTABLE, PACWRAP_AGENT_FILE, GID, UID, TERM, LANG, COLORTERM}, 
+	constants::{LOG_LOCATION, BWRAP_EXECUTABLE, PACWRAP_AGENT_FILE, BOLD, RESET, GID, UID, TERM, LANG, COLORTERM}, 
     config::InstanceHandle};
-use crate::constants::{RESET, BOLD};
+
+use self::seccomp::{provide_bpf_program, FilterType::*};
 
 pub mod args;
 pub mod utils;
+pub mod seccomp;
 
 lazy_static! {
     static ref ID: (&'static str, &'static str) = (to_static_str!(UID), to_static_str!(GID));
@@ -45,8 +68,12 @@ impl Display for ExecutionError {
     }
 }
 
-pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child, Error> {  
-    Command::new(BWRAP_EXECUTABLE)
+pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child, Error> {
+	let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();  
+	let sec_fd = provide_bpf_program(vec![Standard, Namespaces, TtyControl], &sec_reader, sec_writer).unwrap();
+	let fd_mappings = vec![FdMapping { parent_fd: sec_fd, child_fd: sec_fd }];
+	
+	Command::new(BWRAP_EXECUTABLE)
 		.env_clear()
 		.arg("--tmpfs").arg("/tmp")
 		.arg("--bind").arg(ins.vars().root()).arg("/")
@@ -58,7 +85,6 @@ pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<
 		.arg("--dev").arg("/dev")
 		.arg("--proc").arg("/proc")
 		.arg("--unshare-all").arg("--share-net")
-		.arg("--clearenv")
 		.arg("--hostname").arg("FakeChroot")
 		.arg("--new-session")
 		.arg("--setenv").arg("TERM").arg("xterm")
@@ -67,16 +93,24 @@ pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<
 		.arg("--setenv").arg("HOME").arg(ins.vars().home_mount())
 		.arg("--setenv").arg("USER").arg(ins.vars().user())
 		.arg("--die-with-parent")
-		.arg("--unshare-user")
 		.arg("--disable-userns")
+		.arg("--unshare-user")
+		.arg("--seccomp")
+		.arg(sec_fd.to_string())
 		.arg("fakechroot")
 		.arg("fakeroot")
 		.args(arguments)
+		.fd_mappings(fd_mappings)
+		.unwrap()
 		.spawn()
 }
 
 pub fn transaction_agent(ins: &InstanceHandle) -> Result<Child,Error> { 
-    Command::new(BWRAP_EXECUTABLE)
+	let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();  
+	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_reader, sec_writer).unwrap();
+	let fd_mappings = vec![FdMapping { parent_fd: sec_fd, child_fd: sec_fd }];
+	
+	Command::new(BWRAP_EXECUTABLE)
 		.env_clear()
 		.arg("--bind").arg(&ins.vars().root()).arg("/mnt")
 		.arg("--tmpfs").arg("/tmp")
@@ -112,7 +146,11 @@ pub fn transaction_agent(ins: &InstanceHandle) -> Result<Child,Error> {
 		.arg("--die-with-parent")
 		.arg("--unshare-user")
 		.arg("--disable-userns")
+		.arg("--seccomp")
+		.arg(sec_fd.to_string())
 		.arg("agent")
 		.arg("transact")
+		.fd_mappings(fd_mappings)
+		.unwrap()
 		.spawn()
 }

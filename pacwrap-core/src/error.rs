@@ -1,6 +1,25 @@
+/*
+ * pacwrap-core
+ * 
+ * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * This library is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use std::{any::Any, process::exit, fmt::{Display, Debug}};
 
-use crate::utils::{print_error, print_warning};
+use crate::{utils::{print_error, print_warning}, sync::transaction::ErrorKind};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -50,7 +69,15 @@ impl Error {
     }
 
     pub fn handle(&self) {
-        print_error(&self.kind); 
+        //Temporary until command and control pipeline is implemented for pacwrap-agent
+        match self.downcast::<ErrorKind>() {
+            Ok(error) => match error {
+                ErrorKind::TransactionFailureAgent => (),
+                _ => print_error(&self.kind), 
+            } 
+            Err(_) => print_error(&self.kind),
+        }
+
         exit(self.kind.code());
     }
 
