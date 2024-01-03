@@ -1,22 +1,21 @@
 #!/bin/bash
 #
-#  pacwrap - distribution script
+# pacwrap-dist
 # 
-#  Copyright (C) 2023 Xavier R.M. 
-#  sapphirus(at)azorium(dot)net
+# Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+# SPDX-License-Identifier: GPL-3.0-only
 #
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
 #
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, with only version 3 of the License.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 user() {
 	local uid=$PACWRAP_REAL_UID
@@ -25,6 +24,7 @@ user() {
 	if [[ "$(cat /etc/passwd | grep $uid:$gid)" ]]; then
 		return
 	fi
+
 
 	echo "Creating dummy user.."
 	echo "user:x:$uid:$gid::/:/usr/bin/nologin" >> /etc/passwd
@@ -39,12 +39,12 @@ locale() {
 	echo "Initializing locales.."	
 	
 	if [[ $LANG == "en_US.UTF-8" ]] || [[ -z "$LANG" ]]; then
-		echo -e "\nen_US.UTF-8" >> "$INSTANCE_ROOT/etc/locale.gen"	
+		echo -e "\nen_US.UTF-8 UTF-8" >> /etc/locale.gen
 	else
-		echo -e "\nen_US.UTF-8 UTF-8\n$LANG ${LANG#*.}" >> "$INSTANCE_ROOT/etc/locale.gen"	
+		echo -e "\nen_US.UTF-8 UTF-8\n$LANG ${LANG#*.}" >> /etc/locale.gen
 	fi
 
-	echo "LANG=$LANG" > "$INSTANCE_ROOT/etc/locale.conf"
+	echo "LANG=$LANG" > /etc/locale.conf
 	locale-gen
 }
 
