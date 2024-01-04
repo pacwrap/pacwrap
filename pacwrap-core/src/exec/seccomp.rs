@@ -96,7 +96,7 @@ static RULES_COND: [(FilterType, &'static str, Action, Compare); 4] = [
 ];
 
 // Provide configuration parameters for berkley filtering program generation 
-pub fn configure_pbf_program(instance: &InstanceRuntime) -> Vec<FilterType> {
+pub fn configure_bpf_program(instance: &InstanceRuntime) -> Vec<FilterType> {
     let mut filters = vec![Standard];
 
     if ! instance.enable_userns() {

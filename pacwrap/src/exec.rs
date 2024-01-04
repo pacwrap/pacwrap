@@ -34,7 +34,7 @@ use pacwrap_core::{err,
     error::*,
     exec::{ExecutionError,
         args::ExecutionArgs,
-        seccomp::{provide_bpf_program, configure_pbf_program},
+        seccomp::{provide_bpf_program, configure_bpf_program},
         utils::bwrap_json,
         fakeroot_container},
     constants::{self,
@@ -179,7 +179,7 @@ fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool
     let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();
     let time = std::time::SystemTime::now();
     let sec_fd = match cfg.seccomp() {
-        true => provide_bpf_program(configure_pbf_program(cfg), &sec_reader, sec_writer).unwrap(), 
+        true => provide_bpf_program(configure_bpf_program(cfg), &sec_reader, sec_writer).unwrap(), 
         false => { print_warning("Disabling seccomp filtering can allow for sandbox escape."); 0 },
     };
 
