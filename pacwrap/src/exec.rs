@@ -177,13 +177,10 @@ fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool
     let (reader, writer) = os_pipe::pipe().unwrap();
     let fd = writer.as_raw_fd();
     let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();
-    let time = std::time::SystemTime::now();
     let sec_fd = match cfg.seccomp() {
         true => provide_bpf_program(configure_bpf_program(cfg), &sec_reader, sec_writer).unwrap(), 
         false => { print_warning("Disabling seccomp filtering can allow for sandbox escape."); 0 },
     };
-
-    println!(" {} ", time.elapsed().unwrap().as_nanos());
 
     let tc = TermControl::new(0); 
     let mut proc = Command::new(BWRAP_EXECUTABLE);
