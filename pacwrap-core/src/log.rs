@@ -19,22 +19,36 @@
 
 use std::{path::Path,
     fs::{OpenOptions, File}, 
-    io::{Write, Error}};
+    io::Write, fmt::{Display, Formatter}};
 
 use time::{OffsetDateTime, 
     format_description::FormatItem,
     macros::format_description, UtcOffset};
 
-use crate::constants::LOG_LOCATION;
+use crate::{err, 
+    impl_error, 
+    Error, 
+    ErrorKind, 
+    ErrorTrait, 
+    Result, 
+    constants::LOG_LOCATION};
 
 const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
 const UTC_OFFSET: &[FormatItem<'static>] = format_description!("[offset_hour]");
 
+impl_error!(LoggerError);
+
 #[derive(Debug)]
 pub enum LoggerError {
-    ParentNotFound,
     Uninitialized,
-    GenericIOError(&'static str, Error)
+}
+
+impl Display for LoggerError {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::Uninitialized => write!(fmter, "Logger is uninitialized"),
+        }
+    }
 }
 
 pub struct Logger {
@@ -63,13 +77,8 @@ impl Logger {
         }
     }
 
-    pub fn init(mut self) -> Result<Self, LoggerError> {
+    pub fn init(mut self) -> Result<Self> {
         let path = Path::new(*LOG_LOCATION);
-        
-        if ! path.parent().unwrap().exists() {
-            Err(LoggerError::ParentNotFound)?
-        }
-
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -79,13 +88,13 @@ impl Logger {
 
         self.file = Some(match file {
             Ok(file) => file,
-            Err(error) => Err(LoggerError::GenericIOError(LOG_LOCATION.clone(), error))?, 
+            Err(error) => err!(ErrorKind::IOError(LOG_LOCATION.to_string(), error.kind()))?, 
         });
 
         Ok(self)
     }
 
-    pub fn log(&mut self, msg: impl Into<String> + std::fmt::Display) -> Result<(),LoggerError> { 
+    pub fn log(&mut self, msg: impl Into<String> + std::fmt::Display) -> Result<()> { 
        /*
         * We then attempt to update it here.
         *
@@ -100,12 +109,12 @@ impl Logger {
         let time: OffsetDateTime = OffsetDateTime::now_utc().to_offset(self.offset);
         let write = match self.file.as_mut() {
             Some(file) => file.write(format!("[{}] [{}] {}\n", time.format(DATE_FORMAT).unwrap(), self.module, msg).as_bytes()),
-            None => Err(LoggerError::Uninitialized)?
+            None => err!(LoggerError::Uninitialized)?
         };
 
         match write {
             Ok(_) => Ok(()),
-            Err(error) => Err(LoggerError::GenericIOError(LOG_LOCATION.clone(), error)),
+            Err(error) => err!(ErrorKind::IOError(LOG_LOCATION.to_string(), error.kind())),
         }
     }
 }

@@ -24,18 +24,18 @@ use crate::{err,
     error::*,
     constants::ARROW_GREEN,
 	config::InstanceType,
-	exec::utils::execute_in_container,
+	exec::utils::execute_fakeroot_container,
 	log::Logger,
-	sync::{self, filesystem::FileSystemStateSync},
-	config::{InstanceHandle, InstanceType::ROOT,cache::InstanceCache}};
-
-use super::{
-    Transaction,
-    TransactionHandle,
-    TransactionState,
-    TransactionType,
-    TransactionFlags, 
-    TransactionMetadata};
+	sync::{self,
+	    SyncError,
+	    filesystem::FileSystemStateSync,
+	    transaction::{Transaction,
+            TransactionHandle,
+            TransactionState,
+            TransactionType,
+            TransactionFlags, 
+            TransactionMetadata}},
+	config::{InstanceHandle, InstanceType::ROOT,cache::InstanceCache, CONFIG}};
 
 pub struct TransactionAggregator<'a> {
     queried: Vec<&'a str>,
@@ -143,12 +143,12 @@ impl <'a>TransactionAggregator<'a> {
         };
         let alpm = sync::instantiate_alpm(&inshandle);
         let mut meta = TransactionMetadata::new(queue);
-        let mut handle = TransactionHandle::new(alpm, &mut meta);
+        let mut handle = TransactionHandle::new(&*CONFIG, alpm, &mut meta);
         let mut act: Box<dyn Transaction> = TransactionState::Prepare.from(self);
         
         self.action.begin_message(&inshandle);
 
-        loop {  
+        loop {
             let result = match act.engage(self, &mut handle, inshandle) {
                 Ok(result) => {
                     if let TransactionState::Complete(updated) = result {
@@ -163,8 +163,19 @@ impl <'a>TransactionAggregator<'a> {
                     result
                 },
                 Err(result) => {
+                    let is_okay = match result.downcast::<SyncError>() { 
+                        Ok(error) => match error {  
+                            SyncError::NothingToDo(bool) => *bool, _ => true,
+                        },
+                        Err(_) => true,
+                    };
+
                     handle.release();
-                    return err!(result)
+
+                    match is_okay {
+                        false => return Ok(()),
+                        true => return Err(result),
+                    }
                 } 
             };
                
@@ -173,8 +184,8 @@ impl <'a>TransactionAggregator<'a> {
     }
 
     pub fn keyring_update(&mut self, inshandle: &InstanceHandle) -> Result<()> {
-        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"))?;
-        execute_in_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"))?;
+        execute_fakeroot_container(inshandle, vec!("/usr/bin/pacman-key", "--populate", "archlinux"))?;
+        execute_fakeroot_container(inshandle, vec!("/usr/bin/pacman-key", "--updatedb"))?;
         self.keyring = true;
         Ok(())
     }

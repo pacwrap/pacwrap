@@ -16,30 +16,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-use std::{fs::File, path::Path};
-
 use alpm::Alpm;
 use dialoguer::console::Term;
-use serde::Serialize;
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
 
-use crate::{exec::transaction_agent, 
-    sync::{DEFAULT_ALPM_CONF, utils::erroneous_preparation, self}, 
+use crate::{err,
+    Error,
+    Result,
+    exec::transaction_agent, 
+    sync::{self,
+        SyncError,
+        transaction::{Transaction, 
+            TransactionState, 
+            TransactionHandle, 
+            TransactionAggregator,
+            TransactionFlags, 
+            TransactionParameters},
+        utils::erroneous_preparation}, 
     utils::prompt::prompt,
-    constants::{PACWRAP_AGENT_FILE, RESET, BOLD, DIM},
-    config::InstanceHandle,
-};
-
-use super::{Transaction, 
-    TransactionState, 
-    TransactionHandle, 
-    TransactionAggregator,
-    TransactionFlags,
-    TransactionParameters,
-    Result, 
-    ErrorKind};
-
+    constants::{RESET, BOLD, DIM},
+    config::InstanceHandle};
 
 pub struct Commit {
     state: TransactionState,
@@ -76,19 +72,14 @@ impl Transaction for Commit {
         }
 
         let result = confirm(&self.state, ag, handle);
-        let download = result.1.unwrap_or((0,0));
-
-        if let Some(result) = result.0 {
-            return result;
-        }
+        let result = match result.0 {
+            Some(result) => return result, None => result.1
+        };
 
         handle.set_alpm(None); 
-        write_agent_params(ag, handle, download)?; 
- 
-        let mut agent = match transaction_agent(inshandle) {
-            Ok(child) => child,
-            Err(error) => Err(ErrorKind::TransactionFailure(format!("Execution of agent failed: {}", error)))?,      
-        };
+
+        let parameters =  &TransactionParameters::new(*ag.action(), *handle.get_mode(), result);
+        let mut agent = transaction_agent(inshandle, parameters, handle.metadata())?;
 
         match agent.wait() {
             Ok(exit_status) => match exit_status.code().unwrap_or(-1) {
@@ -98,49 +89,30 @@ impl Transaction for Commit {
                     }
 
                     handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
-                    handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE)); 
+                    handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?; 
                     ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
                     state_transition(&self.state, handle, true)
                 },
-                1 => Err(ErrorKind::TransactionFailureAgent),
-                2 => Err(ErrorKind::ParameterAcquisitionFailure),
-                3 => Err(ErrorKind::DeserializationFailure), 
-                4 => Err(ErrorKind::InvalidMagicNumber),
-                5 => Err(ErrorKind::AgentVersionMismatch),
-                _ => Err(ErrorKind::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(-1))))?,  
+                1 => err!(SyncError::TransactionFailureAgent),
+                2 => err!(SyncError::ParameterAcquisitionFailure),
+                3 => err!(SyncError::DeserializationFailure), 
+                4 => err!(SyncError::InvalidMagicNumber),
+                5 => err!(SyncError::AgentVersionMismatch),
+                _ => err!(SyncError::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(-1))))?,  
             },
-            Err(error) => Err(ErrorKind::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
+            Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
         }
     } 
 }
 
-fn write_agent_params(ag: &TransactionAggregator, handle: &TransactionHandle, download: (u64, usize)) -> Result<()> {
-    let f = match File::create(Path::new(*PACWRAP_AGENT_FILE)) {
-        Ok(f) => f,
-        Err(error) => Err(ErrorKind::IOError((*PACWRAP_AGENT_FILE).into(), error.kind()))?
-    };
-
-    serialize(&TransactionParameters::new(*ag.action(), *handle.get_mode(), download.0, download.1), &f)?;  
-    serialize(&*DEFAULT_ALPM_CONF, &f)?; 
-    serialize(handle.metadata(), &f)?; 
-    Ok(())
-}
-
-fn serialize<T: for<'de> Serialize>(input: &T, file: &File) -> Result<()> { 
-    match bincode::serialize_into::<&File, T>(file, input) {
-        Ok(()) => Ok(()),
-        Err(error) => Err(ErrorKind::TransactionFailure(format!("Agent data serialization failed: {}", error))),
-    }
-}
-
-fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> (Option<Result<TransactionState>>, Option<(u64, usize)>) {
-    let mut download = None;
+fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> (Option<Result<TransactionState>>, (u64, u64)) {
+    let sum = summary(handle.alpm());
 
     if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
-        download = Some(summary(handle.alpm()));
+        println!("{}", sum.0);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            return (Some(state_transition(state, handle, false)), None); 
+            return (Some(state_transition(state, handle, false)), sum.1); 
         } 
 
         if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
@@ -148,13 +120,13 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
             let query = format!("Proceed with {action}?");
 
             if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
-                return (Some(state_transition(state, handle, false)), None);
+                return (Some(state_transition(state, handle, false)), sum.1);
             }
         } 
     }
 
     handle.alpm_mut().trans_release().ok();
-    (None, download)
+    (None, sum.1)
 }
 
 fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle, updated: bool) -> Result<TransactionState> {
@@ -167,22 +139,20 @@ fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle
     })
 }
 
-fn summary(handle: &Alpm) -> (u64, usize) { 
-    let mut installed_size_old: i64 = 0;
+fn summary(handle: &Alpm) -> (String, (u64, u64)) { 
     let mut installed_size: i64 = 0;
+    let mut installed_size_old: i64 = 0; 
     let mut download: i64 = 0;
-    let mut files_to_download: usize = 0; 
-    let mut pkglist: String = String::new();
+    let mut files_to_download: u64 = 0;
     let mut current_line_len: usize = 0;
     let remove = if handle.trans_remove().len() > 0 { true } else { false };
     let packages = if remove { handle.trans_remove() } else { handle.trans_add() };
-    let total_str = if remove { "Total Removed Size" } else { "Total Installed Size" };
     let size = Term::size(&Term::stdout());
     let preface = format!("Packages ({}) ", packages.len());
     let preface_newline = " ".repeat(preface.len()); 
     let line_delimiter = size.1 as usize - preface.len();
-   
-    print!("\n{}{preface}{}", *BOLD, *RESET);
+    let mut pkglist: String = String::new(); 
+    let mut summary = format!("\n{}{preface}{}", *BOLD, *RESET);
 
     for pkg_sync in packages { 
         let pkg = match handle.localdb().pkg(pkg_sync.name()) {
@@ -193,7 +163,7 @@ fn summary(handle: &Alpm) -> (u64, usize) {
         let string_len = pkg.name().len() + pkg_sync.version().len() + 2;
 
         if current_line_len+string_len >= line_delimiter { 
-            println!("{pkglist}"); 
+            summary.push_str(&format!("{pkglist}\n"));
             pkglist = preface_newline.clone();
             current_line_len = pkglist.len(); 
         }
@@ -210,19 +180,18 @@ fn summary(handle: &Alpm) -> (u64, usize) {
         pkglist.push_str(&output);  
     }
 
-    print!("{pkglist}\n\n");
-    println!("{}{total_str}{}: {}", *BOLD, *RESET, installed_size.to_byteunit(SI));  
-
+    let total_str = if remove { "Total Removed Size" } else { "Total Installed Size" }; 
     let net = installed_size-installed_size_old;
 
+    summary.push_str(&format!("{pkglist}\n\n{}{total_str}{}: {}\n", *BOLD, *RESET, installed_size.to_byteunit(SI))); 
+  
     if net != 0 {
-        println!("{}Net Upgrade Size{}: {}", *BOLD, *RESET, net.to_byteunit(SI)); 
+        summary.push_str(&format!("{}Net Upgrade Size{}: {}\n", *BOLD, *RESET, net.to_byteunit(SI))); 
     }
 
     if download > 0 {
-        println!("{}Total Download Size{}: {}", *BOLD, *RESET, download.to_byteunit(SI));
+        summary.push_str(&format!("{}Total Download Size{}: {}\n", *BOLD, *RESET, download.to_byteunit(SI)));
     }
 
-    println!();
-    (download as u64, files_to_download)
+    (summary, (download as u64, files_to_download))
 }

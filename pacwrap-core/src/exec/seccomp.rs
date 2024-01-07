@@ -54,9 +54,11 @@ static PERSONALITY: u64 = if cfg!(target_pointer_width = "64") { 0x0000 } else {
  *
  * https://github.com/flatpak/flatpak/blob/main/common/flatpak-run.c#L1835
  * 
- * Please do not open issue reports regarding filters that of which can be toggled. When the
- * relevant options are activated, users are warned of the potential ramifications of so doing. 
- * This encumbers great responsibility upon the user when exercising this great power.
+ * Please do not open issue reports, esplicitly regarding lessened security, regarding filters 
+ * that of which can be toggled. When the relevant options are activated, users are warned of 
+ * the potential ramifications of so doing. 
+ * 
+ * This encumbers a great responsibility upon the user when exercising this great power.
  */
 static RULES: [(FilterType, &'static str, Action); 28] = [
     (Standard, "syslog", EPERM), 

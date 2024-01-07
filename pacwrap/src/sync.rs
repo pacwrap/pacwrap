@@ -30,9 +30,9 @@ use pacwrap_core::{err,
     utils::arguments::{Arguments, 
         InvalidArgument, 
         Operand},
-    config::{self, 
-        InstanceType, 
+    config::{InstanceType, 
         InstanceHandle,
+        init::init,
         cache},
     config::InstanceCache,
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
@@ -56,7 +56,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
         TransactionType::Upgrade(u > 0, y > 0, y > 1)
     };
 
-    config::init::init();
+    init()?;
 
     if create(args) { 
         if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
@@ -67,7 +67,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
             }
         }
 
-        instantiate(&mut cache, acquire_depends(args)?)?
+        instantiate(&mut logger, &mut cache, acquire_depends(args)?)?
     }
 
     engage_aggregator(&cache, action, args, &mut logger)
@@ -139,7 +139,7 @@ fn create(args: &mut Arguments) -> bool {
     return false;
 }
 
-fn instantiate<'a>(cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<()> { 
+fn instantiate<'a>(logger: &mut Logger, cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<()> { 
     println!("{} {}Instantiating container{}{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for target in targets {
@@ -152,7 +152,7 @@ fn instantiate<'a>(cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (In
         cache.add(target.0, target.1.0, target.1.1)?;
 
         match cache.get_instance(target.0) {
-            Some(ins) => instantiate_container(ins)?,
+            Some(ins) => instantiate_container(logger, ins)?,
             None => err!(ErrorKind::InstanceNotFound(target.0.into()))?
         }
     }
@@ -160,8 +160,7 @@ fn instantiate<'a>(cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (In
     Ok(())
 }
 
-fn instantiate_container<'a>(handle: &'a InstanceHandle<'a>) -> Result<()> {
-    let mut logger = Logger::new("pacwrap").init().unwrap();
+fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>) -> Result<()> {
     let ins = handle.vars().instance();
     let instype = handle.metadata().container_type();
 
@@ -186,8 +185,8 @@ fn instantiate_container<'a>(handle: &'a InstanceHandle<'a>) -> Result<()> {
         }; 
     }
 
-    config::save_handle(&handle).ok();
-    logger.log(format!("Configuration file created for {ins}")).unwrap();
+    handle.save()?;
+    logger.log(format!("Instantiation of {ins} complete.")).unwrap();
     println!("{} Instantiation of {ins} complete.", *ARROW_GREEN);
     Ok(())
 }

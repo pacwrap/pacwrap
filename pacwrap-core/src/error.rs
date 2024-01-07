@@ -19,7 +19,7 @@
 
 use std::{any::Any, process::exit, fmt::{Display, Debug}};
 
-use crate::{utils::{print_error, print_warning}, sync::transaction::ErrorKind};
+use crate::{utils::{print_error, print_warning}, sync::SyncError};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -70,9 +70,9 @@ impl Error {
 
     pub fn handle(&self) {
         //Temporary until command and control pipeline is implemented for pacwrap-agent
-        match self.downcast::<ErrorKind>() {
+        match self.downcast::<SyncError>() {
             Ok(error) => match error {
-                ErrorKind::TransactionFailureAgent => (),
+                SyncError::TransactionFailureAgent => (),
                 _ => print_error(&self.kind), 
             } 
             Err(_) => print_error(&self.kind),
@@ -81,8 +81,9 @@ impl Error {
         exit(self.kind.code());
     }
 
-    pub fn error(&self) {
+    pub fn error(&self) -> i32 {
         print_error(&self.kind); 
+        self.kind.code()
     }
 
     pub fn warn(&self) {

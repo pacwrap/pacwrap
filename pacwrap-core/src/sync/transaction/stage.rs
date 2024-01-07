@@ -16,20 +16,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 use alpm::TransFlag;
 
-use crate::config::InstanceType;
-use crate::config::InstanceHandle;
-use super::Result;
-use super::TransactionMode;
-use super::{Transaction, 
-    TransactionType, 
-    TransactionState, 
-    TransactionHandle, 
-    TransactionAggregator, 
-    TransactionFlags,
-    ErrorKind};
+use crate::{err, 
+    Error, Result, 
+    config::{InstanceType, InstanceHandle},
+    sync::{SyncError,
+        transaction::{Transaction, 
+            TransactionState,
+            TransactionMode,
+            TransactionType,
+            TransactionHandle, 
+            TransactionAggregator,
+            TransactionFlags}}};
 
 pub struct Stage {
     state: TransactionState,
@@ -63,12 +62,12 @@ impl Transaction for Stage {
 
     fn engage(&self, ag: &mut TransactionAggregator,  handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> { 
         if let Err(error) = handle.alpm().trans_init(self.flags) {
-            Err(ErrorKind::InitializationFailure(error.to_string().into()))?
+            err!(SyncError::InitializationFailure(error.to_string().into()))?
         }
 
         ag.action().action_message(self.mode);
         handle.set_mode(self.mode);
-        handle.ignore();
+        handle.ignore(false);
         handle.set_flags(ag.flags(), self.flags);
 
         match ag.action() {

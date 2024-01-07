@@ -16,32 +16,33 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 use std::{fs::{self, File}, io::ErrorKind::NotFound, os::unix::prelude::FileExt, env};
 
 use serde::Deserialize;
 
 use pacwrap_core::{err,
     Error,
-    sync::{self, AlpmConfigData,
+    Result,
+    sync::{self, 
+        SyncError, 
+        AlpmConfigData,
         utils::{erroneous_transaction, 
             erroneous_preparation}, 
             transaction::{TransactionHandle,
             TransactionType,
             TransactionMetadata,
             TransactionParameters,
-            ErrorKind, 
             MAGIC_NUMBER}, 
     event::{download::{DownloadCallback, download_event}, 
             progress::{ProgressEvent, callback}, 
             query::questioncb}}, 
-    utils::{print_warning, read_le_32}};
+    utils::{print_warning, read_le_32}, config::Global};
 
 use crate::error::AgentError;
 
-static AGENT_PARAMS: &'static str = "/tmp/agent_params";
+static AGENT_PARAMS: &'static str = "/mnt/agent_params";
 
-pub fn transact() -> Result<(), Error> {
+pub fn transact() -> Result<()> {
     let mut header_buffer = vec![0; 7]; 
     let mut file = match File::open(AGENT_PARAMS) {
         Ok(file) => file,
@@ -62,29 +63,26 @@ pub fn transact() -> Result<(), Error> {
     
     decode_header(&header_buffer)?;
 
-    let params: TransactionParameters = deserialize(&mut file)?; 
-    let alpm_remotes: AlpmConfigData = deserialize(&mut file)?; 
+    let params: TransactionParameters = deserialize(&mut file)?;
+    let config: Global = deserialize(&mut file)?;
+    let alpm_remotes: AlpmConfigData = deserialize(&mut file)?;
     let mut metadata: TransactionMetadata = deserialize(&mut file)?; 
-    let alpm = sync::instantiate_alpm_agent(&alpm_remotes);
-    let mut handle = TransactionHandle::new(alpm, &mut metadata);
+    let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes);
+    let mut handle = TransactionHandle::new(&config, alpm, &mut metadata);
 
-    if let Err(error) = conduct_transaction(&mut handle, params) {
-        err!(error)?
-    } 
-
-    Ok(())
+    conduct_transaction(&mut handle, params)
 }
 
-fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<(), ErrorKind> {
+fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
     let flags = handle.retrieve_flags(); 
     let mode = agent.mode();
     let action = agent.action();
 
     if let Err(error) = handle.alpm_mut().trans_init(flags.1.unwrap()) {
-        Err(ErrorKind::InitializationFailure(error.to_string().into()))?
+        err!(SyncError::InitializationFailure(error.to_string().into()))?
     }
 
-    handle.ignore();  
+    handle.ignore(true);  
 
     if let TransactionType::Upgrade(upgrade, downgrade, _) = action {  
         if upgrade {
@@ -109,16 +107,16 @@ fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParamet
     handle.alpm_mut().trans_release().unwrap();
     handle.mark_depends();
 
-    if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/etc/ld.so.cache") {
+    if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/fs/etc/ld.so.cache") {
         match error.kind() {
-            NotFound => (),_ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)), 
+            NotFound => (), _ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)), 
         }
     }
 
     Ok(())
 }
 
-fn decode_header(buffer: &Vec<u8>) -> Result<(), Error> {
+fn decode_header(buffer: &Vec<u8>) -> Result<()> {
     let magic = read_le_32(&buffer, 0);
     let major: (u8, u8) = (env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(), buffer[4]);
     let minor: (u8, u8) = (env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(), buffer[5]);
@@ -135,7 +133,7 @@ fn decode_header(buffer: &Vec<u8>) -> Result<(), Error> {
     Ok(())
 }
 
-fn deserialize<T: for<'de> Deserialize<'de>>(stdin: &mut File) -> Result<T, Error> {
+fn deserialize<T: for<'de> Deserialize<'de>>(stdin: &mut File) -> Result<T> {
     match bincode::deserialize_from::<&mut File, T>(stdin) {
         Ok(meta) => Ok(meta),
         Err(error) => err!(AgentError::DeserializationError(error.as_ref().to_string()))

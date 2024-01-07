@@ -19,9 +19,12 @@
 
 use alpm::{CommitResult, FileConflictType, Package, Alpm, PrepareResult};
 
-use crate::{sync::transaction::Result, sync::transaction::ErrorKind};
-use crate::constants::{BOLD, BOLD_WHITE, RESET};
-use crate::utils::{print_error, print_warning};
+use crate::{err, 
+    Error,
+    Result,
+    sync::SyncError,
+    constants::{BOLD, BOLD_WHITE, RESET},
+    utils::{print_error, print_warning}};
 
 pub trait AlpmUtils {
     fn get_local_package(&self, pkg: &str) -> Option<Package<'_>>;
@@ -102,7 +105,7 @@ pub fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Resu
                 }
             }
 
-            Err(ErrorKind::TransactionFailure("Conflict within container filesystem".into()))?
+            err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
         },
         CommitResult::PkgInvalid(p) => {
             for pkg in p.iter() {
@@ -113,7 +116,7 @@ pub fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Resu
         _ => ()
     }
 
-    Err(ErrorKind::TransactionFailure(error.1.to_string()))
+    err!(SyncError::TransactionFailure(error.1.to_string()))
 }
 
 pub fn erroneous_preparation<'a>(error:  (PrepareResult<'a>, alpm::Error)) -> Result<()> {  
@@ -136,5 +139,5 @@ pub fn erroneous_preparation<'a>(error:  (PrepareResult<'a>, alpm::Error)) -> Re
         _ => (),
     }
         
-    Err(ErrorKind::PreparationFailure(error.1.to_string()))
+    err!(SyncError::PreparationFailure(error.1.to_string()))
 }
