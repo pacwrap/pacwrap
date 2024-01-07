@@ -17,16 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::borrow::Cow;
-use std::fmt::{Display, Debug, Formatter};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::vec::Vec;
+use std::{borrow::Cow,
+	time::{SystemTime, UNIX_EPOCH},
+    fmt::{Display, Debug, Formatter},
+	vec::Vec};
+
 use serde::{Deserialize, Serialize};
 
-use crate::config::permission::{Permission, none::NONE};
-use crate::config::filesystem::{Filesystem, root::ROOT, home::HOME};
-use crate::config::dbus::Dbus;
-use crate::config::vars::InsVars;
+use crate::{Result,
+    config::{permission::{Permission, none::NONE}, 
+        filesystem::{Filesystem, root::ROOT, home::HOME},
+        dbus::Dbus,
+        vars::InsVars, 
+        save}};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Instance<'a> {
@@ -78,10 +81,14 @@ impl <'a>InstanceHandle<'a> {
     pub fn vars(&self) -> &InsVars {
         &self.vars
     }
+
+    pub fn save(&self) -> Result<()> {
+        save(&self.instance, self.vars.config_path())
+    }
 }
 
 impl <'a>Debug for InstanceHandle<'a> {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(fmter, "{:?}", self.vars())?;
         write!(fmter, "{:?}", self.config())
     }
@@ -153,7 +160,7 @@ impl InstanceRuntime {
 }
 
 impl Debug for InstanceRuntime {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         writeln!(fmter, "allow_forking:       {}", self.allow_forking)?;
         writeln!(fmter, "retain_session:      {}", self.retain_session)?;
         writeln!(fmter, "enable_userns:       {}", self.enable_userns)?;
@@ -192,7 +199,7 @@ impl InstanceType {
 }
 
 impl Display for InstanceType {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         fmt.write_str(self.as_str())
     }
 }

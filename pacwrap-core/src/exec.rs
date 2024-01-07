@@ -17,19 +17,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{process::{Child, Command}, fmt::{Formatter, Display}, io::Error};
+use std::{process::{Child, Command}, fmt::{Formatter, Display}, os::fd::AsRawFd};
 
 use command_fds::{CommandFdExt, FdMapping};
-//use os_pipe::{PipeReader, PipeWriter};
 use lazy_static::lazy_static;
+use os_pipe::{PipeWriter, PipeReader};
+use serde::Serialize;
 
-use crate::{impl_error,
+use crate::{err,
+	impl_error,
 	to_static_str,
 	ErrorTrait,
-	constants::{LOG_LOCATION, BWRAP_EXECUTABLE, PACWRAP_AGENT_FILE, BOLD, RESET, GID, UID, TERM, LANG, COLORTERM}, 
-    config::InstanceHandle};
-
-use self::seccomp::{provide_bpf_program, FilterType::*};
+	ErrorKind,
+	Error,
+	Result,
+	constants::{LOG_LOCATION, BWRAP_EXECUTABLE, BOLD, RESET, GID, UID, TERM, LANG, COLORTERM}, 
+    config::{InstanceHandle, CONFIG},
+    sync::{DEFAULT_ALPM_CONF, SyncError, transaction::{TransactionParameters, TransactionMetadata}},
+	exec::seccomp::{provide_bpf_program, FilterType::*}};
 
 pub mod args;
 pub mod utils;
@@ -68,15 +73,16 @@ impl Display for ExecutionError {
     }
 }
 
-pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child, Error> {
+pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child> {
 	let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();  
-	let sec_fd = provide_bpf_program(vec![Standard, Namespaces, TtyControl], &sec_reader, sec_writer).unwrap();
+	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_reader, sec_writer).unwrap();
 	let fd_mappings = vec![FdMapping { parent_fd: sec_fd, child_fd: sec_fd }];
 	
-	Command::new(BWRAP_EXECUTABLE)
+	match Command::new(BWRAP_EXECUTABLE)
 		.env_clear()
 		.arg("--tmpfs").arg("/tmp")
 		.arg("--bind").arg(ins.vars().root()).arg("/")
+		.arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/tmp/runtime")
 		.arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
 		.arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime")
 		.arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/etc/pacman.d/gnupg")
@@ -102,34 +108,40 @@ pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<
 		.args(arguments)
 		.fd_mappings(fd_mappings)
 		.unwrap()
-		.spawn()
+		.spawn() {
+			Ok(child) => Ok(child),
+			Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
+	}
 }
 
-pub fn transaction_agent(ins: &InstanceHandle) -> Result<Child,Error> { 
+pub fn transaction_agent(ins: &InstanceHandle, params: &TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> { 
 	let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();  
+	let (params_reader, params_writer) = os_pipe::pipe().unwrap();  	
+	let params_fd = agent_params(&params_reader, &params_writer, params, metadata)?;
 	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_reader, sec_writer).unwrap();
-	let fd_mappings = vec![FdMapping { parent_fd: sec_fd, child_fd: sec_fd }];
+	let fd_mappings = vec![
+		FdMapping { parent_fd: sec_fd, child_fd: sec_fd }, 
+		FdMapping { parent_fd: params_fd, child_fd: params_fd },
+	];
 	
-	Command::new(BWRAP_EXECUTABLE)
+	match Command::new(BWRAP_EXECUTABLE)
 		.env_clear()
-		.arg("--bind").arg(&ins.vars().root()).arg("/mnt")
-		.arg("--tmpfs").arg("/tmp")
-		.arg("--tmpfs").arg("/etc")
-		.arg("--symlink").arg("/mnt/usr").arg("/usr")
-		.arg("--ro-bind").arg(*PACWRAP_AGENT_FILE).arg("/tmp/agent_params")
+		.arg("--bind").arg(&ins.vars().root()).arg("/mnt/fs")
+		.arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
 		.arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/lib64")
 		.arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/bin")
 		.arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
 		.arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 
 		.arg("--ro-bind").arg(*DIST_TLS).arg("/etc/ssl/certs/ca-certificates.crt")
-		.arg("--bind").arg(*LOG_LOCATION).arg("/tmp/pacwrap.log") 
-		.arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/tmp/pacman/gnupg")
-		.arg("--bind").arg(ins.vars().pacman_cache()).arg("/tmp/pacman/pkg")
-		.arg("--ro-bind").arg(env!("PACWRAP_DIST_REPO")).arg("/tmp/dist-repo")
+		.arg("--bind").arg(*LOG_LOCATION).arg("/mnt/share/pacwrap.log") 
+		.arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/share/gnupg")
+		.arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/share/cache")
+		.arg("--ro-bind").arg(env!("PACWRAP_DIST_REPO")).arg("/mnt/share/dist-repo")
 		.arg("--dev").arg("/dev")
-		.arg("--dev").arg("/mnt/dev")
-		.arg("--proc").arg("/mnt/proc")
-		.arg("--unshare-all").arg("--share-net")
+		.arg("--dev").arg("/mnt/fs/dev")
+		.arg("--proc").arg("/mnt/fs/proc")
+		.arg("--unshare-all")
+		.arg("--share-net")
 		.arg("--clearenv")
 		.arg("--hostname").arg("pacwrap-agent")
 		.arg("--new-session")
@@ -148,9 +160,30 @@ pub fn transaction_agent(ins: &InstanceHandle) -> Result<Child,Error> {
 		.arg("--disable-userns")
 		.arg("--seccomp")
 		.arg(sec_fd.to_string())
+		.arg("--ro-bind-data")
+		.arg(params_fd.to_string())
+		.arg("/mnt/agent_params")
 		.arg("agent")
 		.arg("transact")
 		.fd_mappings(fd_mappings)
 		.unwrap()
-		.spawn()
+		.spawn() {
+			Ok(child) => Ok(child),
+			Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
+	}
+}
+
+fn agent_params(reader: &PipeReader, writer: &PipeWriter, params: &TransactionParameters, metadata: &TransactionMetadata) -> Result<i32> {
+    serialize(params, writer)?;  
+    serialize(&*CONFIG, writer)?;
+    serialize(&*DEFAULT_ALPM_CONF, writer)?;
+    serialize(metadata, writer)?;
+    Ok(reader.as_raw_fd())
+}
+
+fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> { 
+    match bincode::serialize_into::<&PipeWriter, T>(file, input) {
+        Ok(()) => Ok(()),
+        Err(error) => err!(SyncError::TransactionFailure(format!("Agent data serialization failed: {}", error))),
+    }
 }

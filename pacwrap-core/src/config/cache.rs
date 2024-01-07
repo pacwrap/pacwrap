@@ -165,6 +165,6 @@ fn roots<'a>() -> Result<Vec<&'a str>> {
                 false => Some(e)
             })
         .collect()),
-        Err(error) => err!(ErrorKind::IOError(format!("'{}/root", *DATA_DIR), error.kind())),
+        Err(error) => err!(ErrorKind::IOError(format!("{}/root", *DATA_DIR), error.kind())),
     }
 }

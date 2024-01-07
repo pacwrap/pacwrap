@@ -17,21 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{path::Path, process::exit, fs::File, io::Write};
+use std::{path::Path, fs::File, io::Write};
 
-use crate::{utils::print_error, constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR}};
+use crate::{err,
+    Error,
+    Result,
+    ErrorKind,
+    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR}};
 
-static PACMAN_CONF_DEFAULT: &'static str = r###"
+static REPO_CONF_DEFAULT: &'static str = r###"## See the pacman.conf(5) manpage for information on repository directives.
+## All other libalpm-related options therein are ignored.
+
 [options]
-HoldPkg = pacman glibc
-Architecture = auto 
-LogFile = /tmp/pacman.log 
-NoExtract = etc/pacman.conf etc/pacman.d/mirrorlist 
-
-ParallelDownloads = 5 
-
-SigLevel = Required DatabaseOptional
-LocalFileSigLevel = Optional 
+Architecture = auto
 
 [core]
 Include = /etc/pacman.d/mirrorlist
@@ -42,6 +40,24 @@ Include = /etc/pacman.d/mirrorlist
 [multilib]
 Include = /etc/pacman.d/mirrorlist
 "###;
+static PACWRAP_CONF_DEFAULT: &'static str = r###"## See the pacwrap.yml(2) manpage for more detailed information.
+## Documentation is also available at https://git.sapphirus.org/pacwrap/pacwrap/docs/
+
+config:
+  summary: Basic
+  progress: Verbose
+alpm:
+  #ignore_pkg:
+  #- somepackage
+  hold_pkg:
+  - pacwrap-base-dist
+  - pacman
+  - glibc
+  sig_level: Required DatabaseOptional
+  sig_level_local: Optional
+  #parallel_downloads: 5
+  #check_space: true
+  #download_timeout: true"###;
 
 pub struct DirectoryLayout {
     dirs: Vec<&'static str>,
@@ -49,20 +65,20 @@ pub struct DirectoryLayout {
 }
 
 impl DirectoryLayout {
-    fn instantiate(self) {
+    fn instantiate(self) -> Result<()> {
         for dir in self.dirs {
-            let path: &str = &(self.root.to_owned()+dir);
-            let path = Path::new(path);
+            let path: &str = &format!("{}{}", self.root, dir);
             
-            if path.exists() {
+            if Path::new(path).exists() {
                 continue;
             }
 
-            if let Err(err) = std::fs::create_dir_all(path) {
-                print_error(format!("'{}' {err}", path.to_str().unwrap()));
-                exit(1);
+            if let Err(error) = std::fs::create_dir_all(path) {
+                err!(ErrorKind::IOError(path.into(), error.kind()))?
             }
         }
+
+        Ok(())
     }
 }
 
@@ -87,30 +103,27 @@ fn config_layout() -> DirectoryLayout {
     }
 }
 
-fn write_to_file(location: &str, contents: &str) {
-    let location = Path::new(&location);
-
-    if location.exists() {
-        return;
+fn write_to_file(location: &str, contents: &str) -> Result<()> {
+    if Path::new(&location).exists() {
+        return Ok(());
     }
 
     let mut f = match File::create(&location) {
         Ok(f) => f,
-        Err(error) => {
-            print_error(format!("'{}': {}", location.to_str().unwrap(), error));
-            exit(1); 
-        }
+        Err(error) => err!(ErrorKind::IOError(location.into(), error.kind()))?
     };
    
     if let Err(error) = write!(f, "{contents}") {
-        print_error(format!("'{}': {}", location.to_str().unwrap(), error));
-        exit(1);
+        err!(ErrorKind::IOError(location.into(), error.kind()))?
     }
+
+    Ok(())
 }
 
-pub fn init() {
-    config_layout().instantiate();
-    data_layout().instantiate();
-    cache_layout().instantiate();    
-    write_to_file(&format!("{}/pacman.conf", *CONFIG_DIR), PACMAN_CONF_DEFAULT);
+pub fn init() -> Result<()> {
+    config_layout().instantiate()?;
+    data_layout().instantiate()?;
+    cache_layout().instantiate()?;
+    write_to_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
+    write_to_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)
 }

@@ -16,18 +16,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-use crate::{config::InstanceHandle, sync};
-
-use super::{Transaction, 
-    TransactionType, 
-    TransactionState, 
-    TransactionHandle, 
-    TransactionAggregator, 
-    TransactionFlags,
-    SyncReqResult, TransactionMode, 
-    ErrorKind,
-    Result};
+use crate::{err, 
+    Error, 
+    Result, 
+    config::InstanceHandle,     
+    sync::{self,
+        SyncError,
+        transaction::{Transaction, 
+            TransactionState,
+            TransactionMode,
+            TransactionType,
+            TransactionHandle, 
+            TransactionAggregator,
+            TransactionFlags,
+            SyncReqResult}}};
 
 pub struct Prepare {
     state: TransactionState,
@@ -53,18 +55,18 @@ impl Transaction for Prepare {
                                 handle.enumerate_foreign_pkgs(&dep_alpm); 
                                 dep_alpm.release().unwrap();
                             },
-                            None => Err(ErrorKind::DependentContainerMissing(dep.to_string()))?,
+                            None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
                     }   
                 }
 
                 if let TransactionType::Upgrade(upgrade,_,_) = ag.action() {
                     if ! upgrade && handle.metadata().queue.len() == 0 {
-                        Err(ErrorKind::NothingToDo)?
+                        err!(SyncError::NothingToDo(true))?
                     }
                 } else {
                     if handle.metadata().queue.len() == 0 {
-                        Err(ErrorKind::NothingToDo)?
+                        err!(SyncError::NothingToDo(true))?
                     }  
                 }
 

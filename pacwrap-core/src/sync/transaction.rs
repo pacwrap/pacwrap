@@ -17,27 +17,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, collections::HashSet, fmt::{Display, Formatter}, fs::remove_file};
+use std::{borrow::Cow, collections::HashSet};
 
 use bitflags::bitflags;
 use alpm::{Alpm, PackageReason, TransFlag};
 use serde::{Deserialize, Serialize};
 
-use crate::{config,
-    config::InstanceHandle,
-    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, PACWRAP_AGENT_FILE, ARROW_RED}, 
-    sync::{
+use crate::{err,
+    Error,
+    config::{InstanceHandle, Global},
+    constants::{RESET, BOLD, ARROW_CYAN, BAR_CYAN, BOLD_YELLOW, BOLD_GREEN}, 
+    sync::{SyncError,
+        transaction::{stage::Stage,
+        commit::Commit,
+        prepare::Prepare, 
+        uptodate::UpToDate},
         resolver_local::LocalDependencyResolver,
         resolver::DependencyResolver,
-        utils::AlpmUtils}, 
-    Error, 
-    ErrorTrait, 
-    impl_error};
-
-use self::{stage::Stage,
-    commit::Commit,
-    prepare::Prepare, 
-    uptodate::UpToDate};
+        utils::AlpmUtils}, utils::print_warning};
 
 pub use self::aggregator::TransactionAggregator;
 
@@ -47,30 +44,8 @@ mod prepare;
 mod uptodate;
 mod stage;
 
-pub type Result<T> = std::result::Result<T, ErrorKind>;
-
+pub type Result<T> = crate::Result<T>;
 pub static MAGIC_NUMBER: u32 = 663445956;
-
-#[derive(Clone, Debug)]
-pub enum ErrorKind {
-    TransactionFailureAgent,
-    ParameterAcquisitionFailure,
-    DeserializationFailure,
-    InvalidMagicNumber,
-    AgentVersionMismatch,
-    NothingToDo,
-    DependentContainerMissing(String),
-    RecursionDepthExceeded(isize),
-    TargetUpstream(String),
-    TargetNotInstalled(String),
-    TargetNotAvailable(String),
-    PreparationFailure(String),
-    TransactionFailure(String),
-    InitializationFailure(String),
-    InternalError(String),
-    NoCompatibleRemotes,
-    IOError(String, std::io::ErrorKind), 
-}
 
 pub enum TransactionState {
     Complete(bool),
@@ -121,6 +96,8 @@ bitflags! {
 pub struct TransactionHandle<'a> {
     meta: &'a mut TransactionMetadata<'a>,
     alpm: Option<Alpm>,
+    fail: bool,
+    config: &'a Global,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -219,50 +196,6 @@ impl TransactionType {
     }
 }
 
-impl_error!(ErrorKind);
-
-impl Display for ErrorKind {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
-       match self {
-            Self::IOError(ins, error) => write!(fmter, "'{ins}': {error}"), 
-            Self::DependentContainerMissing(u) => write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
-            Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET), 
-            Self::TargetNotAvailable(pkg) => write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),   
-            Self::TargetUpstream(pkg) => write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET), 
-            Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
-            Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
-            Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
-            Self::DeserializationFailure => write!(fmter, "Deserialization of input parameters failed."),
-            Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
-            Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
-            Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
-            Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."), 
-            Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
-            Self::NothingToDo => write!(fmter, "Nothing to do."),
-            _ => Ok(()),
-        }?;
-
-        //Temporary until command and control pipeline is implemented for pacwrap-agent 
-        match self {
-            Self::TransactionFailureAgent => Ok(()), 
-            _ => write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
-        }
-    }
-}
-
-impl From<Error> for ErrorKind {
-    fn from(error: Error) -> ErrorKind {
-        Self::InternalError(error.downcast::<ErrorKind>().unwrap().to_string())
-    }
-}
-
-impl From<ErrorKind> for String {
-    fn from(error: ErrorKind) -> Self {
-        error.into()
-    }
-}
-
 impl <'a>TransactionMetadata<'a> {
     fn new(queue: Vec<&'a str>) -> TransactionMetadata {
         Self { 
@@ -277,10 +210,12 @@ impl <'a>TransactionMetadata<'a> {
 }
 
 impl <'a>TransactionHandle<'a> { 
-    pub fn new(alpm_handle: Alpm, metadata: &'a mut TransactionMetadata<'a>) -> Self {
+    pub fn new(global: &'a Global, alpm_handle: Alpm, metadata: &'a mut TransactionMetadata<'a>) -> Self {
         Self {
             meta: metadata,
             alpm: Some(alpm_handle),
+            fail: true,
+            config: global,
         }  
     }
 
@@ -321,7 +256,9 @@ impl <'a>TransactionHandle<'a> {
             .collect::<Vec<_>>());
     }
 
-    pub fn ignore(&mut self) {
+    pub fn ignore(&mut self, silent: bool) {
+        let mut fail = self.fail; 
+        let alpm = self.alpm.as_mut().unwrap();
         let ignore = match self.meta.mode { 
             TransactionMode::Foreign => &self.meta.resident_pkgs,
             TransactionMode::Local => &self.meta.foreign_pkgs,
@@ -330,15 +267,47 @@ impl <'a>TransactionHandle<'a> {
             TransactionMode::Local => &self.meta.resident_pkgs,
             TransactionMode::Foreign => &self.meta.foreign_pkgs,
         };
-        let alpm = self.alpm.as_mut().unwrap();
-  
+
         for pkg in unignore {
             alpm.remove_ignorepkg(pkg.as_bytes()).unwrap();
         }
 
         for pkg in ignore {
             alpm.add_ignorepkg(pkg.as_bytes()).unwrap();
-        }    
+        }
+
+        for pkg in self.config.alpm().ignored() {
+            alpm.add_ignorepkg(pkg.as_bytes()).unwrap();
+        }
+
+        for package in alpm
+            .localdb()
+            .pkgs()
+            .iter()
+            .filter(|a| ! ignore.contains(a.name()) 
+                && self.config.alpm().ignored().contains(&a.name())) {
+            let new = match package.sync_new_version(alpm.syncdbs()) { 
+                Some(new) => { fail = false; new }, None => continue,
+            };
+
+            if silent {
+                break;
+            }
+
+            let name = package.name();
+            let ver = package.version();                    
+            let ver_new = new.version();
+
+            print_warning(format!("{}{name}{}: Ignoring package upgrade ({}{ver}{} => {}{ver_new}{})", 
+                *BOLD,  
+                *RESET,
+                *BOLD_YELLOW,
+                *RESET, 
+                *BOLD_GREEN,          
+                *RESET));    
+        }
+
+        self.fail = fail;
     }
 
     pub fn prepare(&mut self, trans_type: &TransactionType, flags: &TransactionFlags) -> Result<()> {
@@ -359,7 +328,7 @@ impl <'a>TransactionHandle<'a> {
 
             if ! flags.contains(TransactionFlags::FORCE_DATABASE) {
                 if ! upstream.is_empty() {
-                    Err(ErrorKind::TargetUpstream(upstream[0].to_string()))?
+                    err!(SyncError::TargetUpstream(upstream[0].to_string()))?
                 }
             }
         }
@@ -372,7 +341,7 @@ impl <'a>TransactionHandle<'a> {
                     .collect::<Vec<&str>>();
 
                 if ! not_installed.is_empty() {
-                    Err(ErrorKind::TargetNotInstalled(not_installed[0].to_string()))?
+                    err!(SyncError::TargetNotInstalled(not_installed[0].to_string()))?
                 }
 
                 for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type).enumerate(&queue)? {     
@@ -386,7 +355,7 @@ impl <'a>TransactionHandle<'a> {
                     .collect::<Vec<&str>>();
 
                 if ! not_available.is_empty() {
-                    Err(ErrorKind::TargetNotAvailable(not_available[0].to_string()))?
+                    err!(SyncError::TargetNotAvailable(not_available[0].to_string()))?
                 }
 
                 let packages = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
@@ -408,7 +377,7 @@ impl <'a>TransactionHandle<'a> {
         Ok(())
     }
 
-    fn apply_configuration(&mut self, instance: &InstanceHandle, create: bool) {
+    fn apply_configuration(&mut self, instance: &InstanceHandle, create: bool) -> Result<()> {
         let depends = instance.metadata().dependencies();
         let explicit_packages: Vec<&str> = instance.metadata().explicit_packages();
         let pkgs = self.alpm
@@ -427,9 +396,11 @@ impl <'a>TransactionHandle<'a> {
             let mut instance = instance.clone();
 
             instance.metadata_mut().set(depends, pkgs);
-            config::save_handle(&instance).ok();  
+            instance.save()?;  
             drop(instance);
         }
+
+        Ok(())
     }
 
     pub fn trans_ready(&mut self, trans_type: &TransactionType) -> Result<()> { 
@@ -438,8 +409,8 @@ impl <'a>TransactionHandle<'a> {
             TransactionType::Remove(..) => self.alpm().trans_remove().len()
         } > 0 {
             Ok(())
-        } else {
-            Err(ErrorKind::NothingToDo)
+        } else {  
+            err!(SyncError::NothingToDo(self.fail))
         }
     }
 
@@ -452,7 +423,6 @@ impl <'a>TransactionHandle<'a> {
     }
 
     pub fn release(self) {
-        remove_file(*PACWRAP_AGENT_FILE).ok();
         drop(self);
     }
     
@@ -490,14 +460,14 @@ impl <'a>TransactionHandle<'a> {
 }
 
 impl TransactionParameters {
-    fn new(t_type: TransactionType, t_mode: TransactionMode, dl_size: u64, amount: usize) -> Self {
+    fn new(t_type: TransactionType, t_mode: TransactionMode, download: (u64, u64)) -> Self {
         Self {
             magic: MAGIC_NUMBER,
             ver_major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
             ver_minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
             ver_patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
-            bytes: dl_size,
-            files: amount as u64,
+            bytes: download.0,
+            files: download.1,
             action: t_type,
             mode: t_mode,
         }

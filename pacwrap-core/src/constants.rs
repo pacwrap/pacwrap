@@ -61,8 +61,7 @@ lazy_static! {
     pub static ref CACHE_DIR: &'static str = env_default_dir("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
     pub static ref CONFIG_DIR: &'static str = env_default_dir("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
     pub static ref DATA_DIR: &'static str = env_default_dir("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
-    pub static ref GLOBAL_CONFIG: &'static str = format_str!("{}/pacwrap.yml", PACWRAP_CONFIG_DIR); 
-    pub static ref PACWRAP_AGENT_FILE: &'static str = format_str!("/run/user/{}/pacwrap_agent_{}", *UID, &id()); 
+    pub static ref CONFIG_FILE: &'static str = format_str!("{}/pacwrap.yml", *CONFIG_DIR); 
     pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", *UID);
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", *UID, &id());
     pub static ref WAYLAND_SOCKET: String = format!("{}{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);

@@ -21,7 +21,7 @@ use std::collections::HashSet;
 
 use alpm::{Package, Alpm};
 
-use super::{transaction::ErrorKind, utils::AlpmUtils};
+use crate::{err, Error, sync::{SyncError, utils::AlpmUtils}};
 
 pub struct DependencyResolver<'a> {
     resolved: HashSet<&'a str>,
@@ -44,16 +44,16 @@ impl <'a>DependencyResolver<'a> {
         }
     }
 
-    fn check_depth(&mut self) -> Result<(), ErrorKind> {
+    fn check_depth(&mut self) -> Result<(), Error> {
         if self.depth == 50 { 
-            Err(ErrorKind::RecursionDepthExceeded(self.depth))?
+            err!(SyncError::RecursionDepthExceeded(self.depth))?
         }
 
         self.depth += 1;
         Ok(())
     }
     
-    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<Package<'a>>), ErrorKind> {
+    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<Package<'a>>), Error> {
         let mut synchronize: Vec<&'a str> = Vec::new(); 
         
         for pkg in packages {

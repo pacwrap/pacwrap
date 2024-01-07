@@ -24,13 +24,10 @@ use serde_yaml::Value;
 
 use crate::{constants::BWRAP_EXECUTABLE, config::InstanceHandle, ErrorKind, error::*, err};
 
-pub fn execute_in_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
-    match super::fakeroot_container(ins, arguments) {
-        Ok(mut child) => match child.wait() {
-            Ok(_) => Ok(()),
-            Err(err) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, err.kind()))
-        },
-        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
+pub fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
+    match super::fakeroot_container(ins, arguments)?.wait() {
+        Ok(_) => Ok(()),
+        Err(err) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, err.kind()))
     }
 }
 

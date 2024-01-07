@@ -35,8 +35,7 @@ use pacwrap_core::{err,
     exec::{ExecutionError,
         args::ExecutionArgs,
         seccomp::{provide_bpf_program, configure_bpf_program},
-        utils::bwrap_json,
-        fakeroot_container},
+        utils::{bwrap_json, execute_fakeroot_container}},
     constants::{self,
         DEFAULT_PATH,
         BWRAP_EXECUTABLE, 
@@ -128,8 +127,8 @@ impl <'a>ExecParams<'a> {
 
 pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
     match ExecParams::parse(args)? {
-        ExecParams::Root(verbosity, true, _, handle) => execute_fakeroot_container(&handle, vec!("bash"), verbosity),
-        ExecParams::Root(verbosity,  false, args, handle) => execute_fakeroot_container(&handle, args, verbosity),
+        ExecParams::Root(verbosity, true, _, handle) => execute_fakeroot(&handle, vec!("bash"), verbosity),
+        ExecParams::Root(verbosity,  false, args, handle) => execute_fakeroot(&handle, args, verbosity),
         ExecParams::Container(verbosity, true, _, handle) => execute_container(&handle, vec!("bash"), true, verbosity),
         ExecParams::Container(verbosity, false, args, handle) => execute_container(&handle, args, false, verbosity),
     }
@@ -349,17 +348,13 @@ fn clean_up_socket(path: &str) -> Result<()> {
     Ok(())
 }
 
-fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>, verbosity: i8) -> Result<()> {  
+fn execute_fakeroot(ins: &InstanceHandle, arguments: Vec<&str>, verbosity: i8) -> Result<()> {  
     if verbosity > 0 {
         println!("Arguments:\t     {arguments:?}\n{ins:?}\n");
     }
 
     check_path(ins, &arguments, vec!("/usr/bin", "/bin"))?;
-
-    match fakeroot_container(ins, arguments.iter().map(|a| a.as_ref()).collect()) {
-        Ok(process) => Ok(wait_on_process(process, 0, false, Vec::<Child>::new(), TermControl::new(0)))?,
-        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())), 
-    }
+    execute_fakeroot_container(ins, arguments)
 }
 
 fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<()> {
