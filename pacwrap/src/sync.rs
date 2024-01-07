@@ -27,6 +27,7 @@ use pacwrap_core::{err,
     error::*,
     log::Logger,
     sync::transaction::TransactionType,
+    utils::check_root,
     utils::arguments::{Arguments, 
         InvalidArgument, 
         Operand},
@@ -56,6 +57,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
         TransactionType::Upgrade(u > 0, y > 0, y > 1)
     };
 
+    check_root()?;
     init()?;
 
     if create(args) { 

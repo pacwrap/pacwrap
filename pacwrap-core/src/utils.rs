@@ -17,15 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::path::Path;
-use std::env::var;
-use std::os::unix::net::UnixStream;
-use std::fmt::Display;
+use std::{path::Path, env::var, os::unix::net::UnixStream, fmt::Display};
 
 use nix::unistd::isatty;
 
-use crate::{Error, ErrorKind, err};
-use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET, TERM, COLORTERM};
+use crate::{err, Error, ErrorKind, Result, constants::{BOLD_RED, BOLD_YELLOW, RESET, TERM, COLORTERM, UID, GID}};
 
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
@@ -42,7 +38,7 @@ pub fn print_error(message: impl Into<String> + Display) {
     eprintln!("{}error:{} {}", *BOLD_RED, *RESET, &message);
 } 
 
-pub fn env_var(env: &'static str) -> Result<String, Error> {
+pub fn env_var(env: &'static str) -> Result<String> {
     match var(env) {
         Ok(var) => Ok(var),
         Err(_) => err!(ErrorKind::EnvVarUnset(env))
@@ -69,4 +65,12 @@ pub fn is_truecolor_terminal() -> bool {
 
 pub fn read_le_32(vec: &Vec<u8>, pos: usize) -> u32 {
     ((vec[pos+0] as u32) << 0) + ((vec[pos+1] as u32) << 8) + ((vec[pos+2] as u32) << 16) + ((vec[pos+3] as u32) << 24) 
+}
+
+pub fn check_root() -> Result<()> {
+    if *UID == 0 || *GID == 0 {
+        err!(ErrorKind::ElevatedPrivileges)?
+    }
+
+    Ok(())
 }

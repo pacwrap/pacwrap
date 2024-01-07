@@ -43,6 +43,7 @@ pub enum ErrorKind {
     DependencyNotFound(String, String), 
     LinkerUninitialized,
     ThreadPoolUninitialized,
+    ElevatedPrivileges,
 }
 
 impl Display for ErrorKind {
@@ -58,7 +59,7 @@ impl Display for ErrorKind {
             Self::ThreadPoolUninitialized => write!(fmter, "Threadpool uninitialized"),
             Self::LinkerUninitialized => write!(fmter, "Filesystem synchronization structure is uninitialized."), 
             Self::Termios(errno) => write!(fmter, "Failed to restore termios parameters: {errno}."), 
-
+            Self::ElevatedPrivileges => write!(fmter, "Execution with elevated privileges is not supported."),
         }?;
         
         if let Self::Message(_) = self {
