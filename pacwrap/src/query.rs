@@ -22,7 +22,7 @@ use alpm::{Alpm, PackageReason};
 use pacwrap_core::{config,
     constants::{RESET, BOLD_GREEN},
     utils::arguments::{Operand, InvalidArgument},
-    utils::arguments::Arguments,
+    utils::{arguments::Arguments, check_root},
     error::*, 
     err};
 
@@ -30,6 +30,8 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
     let mut target = "";
     let mut explicit = false;
     let mut quiet = false;
+
+    check_root()?;
 
     while let Some(arg) = arguments.next() {
         match arg {

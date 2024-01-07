@@ -21,10 +21,10 @@ use std::collections::HashMap;
 
 use pacwrap_core::{log::Logger,
     sync::transaction::TransactionType,
-    utils::arguments::Operand,
+    utils::{arguments::Operand, check_root},
     utils::arguments::{Arguments, InvalidArgument},
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
-    config::cache,
+    config::{cache, init::init},
     error::*, 
     err};
 
@@ -44,7 +44,9 @@ pub fn remove(mut args: &mut Arguments) -> Result<()> {
 
         TransactionType::Remove(recursive > 0 , cascade, recursive > 1) 
     };
-    
+
+    check_root()?;
+    init()?;
     engage_aggregator(action, &mut args, &mut logger)
 }
 

@@ -52,7 +52,8 @@ use pacwrap_core::{err,
     utils::{TermControl, 
         arguments::{Arguments, Operand, InvalidArgument},
         env_var, 
-        print_warning}};
+        print_warning, 
+        check_root}};
 
 const PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
 const SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
@@ -126,6 +127,8 @@ impl <'a>ExecParams<'a> {
 }
 
 pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
+    check_root()?;
+
     match ExecParams::parse(args)? {
         ExecParams::Root(verbosity, true, _, handle) => execute_fakeroot(&handle, vec!("bash"), verbosity),
         ExecParams::Root(verbosity,  false, args, handle) => execute_fakeroot(&handle, args, verbosity),
