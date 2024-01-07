@@ -51,6 +51,10 @@ fn is_debug() -> bool {
 }
 
 fn main() {
+    if ! cfg!(target_os="linux") || ! cfg!(target_family="unix") {
+        panic!("Unsupported build target. Please refer to the documentation for further information.")
+    }
+
     let debug: bool = is_debug();
 
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_REPO");
