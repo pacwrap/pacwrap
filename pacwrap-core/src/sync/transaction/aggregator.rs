@@ -83,7 +83,8 @@ impl <'a>TransactionAggregator<'a> {
             _ => false,
         };
         let target = match self.target {
-            Some(s) => self.cache.get_instance(s), None => None
+            Some(s) => self.cache.get_instance(s), 
+            None => None
         };
 
         if let Some(inshandle) = target { 

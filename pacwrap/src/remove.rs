@@ -26,7 +26,7 @@ use pacwrap_core::{log::Logger,
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
     config::{cache, init::init},
     error::*, 
-    err};
+    err, ErrorKind};
 
 pub fn remove(mut args: &mut Arguments) -> Result<()> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
@@ -54,6 +54,7 @@ fn engage_aggregator<'a>(
     action_type: TransactionType, 
     args: &'a mut Arguments, 
     log: &'a mut Logger) -> Result<()> { 
+    let cache = cache::populate()?;
     let mut action_flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str,Vec<&'a str>> = HashMap::new();
@@ -77,7 +78,7 @@ fn engage_aggregator<'a>(
             Operand::Short('p') 
                 | Operand::Long("preview") 
                 => action_flags = action_flags | TransactionFlags::PREVIEW, 
-            Operand::Long("db-only") 
+            Operand::Long("dbonly") 
                 => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
             Operand::Long("force-foreign") 
                 => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
@@ -87,6 +88,10 @@ fn engage_aggregator<'a>(
             Operand::ShortPos('t', target) 
                 | Operand::LongPos("target", target) 
                 | Operand::ShortPos(_, target) => {
+                if let None = cache.get_instance(target) {
+                    err!(ErrorKind::InstanceNotFound(target.into()))?
+                }
+
                 current_target = Some(target);
                 targets.push(target);
             },
@@ -105,7 +110,7 @@ fn engage_aggregator<'a>(
         err!(InvalidArgument::TargetUnspecified)?
     }
 
-    Ok(TransactionAggregator::new(&cache::populate()?, 
+    Ok(TransactionAggregator::new(&cache, 
         queue, 
         log, 
         action_flags, 

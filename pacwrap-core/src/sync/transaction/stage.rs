@@ -77,11 +77,11 @@ impl Transaction for Stage {
                 }
 
                 handle.prepare(ag.action(), ag.flags())?; 
-                state_transition(&self.state, check_keyring(ag, handle, inshandle))
+                next_state(&self.state, check_keyring(ag, handle, inshandle))
             },
             TransactionType::Remove(_,_,_) => { 
                 handle.prepare(ag.action(), ag.flags())?;
-                state_transition(&self.state, false)
+                next_state(&self.state, false)
             },
         }
     }
@@ -104,7 +104,7 @@ fn check_keyring(ag: &TransactionAggregator, handle: &mut TransactionHandle, ins
     }
 }
 
-fn state_transition(state: &TransactionState, option: bool) -> Result<TransactionState> {
+fn next_state(state: &TransactionState, option: bool) -> Result<TransactionState> {
     Ok(match state {
         TransactionState::Stage => TransactionState::Commit(option),
         TransactionState::StageForeign => TransactionState::CommitForeign,

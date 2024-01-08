@@ -176,7 +176,10 @@ impl TransactionType {
                 TransactionMode::Foreign => "Synchronizing foreign database...",
                 TransactionMode::Local => "Synchronizing resident container..."
             }, 
-            Self::Remove(..) => "Preparing package removal..."
+            Self::Remove(..) => match state {
+                TransactionMode::Foreign => "Preparing foreign package removal...",
+                TransactionMode::Local => "Preparing package removal..."
+            },
         };
 
         println!("{} {}", *ARROW_CYAN, message);
@@ -337,7 +340,8 @@ impl <'a>TransactionHandle<'a> {
             TransactionType::Remove(..) => { 
                 let not_installed = queue.iter()
                     .map(|a| *a)  
-                    .filter(|a| alpm.get_local_package(a).is_none())
+                    .filter(|a| ! ignored.contains(*a) 
+                        && alpm.get_local_package(a).is_none())
                     .collect::<Vec<&str>>();
 
                 if ! not_installed.is_empty() {
