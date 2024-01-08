@@ -16,6 +16,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+use std::result::Result as StdResult;
 use alpm::Alpm;
 use dialoguer::console::Term;
 use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
@@ -28,6 +30,7 @@ use crate::{err,
         SyncError,
         transaction::{Transaction, 
             TransactionState, 
+            TransactionType,
             TransactionHandle, 
             TransactionAggregator,
             TransactionFlags, 
@@ -36,6 +39,7 @@ use crate::{err,
     utils::prompt::prompt,
     constants::{RESET, BOLD, DIM},
     config::InstanceHandle};
+
 
 pub struct Commit {
     state: TransactionState,
@@ -60,11 +64,9 @@ impl Transaction for Commit {
         let state = self.state.as_str();
 
         if let Err(_) = ready {
-            match self.state { 
-                TransactionState::Commit(_) => ready?,
-                TransactionState::CommitForeign => return state_transition(&self.state, handle, false),
-                _ => unreachable!()
-            }
+            match ready_state(handle, ag.action(), &self.state) { 
+                Some(result) => return result, None => ready?,
+            } 
         } 
 
         if let Err(error) = handle.alpm_mut().trans_prepare() {
@@ -72,8 +74,8 @@ impl Transaction for Commit {
         }
 
         let result = confirm(&self.state, ag, handle);
-        let result = match result.0 {
-            Some(result) => return result, None => result.1
+        let result = match result {
+            Err(result) => return result, Ok(result) => result
         };
 
         handle.set_alpm(None); 
@@ -91,7 +93,7 @@ impl Transaction for Commit {
                     handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
                     handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?; 
                     ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
-                    state_transition(&self.state, handle, true)
+                    next_state(handle, ag.action(), &self.state, true)
                 },
                 1 => err!(SyncError::TransactionFailureAgent),
                 2 => err!(SyncError::ParameterAcquisitionFailure),
@@ -105,14 +107,14 @@ impl Transaction for Commit {
     } 
 }
 
-fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mut TransactionHandle) -> (Option<Result<TransactionState>>, (u64, u64)) {
+fn confirm(state: &TransactionState, ag: &TransactionAggregator, handle: &mut TransactionHandle) -> StdResult<(u64, u64), Result<TransactionState>> {
     let sum = summary(handle.alpm());
 
     if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
         println!("{}", sum.0);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            return (Some(state_transition(state, handle, false)), sum.1); 
+            Err(next_state(handle, ag.action(), state, false))? 
         } 
 
         if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
@@ -120,23 +122,47 @@ fn confirm(state: &TransactionState, ag: &mut TransactionAggregator, handle: &mu
             let query = format!("Proceed with {action}?");
 
             if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
-                return (Some(state_transition(state, handle, false)), sum.1);
+                Err(next_state(handle, ag.action(), state, false))?
             }
         } 
     }
 
     handle.alpm_mut().trans_release().ok();
-    (None, sum.1)
+    Ok(sum.1)
 }
 
-fn state_transition<'a>(state: &TransactionState, handle: &mut TransactionHandle, updated: bool) -> Result<TransactionState> {
+fn next_state<'a>(handle: &mut TransactionHandle, action: &TransactionType, state: &TransactionState, updated: bool) -> Result<TransactionState> {
+    handle.alpm_mut().trans_release().ok();
+  
+    match action {
+        TransactionType::Remove(..) => Ok(match state {
+            TransactionState::CommitForeign => TransactionState::Complete(updated),
+            TransactionState::Commit(_) => TransactionState::PrepareForeign, 
+            _ => unreachable!()
+        }),
+        TransactionType::Upgrade(..) => Ok(match state {
+            TransactionState::Commit(_) => TransactionState::Complete(updated),
+            TransactionState::CommitForeign => TransactionState::Stage, 
+            _ => unreachable!()
+        }),
+    }
+}
+
+fn ready_state<'a>(handle: &mut TransactionHandle, action: &TransactionType, state: &TransactionState) -> Option<Result<TransactionState>> {
     handle.alpm_mut().trans_release().ok();
  
-    Ok(match state {
-        TransactionState::Commit(_) => TransactionState::Complete(updated),
-        TransactionState::CommitForeign => TransactionState::Stage,
-        _ => unreachable!()
-    })
+    match action { 
+        TransactionType::Remove(..) => match state { 
+            TransactionState::CommitForeign => None,
+            TransactionState::Commit(_) => Some(Ok(TransactionState::PrepareForeign)),
+            _ => unreachable!()
+        },
+        TransactionType::Upgrade(..) => match state { 
+            TransactionState::Commit(_) => None,
+            TransactionState::CommitForeign => Some(Ok(TransactionState::Stage)),
+            _ => unreachable!()
+        },
+    } 
 }
 
 fn summary(handle: &Alpm) -> (String, (u64, u64)) { 

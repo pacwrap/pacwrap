@@ -232,7 +232,7 @@ fn engage_aggregator<'a>(
                     | TransactionFlags::FORCE_DATABASE,
             Operand::Short('b') | 
                 Operand::Long("base") => base = true,
-            Operand::Long("db-only") 
+            Operand::Long("dbonly") 
                 => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
             Operand::Long("force-foreign") 
                 => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,

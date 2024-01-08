@@ -19,7 +19,7 @@
 use crate::{err, 
     Error, 
     Result, 
-    config::InstanceHandle,     
+    config::{InstanceHandle, InstanceType},     
     sync::{self,
         SyncError,
         transaction::{Transaction, 
@@ -60,7 +60,7 @@ impl Transaction for Prepare {
                     }   
                 }
 
-                if let TransactionType::Upgrade(upgrade,_,_) = ag.action() {
+                if let TransactionType::Upgrade(upgrade, ..) = ag.action() {
                     if ! upgrade && handle.metadata().queue.len() == 0 {
                         err!(SyncError::NothingToDo(true))?
                     }
@@ -76,15 +76,19 @@ impl Transaction for Prepare {
                     }
                 }
 
-                if let TransactionType::Remove(_, _,_) = ag.action() {
+                if let TransactionType::Remove(..) = ag.action() {
                     Ok(TransactionState::Stage)
-                } else if deps.len() == 0 {
+                } else if let InstanceType::BASE = inshandle.metadata().container_type() {
                     Ok(TransactionState::Stage)
                 } else {
                     Ok(TransactionState::PrepareForeign)    
                 }
             },
             TransactionState::PrepareForeign => {
+                if let InstanceType::BASE = inshandle.metadata().container_type() {
+                    return Ok(TransactionState::Complete(false)) 
+                }
+
                 if ! ag.flags().contains(TransactionFlags::FORCE_DATABASE) { 
                     if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) { 
                         if ag.deps_updated(inshandle) {
