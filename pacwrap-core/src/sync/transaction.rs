@@ -34,7 +34,8 @@ use crate::{err,
         uptodate::UpToDate},
         resolver_local::LocalDependencyResolver,
         resolver::DependencyResolver,
-        utils::AlpmUtils}, utils::print_warning};
+        utils::AlpmUtils}, 
+    utils::print_warning};
 
 pub use self::aggregator::TransactionAggregator;
 
@@ -95,16 +96,16 @@ bitflags! {
 
 pub struct TransactionHandle<'a> {
     meta: &'a mut TransactionMetadata<'a>,
+    config: &'a Global,
     alpm: Option<Alpm>,
     fail: bool,
-    config: &'a Global,
+    deps: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TransactionMetadata<'a> {
     foreign_pkgs: HashSet<String>, 
     resident_pkgs: HashSet<String>,
-    deps: Option<Vec<String>>,
     queue: Vec<Cow<'a, str>>,
     mode: TransactionMode,
     flags: (u8, u32)
@@ -203,8 +204,7 @@ impl <'a>TransactionMetadata<'a> {
     fn new(queue: Vec<&'a str>) -> TransactionMetadata {
         Self { 
             foreign_pkgs: HashSet::new(),
-            resident_pkgs: HashSet::new(),
-            deps: None,
+            resident_pkgs: HashSet::new(), 
             mode: TransactionMode::Local,
             queue: queue.iter().map(|q| (*q).into()).collect::<Vec<_>>(),
             flags: (0, 0),
@@ -217,6 +217,7 @@ impl <'a>TransactionHandle<'a> {
         Self {
             meta: metadata,
             alpm: Some(alpm_handle),
+            deps: None, 
             fail: true,
             config: global,
         }  
@@ -230,7 +231,7 @@ impl <'a>TransactionHandle<'a> {
         };
 
         for pkg in alpm.localdb().pkgs() {            
-            if let Some(_) = ignored.get(pkg.name().into()) {
+            if let Some(_) = ignored.get(pkg.name()) {
                 continue;
             }
 
@@ -242,22 +243,32 @@ impl <'a>TransactionHandle<'a> {
         SyncReqResult::NotRequired
     }
 
-    fn enumerate_foreign_pkgs(&mut self, dep_handle: &Alpm) {
-        self.meta.foreign_pkgs.extend(dep_handle.localdb()
+    fn enumerate_package_lists(&mut self, dep_handle: &Alpm, queue: bool) {
+        let foreign_pkgs = dep_handle.localdb()
             .pkgs()
             .iter()
-            .map(|p| p.name().into())
-            .filter(|p| ! self.meta.foreign_pkgs.contains(p))
-            .collect::<Vec<_>>());
-        self.meta.resident_pkgs.extend(self.alpm()
+            .filter(|p| ! self.meta.foreign_pkgs.contains(p.name()))
+            .map(|p| p.name().to_owned())
+            .collect::<Vec<_>>();
+        let resident_pkgs = self.alpm()
             .localdb()
             .pkgs()
             .iter()
-            .map(|a| a.name().into())
-            .filter(|p| ! self.meta.foreign_pkgs.contains(p) 
-                && ! self.meta.resident_pkgs.contains(p))
-            .collect::<Vec<_>>());
-    }
+            .filter(|p| ! self.meta.foreign_pkgs.contains(p.name()) 
+                && ! self.meta.resident_pkgs.contains(p.name()))
+            .map(|a| a.name().to_owned())
+            .collect::<Vec<_>>();
+
+        if queue { 
+            self.meta.queue.extend(foreign_pkgs.iter()
+                .map(|p| p.to_owned().into())
+                .collect::<Vec<_>>());
+            self.fail = false;
+        }
+
+        self.meta.foreign_pkgs.extend(foreign_pkgs); 
+        self.meta.resident_pkgs.extend(resident_pkgs);
+    } 
 
     pub fn ignore(&mut self, silent: bool) {
         let mut fail = self.fail; 
@@ -329,10 +340,9 @@ impl <'a>TransactionHandle<'a> {
                 .filter(|a| ignored.contains(*a))
                 .collect::<Vec<&str>>();
 
-            if ! flags.contains(TransactionFlags::FORCE_DATABASE) {
-                if ! upstream.is_empty() {
-                    err!(SyncError::TargetUpstream(upstream[0].to_string()))?
-                }
+            if ! flags.contains(TransactionFlags::FORCE_DATABASE) 
+            && ! upstream.is_empty() {
+                    err!(SyncError::TargetUpstream(upstream[0].into()))?
             }
         }
         
@@ -345,7 +355,7 @@ impl <'a>TransactionHandle<'a> {
                     .collect::<Vec<&str>>();
 
                 if ! not_installed.is_empty() {
-                    err!(SyncError::TargetNotInstalled(not_installed[0].to_string()))?
+                    err!(SyncError::TargetNotInstalled(not_installed[0].into()))?
                 }
 
                 for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type).enumerate(&queue)? {     
@@ -359,22 +369,20 @@ impl <'a>TransactionHandle<'a> {
                     .collect::<Vec<&str>>();
 
                 if ! not_available.is_empty() {
-                    err!(SyncError::TargetNotAvailable(not_available[0].to_string()))?
+                    err!(SyncError::TargetNotAvailable(not_available[0].into()))?
                 }
 
                 let packages = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
 
                 for pkg in packages.1 {
-                    if let None = self.meta.foreign_pkgs.get(pkg.name()) {
-                        if let TransactionMode::Foreign = self.meta.mode {
-                            continue;
-                        }
+                    if let (None, TransactionMode::Foreign) = (self.meta.foreign_pkgs.get(pkg.name()), self.meta.mode) {
+                        continue;
                     }
 
                     alpm.trans_add_pkg(pkg).unwrap();        
                 }
 
-                self.meta.deps = packages.0;
+                self.deps = packages.0;
             }
         }
 
@@ -419,7 +427,7 @@ impl <'a>TransactionHandle<'a> {
     }
 
     pub fn mark_depends(&mut self) {
-        if let Some(deps) = self.meta.deps.as_ref() {
+        if let Some(deps) = self.deps.as_ref() {
             for mut pkg in deps.iter().filter_map(|a| self.alpm().get_local_package(a)) {
                 pkg.set_reason(PackageReason::Depend).unwrap();
             }

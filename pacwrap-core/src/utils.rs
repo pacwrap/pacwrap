@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{path::Path, env::var, os::unix::net::UnixStream, fmt::Display};
+use std::{path::Path, env::var, os::unix::net::UnixStream, fmt::Display, time::{SystemTime, UNIX_EPOCH}};
 
 use nix::unistd::isatty;
 
@@ -61,6 +61,13 @@ pub fn is_truecolor_terminal() -> bool {
 
     is_color_terminal() && value == "truecolor" || value == "24bit"
 
+}
+
+pub fn unix_time_as_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 pub fn read_le_32(vec: &Vec<u8>, pos: usize) -> u32 {

@@ -29,7 +29,7 @@ use crate::{err,
             TransactionHandle, 
             TransactionAggregator,
             TransactionFlags,
-            SyncReqResult}}};
+            SyncReqResult}}, constants::UNIX_TIMESTAMP};
 
 pub struct Prepare {
     state: TransactionState,
@@ -46,21 +46,26 @@ impl Transaction for Prepare {
         match self.state {
             TransactionState::Prepare => {
                 let deps: Vec<&str> = inshandle.metadata().dependencies();
-       
+                let instype = inshandle.metadata().container_type();
+                let action = ag.action();
+
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
-                        match ag.cache().get_instance(dep) {
-                            Some(dep_handle) => {
-                                let dep_alpm = sync::instantiate_alpm(dep_handle);                             
-                                handle.enumerate_foreign_pkgs(&dep_alpm); 
-                                dep_alpm.release().unwrap();
+                        match ag.cache().get_instance_option(dep) {
+                            Some(dep_handle) => { 
+                                let dep_handle = &sync::instantiate_alpm(dep_handle);
+                                let create = ag.flags().contains(TransactionFlags::CREATE);
+                                let timestamp = inshandle.metadata().timestamp();
+                                let present = *UNIX_TIMESTAMP;
+
+                                handle.enumerate_package_lists(dep_handle, create && present == timestamp)
                             },
                             None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
                     }   
                 }
 
-                if let TransactionType::Upgrade(upgrade, ..) = ag.action() {
+                if let TransactionType::Upgrade(upgrade, ..) = action {
                     if ! upgrade && handle.metadata().queue.len() == 0 {
                         err!(SyncError::NothingToDo(true))?
                     }
@@ -76,9 +81,9 @@ impl Transaction for Prepare {
                     }
                 }
 
-                if let TransactionType::Remove(..) = ag.action() {
+                if let TransactionType::Remove(..) = action {
                     Ok(TransactionState::Stage)
-                } else if let InstanceType::BASE = inshandle.metadata().container_type() {
+                } else if let InstanceType::BASE = instype {
                     Ok(TransactionState::Stage)
                 } else {
                     Ok(TransactionState::PrepareForeign)    

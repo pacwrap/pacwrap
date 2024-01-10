@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use std::fmt::{Display, Formatter};
+use std::{fmt::{Display, Formatter}, path::Path};
 
 use alpm::{Alpm,  SigLevel, Usage};
 use lazy_static::lazy_static;
@@ -26,12 +26,14 @@ use serde::{Serialize, Deserialize};
 use crate::{err,
     impl_error,
     error::*,
+    ErrorKind,
     utils::print_warning,
+    exec::pacman_key,
     constants::{BAR_GREEN, RESET, BOLD, CACHE_DIR, DATA_DIR, CONFIG_DIR, ARROW_RED},
-    sync::event::download::{DownloadCallback, download_event},
+    sync::event::download::{self, DownloadEvent},
 	config::{InsVars,
     InstanceHandle,
-    cache::InstanceCache, CONFIG, Global}};
+    cache::InstanceCache, CONFIG, Global, global::ProgressKind}};
 
 pub mod event;
 pub mod utils;
@@ -64,6 +66,7 @@ pub enum SyncError {
     InitializationFailure(String),
     InternalError(String),
     NoCompatibleRemotes,
+    UnableToLocateKeyrings,
 }
 
 impl_error!(SyncError);
@@ -85,6 +88,7 @@ impl Display for SyncError {
             Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
             Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."), 
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
+            Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
             Self::NothingToDo(_) => write!(fmter, "Nothing to do."),
             _ => Ok(()),
         }?;
@@ -124,7 +128,7 @@ impl AlpmConfigData {
 
         remotes.push(("pacwrap".into(), 
             (SigLevel::PACKAGE_MARGINAL_OK | SigLevel::DATABASE_MARGINAL_OK).bits(), 
-            vec![format!("file://{}", env!("PACWRAP_DIST_REPO")), format!("file:///mnt/dist-repo/")]));
+            vec![format!("file://{}", env!("PACWRAP_DIST_REPO")), format!("file:///mnt/share/dist-repo/")]));
  
         Self {
             repos: remotes,
@@ -149,7 +153,6 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm
 
 pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
     alpm_handle(inshandle.vars(), format!("{}/var/lib/pacman/", inshandle.vars().root()), &*DEFAULT_ALPM_CONF)
-
 }
 
 fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> Alpm { 
@@ -164,6 +167,29 @@ fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> 
     handle.set_disable_dl_timeout(CONFIG.alpm().download_timeout());
     handle = register_remote(handle, remotes); 
     handle
+}
+
+//TODO: Port pacman-key to Rust 
+
+pub fn instantiate_trust() -> Result<()> {
+    let path = &format!("{}/pacman/gnupg/", *DATA_DIR);
+
+    if Path::new(path).exists() {
+        return Ok(());
+    }
+
+    println!("{} {}Initializing package trust database...{}", *BAR_GREEN, *BOLD, *RESET);
+
+    if ! Path::new("/usr/share/pacman/keyrings").exists() {
+        err!(SyncError::UnableToLocateKeyrings)?
+    }
+
+    if let Err(error) = std::fs::create_dir_all(path) {
+        err!(ErrorKind::IOError(path.into(), error.kind()))?
+    }
+
+    pacman_key(path, vec!["--init"])?;
+    pacman_key(path, vec!["--populate"])
 }
 
 fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm { 
@@ -187,8 +213,8 @@ fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
             let db_path = format!("{}/pacman/", *DATA_DIR);
             let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
-            println!("{} {}Synchronising package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
-            handle.set_dl_cb(DownloadCallback::new(0, 0), download_event);
+            println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
+            handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {
                 err!(SyncError::InitializationFailure(err.to_string()))?
@@ -226,7 +252,7 @@ fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
         let mut sig = SigLevel::empty();
 
         for level in sigs {
-            sig = sig | if level == "PackageRequired" || level == "PackageTrustedOnly" {
+            sig = sig | if level == "Required" || level == "PackageRequired" {
                 SigLevel::PACKAGE
             } else if level == "DatabaseRequired" || level == "DatabaseTrustedOnly" {
                 SigLevel::DATABASE

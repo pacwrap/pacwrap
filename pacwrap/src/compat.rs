@@ -58,7 +58,7 @@ pub fn compat(args: &mut Arguments) -> Result<()> {
     }
 }
 
-pub fn execute_bash(executable: &str, args: &mut Arguments) -> Result<()> { 
+pub fn execute_bash(executable: &'static str, args: &mut Arguments) -> Result<()> { 
     handle_process(&executable, Command::new(&executable)
         .args(args.values())
         .spawn())

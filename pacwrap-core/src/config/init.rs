@@ -23,7 +23,8 @@ use crate::{err,
     Error,
     Result,
     ErrorKind,
-    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR}};
+    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
+    config::global::CONFIG};
 
 static REPO_CONF_DEFAULT: &'static str = r###"## See the pacman.conf(5) manpage for information on repository directives.
 ## All other libalpm-related options therein are ignored.
@@ -44,8 +45,11 @@ static PACWRAP_CONF_DEFAULT: &'static str = r###"## See the pacwrap.yml(2) manpa
 ## Documentation is also available at https://git.sapphirus.org/pacwrap/pacwrap/docs/
 
 config:
-  summary: Basic
-  progress: Verbose
+  logging: Basic
+  summmary: Basic
+  #progress:
+    #transact: CondensedForeign
+    #download: CondensedForeign
 alpm:
   #ignore_pkg:
   #- somepackage
@@ -84,7 +88,7 @@ impl DirectoryLayout {
 
 fn data_layout() -> DirectoryLayout {
     DirectoryLayout {
-        dirs: vec!("/root", "/home", "/state", "/pacman/gnupg", "/pacman/sync"),
+        dirs: vec!("/root", "/home", "/state", "/pacman/sync"),
         root: *DATA_DIR,
     }
 }
@@ -121,6 +125,8 @@ fn write_to_file(location: &str, contents: &str) -> Result<()> {
 }
 
 pub fn init() -> Result<()> {
+    let _ = *CONFIG;
+
     config_layout().instantiate()?;
     data_layout().instantiate()?;
     cache_layout().instantiate()?;

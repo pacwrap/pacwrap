@@ -36,7 +36,7 @@ use pacwrap_core::{err,
         init::init,
         cache},
     config::InstanceCache,
-    sync::transaction::{TransactionFlags, TransactionAggregator}, 
+    sync::{instantiate_trust, transaction::{TransactionFlags, TransactionAggregator}}, 
     constants::{BAR_GREEN, BOLD, RESET, ARROW_GREEN}};
 
 pub fn synchronize(args: &mut Arguments) -> Result<()> {
@@ -69,8 +69,9 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
             }
         }
 
-        instantiate(&mut logger, &mut cache, acquire_depends(args)?)?
-    }
+        instantiate_trust()?; 
+        instantiate(&mut logger, &mut cache, acquire_depends(args)?)?;
+   }
 
     engage_aggregator(&cache, action, args, &mut logger)
 }
@@ -142,21 +143,11 @@ fn create(args: &mut Arguments) -> bool {
 }
 
 fn instantiate<'a>(logger: &mut Logger, cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<()> { 
-    println!("{} {}Instantiating container{}{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
+    println!("{} {}Instantiating container...{}{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for target in targets {
-        for dep in target.1.1.iter() {
-            if let None = cache.get_instance(dep) {
-                err!(ErrorKind::DependencyNotFound((*dep).into(), target.0.into()))?
-            }
-        }
-
         cache.add(target.0, target.1.0, target.1.1)?;
-
-        match cache.get_instance(target.0) {
-            Some(ins) => instantiate_container(logger, ins)?,
-            None => err!(ErrorKind::InstanceNotFound(target.0.into()))?
-        }
+        instantiate_container(logger, cache.get_instance(target.0)?)?;
     }
 
     Ok(())
@@ -240,10 +231,7 @@ fn engage_aggregator<'a>(
                 => action_flags = action_flags | TransactionFlags::NO_CONFIRM, 
             Operand::ShortPos('t', target) 
                 | Operand::LongPos("target", target) => { 
-                if let None = cache.get_instance(target) {
-                    err!(ErrorKind::InstanceNotFound(target.into()))?
-                }
-
+                cache.get_instance(target)?;
                 current_target = target;
                 targets.push(target);
 

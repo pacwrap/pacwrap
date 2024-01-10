@@ -35,9 +35,24 @@ pub enum Verbosity {
     Verbose,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub enum ProgressKind {
+    Simple,
+    Condensed,
+    CondensedForeign,
+    CondensedLocal,
+    Verbose,
+}
+
 impl Default for Verbosity {
     fn default() -> Self {
         Self::Verbose
+    }
+}
+
+impl Default for ProgressKind {
+    fn default() -> Self {
+        Self::CondensedForeign
     }
 }
 
@@ -50,11 +65,21 @@ pub struct Global {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct Progress {
+    #[serde(default = "ProgressKind::default")] 
+    transact: ProgressKind,
+     #[serde(default = "ProgressKind::default")] 
+    download: ProgressKind,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Configuration {
     #[serde(default = "Verbosity::default")] 
     summary: Verbosity,
     #[serde(default = "Verbosity::default")] 
-    progress: Verbosity,
+    logging: Verbosity,
+    #[serde(default = "Progress::new")] 
+    progress: Progress,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -79,7 +104,29 @@ impl Configuration {
     fn new() -> Self {
         Self {
             summary: Verbosity::Basic,
-            progress: Verbosity::Verbose,
+            logging: Verbosity::Basic,
+            progress: Progress::new(),
+        }
+    }
+
+    pub fn progress(&self) -> (&ProgressKind, &ProgressKind) {
+        (&self.progress.transact, &self.progress.download)
+    }
+
+    pub fn logging(&self) -> &Verbosity {
+        &self.summary
+    }
+
+    pub fn summary(&self) -> &Verbosity {
+        &self.summary
+    }
+}
+
+impl Progress {
+    fn new() -> Self {
+        Self {
+            transact: ProgressKind::CondensedForeign,
+            download: ProgressKind::CondensedForeign, 
         }
     }
 }

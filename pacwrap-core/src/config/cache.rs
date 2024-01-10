@@ -54,7 +54,13 @@ impl <'a>InstanceCache<'a> {
             err!(ConfigError::AlreadyExists(ins.into()))?
         }
 
-        let deps = deps.iter().map(|a| (*a).into()).collect();          
+        for dep in deps.iter() {
+            if let None = self.instances.get(dep) {
+                err!(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
+            } 
+        }
+
+        let deps = deps.iter().map(|a| (*a).into()).collect();
         let handle = match config::provide_new_handle(ins) {
             Ok(mut handle) => { 
                 handle.metadata_mut().set(deps, vec!()); 
@@ -79,7 +85,7 @@ impl <'a>InstanceCache<'a> {
 
     fn map(&mut self, ins: &'a str) -> Result<()>  {
         if let Some(_) = self.instances.get(ins) {
-            err!(ConfigError::AlreadyExists(ins.into()))?
+            err!(ConfigError::AlreadyExists(ins.to_owned()))?
         }
 
         Ok(self.register(ins, match config::provide_handle(ins) {
@@ -125,7 +131,13 @@ impl <'a>InstanceCache<'a> {
         }
     }
 
-    pub fn get_instance(&self, ins: &str) -> Option<&InstanceHandle> { 
+    pub fn get_instance(&self, ins: &str) -> Result<&InstanceHandle> { 
+        match self.instances.get(ins) {
+            Some(ins) => Ok(ins), None => err!(ErrorKind::InstanceNotFound(ins.into())),
+        }
+    }
+
+    pub fn get_instance_option(&self, ins: &str) -> Option<&InstanceHandle> { 
         self.instances.get(ins)
     }
 }
@@ -146,24 +158,19 @@ pub fn populate<'a>() -> Result<InstanceCache<'a>> {
 
 fn roots<'a>() -> Result<Vec<&'a str>> { 
     match read_dir(format!("{}/root", *DATA_DIR)) {
-        Ok(dir) => Ok(dir.filter(|f| match f { 
+        Ok(dir) => Ok(dir.filter(|f| match f {
             Ok(f) => match f.metadata() {
-                Ok(meta) => meta.is_dir() | meta.is_symlink(), 
-                Err(_) => false, 
+                Ok(meta) => meta.is_dir() | meta.is_symlink(), Err(_) => false 
             }, 
-            Err(_) => false })
+            Err(_) => false 
+        })
         .map(|s| match s {
-                Ok(f) => f.file_name()
-                    .to_str()
-                    .unwrap_or("")
-                    .to_string()
-                    .leak(), 
+                Ok(f) => match f.file_name().to_str() {
+                    Some(f) => f.to_owned().leak(), None => "", 
+                },
                 Err(_) => "",
             })
-        .filter_map(|e| match e.is_empty() {
-                true => None,
-                false => Some(e)
-            })
+        .filter(|e| ! e.is_empty())
         .collect()),
         Err(error) => err!(ErrorKind::IOError(format!("{}/root", *DATA_DIR), error.kind())),
     }

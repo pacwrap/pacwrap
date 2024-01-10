@@ -22,14 +22,25 @@ pub mod query;
 pub mod progress;
 
 fn whitespace(total: usize, current: usize) -> String {
+    let total = log10(total);
+    let current = log10(current); 
     let mut whitespace = String::new();
     let difference = total-current;
   
-    if difference > 0 {
-        for _ in 0..difference {
-            whitespace.push_str(" ");
-        } 
-    }
+    for _ in 0..difference {
+        whitespace.push_str(" ");
+    } 
 
     whitespace
+}
+
+fn log10(mut value: usize) -> usize { 
+    let mut length = 0;
+
+    while value > 0 {
+        value /= 10;
+        length += 1;
+    }
+
+    length
 }

@@ -18,7 +18,6 @@
  */
 
 use std::{borrow::Cow,
-	time::{SystemTime, UNIX_EPOCH},
     fmt::{Display, Debug, Formatter},
 	vec::Vec};
 
@@ -29,7 +28,8 @@ use crate::{Result,
         filesystem::{Filesystem, root::ROOT, home::HOME},
         dbus::Dbus,
         vars::InsVars, 
-        save}};
+        save}, 
+    constants::UNIX_TIMESTAMP};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Instance<'a> {
@@ -228,14 +228,14 @@ impl <'a>InstanceMetadata<'a> {
             container_type: ctype,
             dependencies: deps.iter().map(|a| (*a).into()).collect(),
             explicit_packages: pkgs.iter().map(|a| (*a).into()).collect(),
-            meta_version: time_as_seconds(),
+            meta_version: *UNIX_TIMESTAMP,
         }
     }
 
     pub fn set(&mut self, deps: Vec<&'a str>, pkgs: Vec<&'a str>) {
         self.dependencies = deps.iter().map(|a| (*a).into()).collect();
         self.explicit_packages = pkgs.iter().map(|a| (*a).into()).collect();
-        self.meta_version = time_as_seconds();
+        self.meta_version = *UNIX_TIMESTAMP;
     }
 
     pub fn container_type(&self) -> &InstanceType { 
@@ -249,15 +249,16 @@ impl <'a>InstanceMetadata<'a> {
     pub fn explicit_packages(&'a self) -> Vec<&'a str> { 
         self.explicit_packages.iter().map(|a| a.as_ref()).collect()
     }
-}
 
-fn time_as_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    pub fn timestamp(&self) -> u64 {
+        self.meta_version
+    }
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn time_as_seconds() -> u64 {
+    *UNIX_TIMESTAMP
 }
