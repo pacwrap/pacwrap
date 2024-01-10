@@ -23,7 +23,7 @@ use alpm::{AnyQuestion, Question::*};
 
 use crate::utils::prompt::prompt;
 
-pub fn questioncb(question: AnyQuestion, _: &mut ()) {
+pub fn callback(question: AnyQuestion, _: &mut ()) {
     match question.question() {
         Conflict(mut x) => {
             let pkg_a = x.conflict().package1();
@@ -64,9 +64,6 @@ pub fn questioncb(question: AnyQuestion, _: &mut ()) {
                 x.set_import(true);
             } 
         },
-        //TODO: Implement these questions.
-        RemovePkgs(_) => (),
-        SelectProvider(_) => (),
-        InstallIgnorepkg(_) => (),
+        _ => (),
     }
 }

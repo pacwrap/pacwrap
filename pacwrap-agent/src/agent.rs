@@ -33,9 +33,9 @@ use pacwrap_core::{err,
             TransactionMetadata,
             TransactionParameters,
             MAGIC_NUMBER}, 
-    event::{download::{DownloadCallback, download_event}, 
-            progress::{ProgressEvent, callback}, 
-            query::questioncb}}, 
+    event::{download::{self, DownloadEvent}, 
+            progress::{self, ProgressEvent}, 
+            query}}, 
     utils::{print_warning, read_le_32}, config::Global};
 
 use crate::error::AgentError;
@@ -70,13 +70,17 @@ pub fn transact() -> Result<()> {
     let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes);
     let mut handle = TransactionHandle::new(&config, alpm, &mut metadata);
 
-    conduct_transaction(&mut handle, params)
+    conduct_transaction(&config, &mut handle, params)
 }
 
-fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
+fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
     let flags = handle.retrieve_flags(); 
     let mode = agent.mode();
     let action = agent.action();
+    let config = config.config();
+    let progress = config.progress();
+    let bytes = agent.bytes();
+    let files = agent.files();
 
     if let Err(error) = handle.alpm_mut().trans_init(flags.1.unwrap()) {
         err!(SyncError::InitializationFailure(error.to_string().into()))?
@@ -96,9 +100,17 @@ fn conduct_transaction(handle: &mut TransactionHandle, agent: TransactionParamet
         erroneous_preparation(error)?
     }
 
-    handle.alpm().set_progress_cb(ProgressEvent::new(&action), callback(&mode));
-    handle.alpm().set_question_cb((), questioncb); 
-    handle.alpm().set_dl_cb(DownloadCallback::new(agent.bytes(), agent.files()), download_event);
+    let progress_cb = ProgressEvent::new()
+        .style(progress.0)
+        .configure(&action);
+    let download_cb = DownloadEvent::new()
+        .style(progress.0) 
+        .total(bytes, files)
+        .configure(&mode, progress.1);
+
+    handle.alpm().set_question_cb((), query::callback);
+    handle.alpm().set_progress_cb(progress_cb, progress::callback(&mode, progress.0));
+    handle.alpm().set_dl_cb(download_cb, download::callback(progress.1));
 
     if let Err(error) = handle.alpm_mut().trans_commit() {
         erroneous_transaction(error)?

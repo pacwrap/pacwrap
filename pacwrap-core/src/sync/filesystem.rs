@@ -147,11 +147,8 @@ impl <'a>FileSystemStateSync<'a> {
                 continue;
             }
 
-            let inshandle = match self.cache.get_instance(ins) {
-                Some(ins) => ins,
-                None => err!(ErrorKind::InstanceNotFound(ins.to_string()))?
-            };
-          
+            let inshandle = self.cache.get_instance(ins)?;
+
             write_chan = self.link(&inshandle.metadata().dependencies(), write_chan)?;
             
             if let ROOT = inshandle.metadata().container_type() {

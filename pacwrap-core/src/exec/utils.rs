@@ -17,12 +17,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{process::Child, io::Read};
+use std::{process::Child, io::Read, os::fd::AsRawFd};
 
 use os_pipe::{PipeReader, PipeWriter};
+use serde::Serialize;
 use serde_yaml::Value;
 
-use crate::{constants::BWRAP_EXECUTABLE, config::InstanceHandle, ErrorKind, error::*, err};
+use crate::{err,
+    error::*,
+    ErrorKind,
+    constants::BWRAP_EXECUTABLE, 
+    config::{InstanceHandle, CONFIG},
+    sync::{SyncError, transaction::{TransactionParameters, 
+        TransactionMetadata}, 
+        DEFAULT_ALPM_CONF}};
 
 pub fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
     match super::fakeroot_container(ins, arguments)?.wait() {
@@ -46,13 +54,31 @@ pub fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32> {
     }
 }
 
-pub fn handle_process(name: &str, result: std::result::Result<Child, std::io::Error>) -> Result<()> {
+pub fn agent_params(reader: &PipeReader, writer: &PipeWriter, params: &TransactionParameters, metadata: &TransactionMetadata) -> Result<i32> {
+    serialize(params, writer)?;  
+    serialize(&*CONFIG, writer)?;
+    serialize(&*DEFAULT_ALPM_CONF, writer)?;
+    serialize(metadata, writer)?;
+    Ok(reader.as_raw_fd())
+}
+
+fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> { 
+    match bincode::serialize_into::<&PipeWriter, T>(file, input) {
+        Ok(()) => Ok(()),
+        Err(error) => err!(SyncError::TransactionFailure(format!("Agent data serialization failed: {}", error))),
+    }
+}
+
+pub fn handle_process(name: &'static str, result: std::result::Result<Child, std::io::Error>) -> Result<()> {
     match result {
-        Ok(child) => Ok(wait_on_process(child)),
+        Ok(child) => wait_on_process(name, child),
         Err(error) => err!(ErrorKind::IOError(name.into(), error.kind())),
     }
 }
 
-fn wait_on_process(mut child: Child) { 
-    child.wait().ok(); 
+pub fn wait_on_process(name: &'static str, mut child: Child) -> Result<()> { 
+    match child.wait() {
+        Ok(_) => Ok(()),
+        Err(error) => err!(ErrorKind::ProcessWaitFailure(name, error.kind()))
+    }
 }

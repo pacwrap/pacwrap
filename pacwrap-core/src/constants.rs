@@ -22,11 +22,12 @@ use std::{env::var, process::id};
 use lazy_static::lazy_static;
 use nix::unistd::{geteuid, getegid};
 
-use crate::{error, Error, ErrorKind, utils::{is_color_terminal, is_truecolor_terminal}};
+use crate::{error, Error, ErrorKind, utils::{is_color_terminal, is_truecolor_terminal, unix_time_as_seconds}};
 
 pub const BWRAP_EXECUTABLE: &str = "bwrap";
 pub const DBUS_PROXY_EXECUTABLE: &str = "xdg-dbus-proxy";
 pub const DEFAULT_PATH: &str = "/usr/local/bin:/usr/bin/:/bin";
+pub const PACMAN_KEY_SCRIPT: &'static str = "pacman-key";
 
 const PACWRAP_CONFIG_DIR: &str = "/.config/pacwrap";
 const PACWRAP_DATA_DIR: &str = "/.local/share/pacwrap";
@@ -66,6 +67,7 @@ lazy_static! {
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", *UID, &id());
     pub static ref WAYLAND_SOCKET: String = format!("{}{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
     pub static ref LOG_LOCATION: &'static str = format_str!("{}/pacwrap.log", *DATA_DIR);
+    pub static ref UNIX_TIMESTAMP: u64 = unix_time_as_seconds();
     pub static ref IS_COLOR_TERMINLAL: bool = is_color_terminal();
     pub static ref IS_TRUECOLOR_TERMINLAL: bool = is_truecolor_terminal();
     pub static ref BOLD: &'static str = bold();

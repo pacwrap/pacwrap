@@ -45,7 +45,7 @@ pub mod cache;
 pub mod instance;
 pub mod init;
 pub mod register;
-mod global;
+pub mod global;
 
 #[derive(Debug, Clone)]
 pub enum ConfigError {
@@ -64,8 +64,8 @@ impl Display for ConfigError {
        match self {
             Self::Filesystem(module, err) => write!(fmter, "Failed to register filesystem {}: {} ", module, err), 
             Self::Permission(module, err) => write!(fmter, "Failed to register permission {}: {} ", module, err),
-            Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}.yml': {error}"),
-            Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}.yml': {error}"),
+            Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
+            Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
             Self::AlreadyExists(ins) => write!(fmter, "Container {}{ins}{} already exists.", *BOLD, *RESET),
             Self::ConfigNotFound(ins) => write!(fmter, "Configuration '{}{ins}{}.yml' not found.", *BOLD, *RESET)
         }

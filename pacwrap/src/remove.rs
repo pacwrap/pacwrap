@@ -19,14 +19,14 @@
 
 use std::collections::HashMap;
 
-use pacwrap_core::{log::Logger,
+use pacwrap_core::{err,
+    error::*,
+    log::Logger,
     sync::transaction::TransactionType,
     utils::{arguments::Operand, check_root},
     utils::arguments::{Arguments, InvalidArgument},
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
-    config::{cache, init::init},
-    error::*, 
-    err, ErrorKind};
+    config::{cache, init::init}};
 
 pub fn remove(mut args: &mut Arguments) -> Result<()> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
@@ -88,10 +88,7 @@ fn engage_aggregator<'a>(
             Operand::ShortPos('t', target) 
                 | Operand::LongPos("target", target) 
                 | Operand::ShortPos(_, target) => {
-                if let None = cache.get_instance(target) {
-                    err!(ErrorKind::InstanceNotFound(target.into()))?
-                }
-
+                cache.get_instance(target)?;
                 current_target = Some(target);
                 targets.push(target);
             },

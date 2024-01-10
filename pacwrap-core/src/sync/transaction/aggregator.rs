@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use crate::{err,
     ErrorKind,
     error::*,
-    constants::ARROW_GREEN,
+    constants::{ARROW_GREEN, UNIX_TIMESTAMP},
 	config::InstanceType,
 	exec::utils::execute_fakeroot_container,
 	log::Logger,
@@ -72,6 +72,7 @@ impl <'a>TransactionAggregator<'a> {
     }
 
     pub fn aggregate(mut self) -> Result<()> {
+        let _timestamp = *UNIX_TIMESTAMP;
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
                 if refresh {
@@ -83,8 +84,7 @@ impl <'a>TransactionAggregator<'a> {
             _ => false,
         };
         let target = match self.target {
-            Some(s) => self.cache.get_instance(s), 
-            None => None
+            Some(s) => self.cache.get_instance_option(s), None => None
         };
 
         if let Some(inshandle) = target { 
@@ -128,11 +128,11 @@ impl <'a>TransactionAggregator<'a> {
                 continue;
             }
 
-            if let Some(inshandle) = self.cache.get_instance(ins) {
-                self.queried.push(ins);
-                self.transaction(&inshandle.metadata().dependencies())?;
-                self.transact(inshandle)?;
-            }
+            let inshandle = self.cache.get_instance(ins).unwrap();
+
+            self.queried.push(ins);
+            self.transaction(&inshandle.metadata().dependencies())?;
+            self.transact(inshandle)?;
         }
 
         Ok(())

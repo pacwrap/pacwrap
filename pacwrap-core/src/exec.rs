@@ -17,12 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{process::{Child, Command}, fmt::{Formatter, Display}, os::fd::AsRawFd};
+use std::{process::{Child, Command, Stdio}, fmt::{Formatter, Display}};
 
 use command_fds::{CommandFdExt, FdMapping};
 use lazy_static::lazy_static;
-use os_pipe::{PipeWriter, PipeReader};
-use serde::Serialize;
 
 use crate::{err,
 	impl_error,
@@ -31,10 +29,10 @@ use crate::{err,
 	ErrorKind,
 	Error,
 	Result,
-	constants::{LOG_LOCATION, BWRAP_EXECUTABLE, BOLD, RESET, GID, UID, TERM, LANG, COLORTERM}, 
-    config::{InstanceHandle, CONFIG},
-    sync::{DEFAULT_ALPM_CONF, SyncError, transaction::{TransactionParameters, TransactionMetadata}},
-	exec::seccomp::{provide_bpf_program, FilterType::*}};
+	constants::{LOG_LOCATION, BWRAP_EXECUTABLE, BOLD, RESET, GID, UID, TERM, LANG, COLORTERM, PACMAN_KEY_SCRIPT}, 
+    config::InstanceHandle,
+    sync::transaction::{TransactionParameters, TransactionMetadata},
+	exec::{utils::{wait_on_process, agent_params}, seccomp::{provide_bpf_program, FilterType::*}}};
 
 pub mod args;
 pub mod utils;
@@ -173,17 +171,15 @@ pub fn transaction_agent(ins: &InstanceHandle, params: &TransactionParameters, m
 	}
 }
 
-fn agent_params(reader: &PipeReader, writer: &PipeWriter, params: &TransactionParameters, metadata: &TransactionMetadata) -> Result<i32> {
-    serialize(params, writer)?;  
-    serialize(&*CONFIG, writer)?;
-    serialize(&*DEFAULT_ALPM_CONF, writer)?;
-    serialize(metadata, writer)?;
-    Ok(reader.as_raw_fd())
-}
-
-fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> { 
-    match bincode::serialize_into::<&PipeWriter, T>(file, input) {
-        Ok(()) => Ok(()),
-        Err(error) => err!(SyncError::TransactionFailure(format!("Agent data serialization failed: {}", error))),
+pub fn pacman_key(path: &str, cmd: Vec<&str>) -> Result<()> {
+    match Command::new(PACMAN_KEY_SCRIPT)
+        .stderr(Stdio::null()) 
+        .env("EUID", "0")
+        .arg("--gpgdir")
+        .arg(path)
+        .args(cmd)
+        .spawn() {
+        Ok(proc) => wait_on_process(PACMAN_KEY_SCRIPT, proc),
+        Err(error) => err!(ErrorKind::ProcessInitFailure(PACMAN_KEY_SCRIPT, error.kind()))?,
     }
 }

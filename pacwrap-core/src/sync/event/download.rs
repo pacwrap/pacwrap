@@ -19,16 +19,18 @@
 
 use std::collections::HashMap;
 
-use alpm::{AnyDownloadEvent, DownloadEvent};
+use alpm::{AnyDownloadEvent, DownloadEvent as Event};
 use dialoguer::console::Term;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressDrawTarget};
 use lazy_static::lazy_static;
+use simplebyteunit::simplebyteunit::*;
+
+use crate::{constants::{ARROW_CYAN, BOLD, RESET}, config::global::ProgressKind, sync::transaction::TransactionMode};
 
 use super::whitespace;
 
 lazy_static!{
-   static ref INIT: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg}")
-        .unwrap();
+   static ref INIT: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg}").unwrap();
    static ref UP_TO_DATE: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg} is up-to-date!")        
         .unwrap()
         .progress_chars("#-")
@@ -36,104 +38,185 @@ lazy_static!{
 }
 
 #[derive(Clone)]
-pub struct DownloadCallback {
+pub struct DownloadEvent {
+    total: usize,
+    position: usize,
+    total_bar: Option<ProgressBar>, 
+    condensed: bool,
     progress: MultiProgress,
-    prbar: HashMap<String, ProgressBar>,
-    style: ProgressStyle,
-    total_files: usize,
-    total_files_len: usize,
-    files_done: usize
+    bars: HashMap<&'static str, ProgressBar>,
+    style: Option<ProgressStyle>, 
 }
 
-impl DownloadCallback {
-    pub fn new(total_bytes: u64, files: usize) -> Self {
-        let mut bars = HashMap::new();
-        let files_str_len = files.to_string().len();
-        let size = Term::size(&Term::stdout());
-        let width = ((size.1 / 2) - 14).to_string();
-        let multiprogress = MultiProgress::new();
-        let pb_style_tmpl = " {spinner:.green} {msg:<".to_owned()+width.as_str() 
-        + "} {bytes:>11} {bytes_per_sec:>12} {elapsed_precise:>5} [{wide_bar}] {percent:<3}%";
-        let pb_style = ProgressStyle::with_template(&(pb_style_tmpl))
-            .unwrap()
-            .progress_chars("#-")
-            .tick_strings(&[" ", "✓"]);
-        
-        if total_bytes > 0 {
-            let pb_total = multiprogress.add(
-                ProgressBar::new(total_bytes)
-                    .with_style(pb_style.clone())
-                    .with_message(format!("Total ({}0/{})", whitespace(files_str_len, 1), files)));
-
-            bars.insert("total".into(), pb_total);
-        }
-
+impl DownloadEvent {
+    pub fn new() -> Self { 
         Self {
-            style: pb_style,
-            total_files: files,
-            total_files_len: files_str_len,
-            files_done: 0,
-            progress: multiprogress,
-            prbar: bars,
+            total: 0,
+            position: 0, 
+            total_bar: None,
+            condensed: false,
+            progress: MultiProgress::new(),
+            bars: HashMap::new(),
+            style: None,
         }
+    }
+
+    pub fn style(mut self, kind: &ProgressKind) -> Self {
+        self.style = match kind { 
+            ProgressKind::Simple => None,
+            _ => Some({
+                let size = Term::size(&Term::stdout());
+                let width = ((size.1 / 2) - 14).to_string();
+
+                ProgressStyle::with_template(&(" {spinner:.green} {msg:<".to_owned()+&width 
+                    + "} {bytes:>11} {bytes_per_sec:>12} {elapsed_precise:>5} [{wide_bar}] {percent:<3}%"))
+                    .unwrap()
+                    .progress_chars("#-")
+                    .tick_strings(&[" ", "✓"])
+            }),
+        };
+        self
+    }
+
+    pub fn total(mut self, bytes: u64, files: usize) -> Self {
+        self.total = files;
+        self.total_bar = match (bytes > 0 && files > 1, self.style.as_ref()) {
+            (true, Some(style)) => Some({
+                let bar = self.progress.add(ProgressBar::new(bytes)
+                    .with_style(style.clone())
+                    .with_message(format!("Total ({}0/{})", whitespace(files, 1), files)));
+                
+                bar.set_position(0);
+                bar
+            }),
+            _ => None,
+        };
+
+        self
+    }
+
+    pub fn configure(mut self, mode: &TransactionMode, progress: &ProgressKind) -> Self {
+        self.condensed = match progress {
+            ProgressKind::Condensed => true,
+            ProgressKind::CondensedForeign => match mode {
+                TransactionMode::Foreign => true,
+                TransactionMode::Local => false,
+            },
+            ProgressKind::CondensedLocal => match mode {
+                TransactionMode::Foreign => false,
+                TransactionMode::Local => true,
+            },
+            _ => false,
+        };
+        self
+    }
+
+    fn increment(&mut self, progress: u64) {
+        let bar = match self.total_bar.as_mut() {
+            Some(bar) => bar, None => return,
+        };
+
+        self.position += 1;
+        
+        let total = self.total;
+        let pos = self.position;
+        let whitespace = whitespace(total, pos);
+
+        bar.inc(progress);
+        bar.set_message(format!("Total ({}{}/{})", whitespace, pos, total)); 
+                    
+        if total == pos { 
+            bar.finish(); 
+        } 
+    }
+
+    fn insert(&mut self, file: &str) { 
+        let pb = match self.total_bar.as_mut() { 
+            Some(total) => match self.condensed {
+                true => self.progress.insert_after(&total, ProgressBar::new(0)),  
+                false => self.progress.insert_before(&total, ProgressBar::new(0)),
+           },
+            None => self.progress.add(ProgressBar::new(0)) 
+        };
+
+        pb.set_style(INIT.clone());
+        pb.set_message(message(file)); 
+
+        /*
+         * alpm-rs expects our callback signature to provide a struct bound by a 'static lifetime,
+         * therefore allocate this literal and then leak it for use as a key.
+         */
+        self.bars.insert(file.to_owned().leak(), pb);
     }
 }
 
-pub fn download_event(file: &str, download: AnyDownloadEvent, this: &mut DownloadCallback) {
-    if file.ends_with(".sig") { 
+pub fn simple(file: &str, download: AnyDownloadEvent, this: &mut DownloadEvent) {
+    if file.ends_with(".sig") {
+        return; 
+    }
+
+    if let Event::Completed(progress) = download.event() {
+        this.position += 1;
+
+        let size = progress.total.abs().to_byteunit(SI);
+        let total = this.total;
+        let pos = this.position;
+        let whitespace = whitespace(total, pos);    
+        let message = message(file);
+
+        eprintln!("{} ({}{whitespace}{pos}{}/{}{total}{}) {message} downloaded ({size})", *ARROW_CYAN, *BOLD, *RESET, *BOLD, *RESET); 
+    }
+}
+
+pub fn event(file: &str, download: AnyDownloadEvent, this: &mut DownloadEvent) {
+    if file.ends_with(".sig") {
         return; 
     }
 
     match download.event() {
-        DownloadEvent::Progress(progress) => { 
-            if let Some(pb) = this.prbar.get_mut(&file.to_string()) {
-               if pb.length().unwrap() == 0 {
+        Event::Progress(progress) => { 
+            if let Some(pb) = this.bars.get_mut(file) {
+                if pb.length().unwrap() == 0 {
                     pb.set_length(progress.total.unsigned_abs());
-                    pb.set_style(this.style.clone());
+                    pb.set_style(this.style.as_ref().unwrap().clone());
                 }
 
-                pb.set_position(progress.downloaded.unsigned_abs());
-                    
-                if let Some(total) = this.prbar.get("total") { 
-                    total.inc(progress.downloaded.unsigned_abs());
-                }
+                pb.set_position(progress.downloaded.unsigned_abs()); 
             }    
         },
-        DownloadEvent::Completed(_) => {
-            if let Some(pb) = this.prbar.remove(&file.to_string()) { 
+        Event::Completed(progress) => {
+            if let Some(pb) = this.bars.remove(file) { 
                 if pb.length().unwrap() == 0 {  
                     pb.set_style(UP_TO_DATE.clone());
                 }
-                   
-                pb.finish();
+                
+                pb.finish();   
+                this.increment(progress.total.unsigned_abs());
 
-                if let Some(total) = this.prbar.get("total") { 
-                    this.files_done += 1;
-         
-                    total.set_message(format!("Total ({}{}/{})", 
-                        whitespace(this.total_files_len, 
-                            this.files_done.to_string().len()), 
-                        this.files_done, 
-                        this.total_files)); 
-                    
-                    if this.files_done == this.total_files { 
-                        total.finish(); 
-                    } 
+                if this.condensed {
+                    pb.set_draw_target(ProgressDrawTarget::hidden());
                 }
             }
         },
-        DownloadEvent::Init(_) => {
-            let pb = if let Some(total) = this.prbar.get("total") { 
-                this.progress.insert_before(&total, ProgressBar::new(0))
-            } else {
-                this.progress.add(ProgressBar::new(0)) 
-            };
+        Event::Init(progress) => {
+            if progress.optional {
+                return;
+            }
 
-            pb.set_style(INIT.clone());
-            pb.set_message(message(file)); 
-            this.prbar.insert(file.into(), pb);
+            this.insert(file);
         },
-        _ => (),
+        Event::Retry(_) => {
+            if let Some(pb) = this.bars.get_mut(file) { 
+                pb.set_position(0);
+                pb.set_style(INIT.clone());
+            }
+        },
+    }
+}
+
+ pub fn callback(progress: &ProgressKind) -> for<'a, 'b, 'c> fn(file: &'a str, AnyDownloadEvent<'b>, this: &'c mut DownloadEvent)  {
+    match progress {
+        ProgressKind::Simple => simple, _ => event
     }
 }
 
