@@ -1,7 +1,23 @@
-# Maintainer: Xavier R.M. (sapphirus at azorium dot net)
+#
+# pacwrap-dist
+# 
+# Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 pkgname=('pacwrap-base-dist')
-pkgver=0.5.3
+pkgver=0.6.0
 pkgrel=1
 pkgdesc="Distribution package to configure Arch Linux for use with pacwrap."
 arch=('any')
@@ -9,7 +25,7 @@ url="https://pacwrap.sapphirus.org/"
 license=('GPLv3-only')
 
 source=("${pkgname}-${pkgver}-${pkgrel}.tar.zst::${pkgname}-${pkgver}-${pkgrel}.tar.zst")
-sha512sums=('79b91f3051df9ab971544a30c0b5c3a06b70c979629ef8cc54c2964da67cc352281de94dbd55a1ede6df0e1d9e562ac90584e725d44dce2999f5855aa7b60e23')
+sha512sums=('bd9e31fb4d47fc8180af6de840146f23bb2aaf9a1e68001829688fbce3460b7407feb20af566e79b3299819d32fc674bf517870901c91a6cf9333c5154069903')
 
 package() {
   conflicts=('pacwrap-base-dist')
