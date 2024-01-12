@@ -23,12 +23,14 @@ use pacwrap_core::{err,
     error::*,
     log::Logger,
     sync::transaction::TransactionType,
-    utils::{arguments::Operand, check_root},
-    utils::arguments::{Arguments, InvalidArgument},
+    utils::{arguments::{Arguments, InvalidArgument, Operand as Op}, check_root},
     sync::transaction::{TransactionFlags, TransactionAggregator}, 
     config::{cache, init::init}};
 
 pub fn remove(mut args: &mut Arguments) -> Result<()> {
+    check_root()?;
+    init()?;
+
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let action = {
         let mut recursive = 0;
@@ -36,17 +38,15 @@ pub fn remove(mut args: &mut Arguments) -> Result<()> {
 
         while let Some(arg) = args.next() {
             match arg {
-                Operand::Short('s') | Operand::Long("recursive") => recursive += 1,
-                Operand::Short('c') | Operand::Long("cascade") => cascade = true,
+                Op::Short('s') | Op::Long("recursive") => recursive += 1,
+                Op::Short('c') | Op::Long("cascade") => cascade = true,
                 _ => continue,
             }
         }
 
         TransactionType::Remove(recursive > 0 , cascade, recursive > 1) 
     };
-
-    check_root()?;
-    init()?;
+    
     engage_aggregator(action, &mut args, &mut logger)
 }
 
@@ -60,40 +60,30 @@ fn engage_aggregator<'a>(
     let mut queue: HashMap<&'a str,Vec<&'a str>> = HashMap::new();
     let mut current_target = None;
 
-    if let Operand::None = args.next().unwrap_or_default() { 
+    if let Op::Nothing = args.next().unwrap_or_default() { 
         err!(InvalidArgument::OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
         match arg {
-            Operand::Long("remove")
-                | Operand::Long("cascade") 
-                | Operand::Long("recursive") 
-                | Operand::Short('R')
-                | Operand::Short('c')  
-                | Operand::Short('s') 
-                | Operand::Short('t') => continue,  
-            Operand::Long("noconfirm") 
-                => action_flags = action_flags | TransactionFlags::NO_CONFIRM,                  
-            Operand::Short('p') 
-                | Operand::Long("preview") 
-                => action_flags = action_flags | TransactionFlags::PREVIEW, 
-            Operand::Long("dbonly") 
-                => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
-            Operand::Long("force-foreign") 
-                => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
-            Operand::Short('f') 
-                | Operand::Long("filesystem") 
-                => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
-            Operand::ShortPos('t', target) 
-                | Operand::LongPos("target", target) 
-                | Operand::ShortPos(_, target) => {
+            Op::Long("remove")
+                | Op::Long("cascade") 
+                | Op::Long("recursive") 
+                | Op::Short('R')
+                | Op::Short('c')  
+                | Op::Short('s') 
+                | Op::Short('t') => continue,  
+            Op::Long("dbonly") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,  
+            Op::Long("noconfirm") => action_flags = action_flags | TransactionFlags::NO_CONFIRM,                  
+            Op::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
+            Op::Short('p') | Op::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW, 
+            Op::Short('f') | Op::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
+            Op::ShortPos('t', target) | Op::LongPos("target", target) | Op::ShortPos(_, target) => {
                 cache.get_instance(target)?;
                 current_target = Some(target);
                 targets.push(target);
             },
-            Operand::LongPos(_, package)
-            | Operand::Value(package) => if let Some(target) = current_target {
+            Op::LongPos(_, package) | Op::Value(package) => if let Some(target) = current_target {
                 match queue.get_mut(target) {
                     Some(vec) => vec.push(package),
                     None => { queue.insert(target, vec!(package)); },

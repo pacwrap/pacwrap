@@ -16,8 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#![allow(non_camel_case_types)]
-
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -31,42 +29,34 @@ use crate::{exec::args::ExecutionArgs,
     constants::HOME};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TO_HOME {
-    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
-    permission: String,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    path: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]  
-    filesystem: Vec<Mount>
+pub struct ToHome {
+    #[serde(skip_serializing_if = "Vec::is_empty", default, rename="volumes")]  
+    mounts: Vec<Mount>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Mount {
     #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")] 
     permission: String,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    path: Vec<String>
+    #[serde(skip_serializing_if = "String::is_empty", default)] 
+    path: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)] 
+    dest: String,
 }
 
-#[typetag::serde]
-impl Filesystem for TO_HOME {
+#[typetag::serde(name="to_home")]
+impl Filesystem for ToHome {
     fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
-        if self.path.len() > 0 {
-            if let Err(e) = check_mount(&self.permission, &self.path[0]) {
-                return Err(e);
-            }
-        } else {
-            if self.filesystem.len() == 0 {
-                Err(BindError::Warn(format!("Filesystem paths are undeclared.")))?
-            }
+        if self.mounts.len() == 0 {
+               Err(BindError::Warn(format!("Mount volumes undeclared.")))?  
         }
 
-        for m in self.filesystem.iter() { 
+        for m in self.mounts.iter() { 
             if m.path.len() == 0 {
-                Err(BindError::Warn(format!("Filesystem paths are undeclared.")))? 
+               Err(BindError::Warn(format!("Mount volumes undeclared.")))?
             }
 
-            if let Err(e) = check_mount(&m.permission, &m.path[0]) {
+            if let Err(e) = check_mount(&m.permission, &m.path) {
                 return Err(e);
             }
         }
@@ -75,34 +65,26 @@ impl Filesystem for TO_HOME {
     }
 
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
-        if self.path.len() > 0 { 
-            bind_filesystem(args,vars, &self.permission, &self.path);
-        }
-
-        for m in self.filesystem.iter() { 
-            bind_filesystem(args,vars, &m.permission, &m.path);
+        for m in self.mounts.iter() { 
+            bind_filesystem(args, vars, &m.permission, &m.path, &m.dest);
         }
     }
 
     fn module(&self) -> &'static str {
-        "TO_HOME"
+        "to_home"
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, path: &Vec<String>) {
-    let src = &path[0];
-    let mut dest: &String = src; 
-
-    if path.len() > 1 {
-            dest = &path[1];
-    }
+fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, src: &str, dest: &str) {
+    let dest = match dest.is_empty() {
+        false => dest, true => src
+    }; 
+    let dest = format!("{}/{}", vars.home_mount(), dest);
+    let src = format!("{}/{}", *HOME, src);
   
-    let path_src = format!("{}/{}", *HOME, path[0]);
-    let path_dest = format!("{}/{}", vars.home_mount(), dest);
-
     match permission == "rw" {
-        false => args.robind(path_src, path_dest),
-        true => args.bind(path_src, path_dest),
+        false => args.robind(src, dest),
+        true => args.bind(src, dest),
     }
 }
 

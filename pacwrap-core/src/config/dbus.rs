@@ -25,7 +25,7 @@ mod socket;
 mod appindicator;
 mod xdg_portal;
 
-#[typetag::serde(tag = "permission")]
+#[typetag::serde(tag = "module")]
 pub trait Dbus: DynClone {
     fn register(&self, args: &mut ExecutionArgs);
 }

@@ -24,8 +24,8 @@ use std::{borrow::Cow,
 use serde::{Deserialize, Serialize};
 
 use crate::{Result,
-    config::{permission::{Permission, none::NONE}, 
-        filesystem::{Filesystem, root::ROOT, home::HOME},
+    config::{permission::{Permission, none::None}, 
+        filesystem::{Filesystem, root::Root, home::Home},
         dbus::Dbus,
         vars::InsVars, 
         save}, 
@@ -114,8 +114,8 @@ pub struct InstanceRuntime {
 
 impl InstanceRuntime {
     pub fn new() -> Self {
-        let default_fs: [Box<dyn Filesystem>; 2]  = [Box::new(ROOT {}), Box::new(HOME {})];  
-        let default_per: [Box<dyn Permission>; 1]  = [Box::new(NONE {})]; 
+        let default_fs: [Box<dyn Filesystem>; 2]  = [Box::new(Root {}), Box::new(Home {})];  
+        let default_per: [Box<dyn Permission>; 1]  = [Box::new(None {})]; 
         let fs: Vec<Box<dyn Filesystem>> = Vec::from(default_fs);
         let per: Vec<Box<dyn Permission>> = Vec::from(default_per); 
  
@@ -170,30 +170,19 @@ impl Debug for InstanceRuntime {
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum InstanceType {
-    LINK,
-    BASE,
-    DEP,
-    ROOT
+    Symbolic,
+    Base,
+    Slice,
+    Aggregate,
 }
 
-#[allow(dead_code)]
 impl InstanceType {
-    pub fn new(instype: &str) -> Self {
-        match instype {
-            "BASE" => Self::BASE,
-            "ROOT" => Self::ROOT,
-            "DEP" => Self::DEP,
-            "LINK" => Self::LINK,
-            _ => Self::BASE
-        }
-    }
-
     fn as_str<'a>(&self) -> &'a str {
         match self {
-            Self::ROOT => "ROOT",
-            Self::LINK => "LINK",
-            Self::BASE => "BASE",
-            Self::DEP => "DEP"
+            Self::Symbolic => "LINK",
+            Self::Base => "BASE", 
+            Self::Slice => "DEP",
+            Self::Aggregate => "ROOT",
         }
     }
 }
@@ -206,7 +195,7 @@ impl Display for InstanceType {
 
 impl Default for InstanceType {
     fn default() -> Self {
-        Self::BASE
+        Self::Base
     }
 }
 

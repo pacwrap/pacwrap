@@ -24,10 +24,10 @@ use crate::{exec::args::ExecutionArgs,
     config::permission::Condition::Success};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NONE;
+pub struct None;
 
-#[typetag::serde]
-impl Permission for NONE {
+#[typetag::serde(name="none")]
+impl Permission for None {
     fn check(&self) -> Result<Option<Condition>, PermError> { 
         Ok(Some(Success)) 
     }
@@ -35,6 +35,6 @@ impl Permission for NONE {
     fn register(&self, _: &mut ExecutionArgs) {}
 
     fn module(&self) -> &'static str { 
-        "NONE" 
+        "none" 
     }
 }

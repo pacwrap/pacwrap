@@ -50,7 +50,7 @@ use pacwrap_core::{err,
             register_permissions, 
             register_dbus}},
     utils::{TermControl, 
-        arguments::{Arguments, Operand, InvalidArgument},
+        arguments::{Operand as Op, Arguments, InvalidArgument},
         env_var, 
         print_warning, 
         check_root}};
@@ -70,40 +70,36 @@ enum ExecParams<'a> {
 
 impl <'a>ExecParams<'a> {
     fn parse(args: &'a mut Arguments) -> Result<Self> {
-        let runtime = args.values()
-            .iter()
-            .filter_map(|f| {
-                let str = *f;
-
-                match str {
-                    string if string.starts_with("-E") 
-                        | string.eq("--exec") 
-                        | string.eq("--target")  
-                        | string.eq("--verbose")
-                        | string.eq("--shell") 
-                        | string.eq("--root") 
-                        | string.eq("--fake-chroot") => None,
-                    _ => Some(str),
-                }
-            })
-            .skip(1)
-            .collect(); 
         let mut verbosity: i8 = 0;
         let mut shell = false;
         let mut root = false;
         let mut container = None;
+        let runtime = args.values()
+            .iter()
+            .filter_map(|f| match *f {
+                string if string.starts_with("-E") 
+                    | string.eq("--exec") 
+                    | string.eq("--target")  
+                    | string.eq("--verbose")
+                    | string.eq("--shell") 
+                    | string.eq("--root") 
+                    | string.eq("--fake-chroot") => None, 
+                _ => Some(*f),
+            })
+            .skip(1)
+            .collect(); 
 
         while let Some(arg) = args.next() {
             match arg {
-                Operand::Short('r') | Operand::Long("root") => root = true,
-                Operand::Short('s') | Operand::Long("shell") => shell = true,
-                Operand::Short('v') | Operand::Long("verbose") => verbosity += 1,
-                Operand::ShortPos('E', str) 
-                    | Operand::ShortPos('s', str)
-                    | Operand::ShortPos('r', str)
-                    | Operand::ShortPos('v', str)
-                    | Operand::LongPos("target", str)
-                    | Operand::Value(str) => if let None = container { 
+                Op::Short('r') | Op::Long("root") => root = true,
+                Op::Short('s') | Op::Long("shell") => shell = true,
+                Op::Short('v') | Op::Long("verbose") => verbosity += 1,
+                Op::ShortPos('E', str) 
+                    | Op::ShortPos('s', str)
+                    | Op::ShortPos('r', str)
+                    | Op::ShortPos('v', str)
+                    | Op::LongPos("target", str)
+                    | Op::Value(str) => if let None = container { 
                         container = Some(str); 
                     },
                 _ => continue,
@@ -115,8 +111,8 @@ impl <'a>ExecParams<'a> {
             None => err!(InvalidArgument::TargetUnspecified)?,
         };
 
-        if let InstanceType::DEP = handle.metadata().container_type() {
-            err!(ErrorKind::Message("Execution upon sliced filesystems is not supported."))?
+        if let InstanceType::Slice = handle.metadata().container_type() {
+            err!(ErrorKind::Message("Execution in container filesystem segments is not supported."))?
         }
 
         Ok(match root {

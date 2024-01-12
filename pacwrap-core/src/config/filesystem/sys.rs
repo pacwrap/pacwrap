@@ -16,7 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -26,13 +25,13 @@ use crate::{exec::args::ExecutionArgs,
     config::filesystem::{Filesystem, BindError}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SYSFS {
+struct System {
     #[serde(skip_serializing_if = "is_default_path", default = "default_path")] 
     path: Vec<String>
 }
 
-#[typetag::serde]
-impl Filesystem for SYSFS {
+#[typetag::serde(name="sysfs")]
+impl Filesystem for System {
     fn check(&self, _vars: &InsVars) -> Result<(), BindError> {  
         for dir in self.path.iter() {
             if ! Path::new(&format!("/sys/{}",dir)).exists() {
@@ -50,7 +49,7 @@ impl Filesystem for SYSFS {
     }
 
     fn module(&self) -> &'static str {
-        "SUSFS"
+        "sysfs"
     }
 }
 

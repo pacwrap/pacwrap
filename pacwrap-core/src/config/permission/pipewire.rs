@@ -28,13 +28,13 @@ use crate::{exec::args::ExecutionArgs,
     utils::check_socket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PIPEWIRE {
+struct Pipewire {
     #[serde(skip_serializing_if = "is_default_socket", default = "default_socket")]
     socket: String,
 }
 
-#[typetag::serde]
-impl Permission for PIPEWIRE {
+#[typetag::serde(name="pipewire")]
+impl Permission for Pipewire {
     fn check(&self) -> Result<Option<Condition>, PermError> {  
         if ! Path::new(&self.socket).exists() {
             Err(Warn(format!("Pipewire socket not found.")))?
@@ -52,7 +52,7 @@ impl Permission for PIPEWIRE {
     }
 
     fn module(&self) -> &'static str {
-        "PIPEWIRE"
+        "pipewire"
     }
 }
 

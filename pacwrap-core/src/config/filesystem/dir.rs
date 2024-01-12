@@ -24,13 +24,13 @@ use crate::{exec::args::ExecutionArgs,
     config::filesystem::{Filesystem, BindError}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DIR {
+pub struct Dir {
     #[serde(default)]
     path: Vec<String>
 }
 
-#[typetag::serde]
-impl Filesystem for DIR {
+#[typetag::serde(name="dir")]
+impl Filesystem for Dir {
     fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
         if self.path.len() == 0 {
             Err(BindError::Fail(format!("Path not specified.")))?
@@ -46,6 +46,6 @@ impl Filesystem for DIR {
     }
 
     fn module(&self) -> &'static str {
-        "DIR"
+        "dir"
     }
 }

@@ -24,10 +24,10 @@ use crate::{exec::args::ExecutionArgs,
     config::permission::Condition::Success};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NET;
+pub struct Network;
 
-#[typetag::serde]
-impl Permission for NET {
+#[typetag::serde(name="net")]
+impl Permission for Network {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
@@ -38,6 +38,6 @@ impl Permission for NET {
     }
 
     fn module(&self) -> &'static str {
-        "NET"
+        "net"
     }
 }

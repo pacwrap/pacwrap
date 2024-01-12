@@ -26,10 +26,10 @@ use crate::{exec::args::ExecutionArgs,
     config::filesystem::{Filesystem, BindError}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ROOT;
+pub struct Root;
 
-#[typetag::serde]
-impl Filesystem for ROOT {
+#[typetag::serde(name="root")]
+impl Filesystem for Root {
     fn check(&self, vars: &InsVars) -> Result<(), BindError> {
         if ! Path::new(vars.root()).exists() {
             Err(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
@@ -47,6 +47,6 @@ impl Filesystem for ROOT {
     }
 
     fn module(&self) -> &'static str {
-        "ROOT"
+        "root"
     }
 }

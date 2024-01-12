@@ -25,14 +25,15 @@ use crate::{exec::args::ExecutionArgs,
     config::InsVars, 
     config::filesystem::{Filesystem, BindError}};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HOME;
 
-#[typetag::serde]
-impl Filesystem for HOME {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Home;
+
+#[typetag::serde(name="home")]
+impl Filesystem for Home {
     fn check(&self, vars: &InsVars) -> Result<(), BindError> {
         if ! Path::new(vars.home()).exists() {
-            Err(BindError::Fail(format!("INSTANCE_HOME not found.")))?
+            Err(BindError::Fail(format!("Specified home directory not found.")))?
         }
         Ok(())
     }
@@ -44,6 +45,6 @@ impl Filesystem for HOME {
     }
 
     fn module(&self) -> &'static str {
-        "HOME"
+        "home"
     }
 }

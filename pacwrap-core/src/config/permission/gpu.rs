@@ -32,10 +32,10 @@ lazy_static! {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct GPU;
+struct Graphics;
 
-#[typetag::serde]
-impl Permission for GPU {
+#[typetag::serde(name="gpu")]
+impl Permission for Graphics {
     fn check(&self) -> Result<Option<Condition>, PermError> {  
         if ! Path::new("/dev").exists() {
             Err(Fail(format!("/dev is inaccessible.")))?
@@ -55,7 +55,7 @@ impl Permission for GPU {
     }
 
     fn module(&self) -> &'static str {
-        "GPU"
+        "gpu"
     }
 }
 

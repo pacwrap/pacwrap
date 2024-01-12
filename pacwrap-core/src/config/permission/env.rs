@@ -27,7 +27,7 @@ use crate::{exec::args::ExecutionArgs,
     config::permission::Condition::Success};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ENV { 
+pub struct Environment { 
     #[serde(skip_serializing_if = "String::is_empty", default)] 
     var: String,
     #[serde(skip_serializing_if = "String::is_empty", default)] 
@@ -43,9 +43,8 @@ struct Var {
     set: String
 }
 
-#[typetag::serde]
-impl Permission for ENV {
-
+#[typetag::serde(name="environment")]
+impl Permission for Environment {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
@@ -63,7 +62,7 @@ impl Permission for ENV {
     }
 
     fn module(&self) -> &'static str {
-        "ENV"
+        "env"
     }
 }
 

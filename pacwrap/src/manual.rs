@@ -26,7 +26,7 @@ use pacwrap_core::{err,
     Error,
     ErrorTrait,
     utils::{Arguments, 
-    arguments::Operand,
+    arguments::Operand as Op,
     is_color_terminal, 
     is_truecolor_terminal}};
 
@@ -82,69 +82,67 @@ fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, 
 
     while let Some(arg) = args.next() { 
         match arg {
-            Operand::Long("format")
-                | Operand::Long("help")
-                | Operand::Short('f')
-                | Operand::Short('h') 
+            Op::Long("format")
+                | Op::Long("help")
+                | Op::Short('f')
+                | Op::Short('h') 
                 => continue,
-            Operand::Short('m') 
-                | Operand::Long("more") 
-                => more = true,
-            Operand::LongPos("format", "dumb") 
-                | Operand::ShortPos('f', "dumb") 
+            Op::Short('m') | Op::Long("more") => more = true,
+            Op::LongPos("format", "dumb") 
+                | Op::ShortPos('f', "dumb") 
                 => layout = &HelpLayout::Dumb, 
-            Operand::LongPos("format", "markdown") 
-                | Operand::ShortPos('f', "markdown") 
+            Op::LongPos("format", "markdown") 
+                | Op::ShortPos('f', "markdown") 
                 => layout = &HelpLayout::Markdown,
-            Operand::LongPos("format", "man") 
-                | Operand::ShortPos('f', "man") 
+            Op::LongPos("format", "man") 
+                | Op::ShortPos('f', "man") 
                 => layout = &HelpLayout::Man,
-            Operand::LongPos("format", "ansi") 
-                | Operand::ShortPos('f', "ansi") 
+            Op::LongPos("format", "ansi") 
+                | Op::ShortPos('f', "ansi") 
                 => layout = &HelpLayout::Console,
-            Operand::ShortPos('h', "sync")
-                | Operand::ShortPos('h', "S")
-                | Operand::LongPos("help", "sync")
-                | Operand::LongPos("help", "S") 
+            Op::ShortPos('h', "sync")
+                | Op::ShortPos('h', "S")
+                | Op::LongPos("help", "sync")
+                | Op::LongPos("help", "S") 
                 => topic.push(&HelpTopic::Sync),
-            Operand::ShortPos('h', "E")
-                | Operand::ShortPos('h', "exec")
-                | Operand::LongPos("help", "E")
-                | Operand::LongPos("help", "exec") 
+            Op::ShortPos('h', "E")
+                | Op::ShortPos('h', "exec")
+                | Op::LongPos("help", "E")
+                | Op::LongPos("help", "exec") 
                 => topic.push(&HelpTopic::Execute),
-            Operand::ShortPos('h', "process")
-                | Operand::ShortPos('h', "P")
-                | Operand::LongPos("help", "process")
-                | Operand::LongPos("help", "P")
+            Op::ShortPos('h', "process")
+                | Op::ShortPos('h', "P")
+                | Op::LongPos("help", "process")
+                | Op::LongPos("help", "P")
                 => topic.push(&HelpTopic::Process),
-            Operand::ShortPos('h', "utils")
-                | Operand::ShortPos('h', "U")
-                | Operand::LongPos("help", "utils")
-                | Operand::LongPos("help", "U") 
+            Op::ShortPos('h', "utils")
+                | Op::ShortPos('h', "U")
+                | Op::LongPos("help", "utils")
+                | Op::LongPos("help", "U") 
                 => topic.push(&HelpTopic::Utils),
-            Operand::ShortPos('h', "help")
-                | Operand::ShortPos('h', "h")
-                | Operand::LongPos("help", "help")
-                | Operand::LongPos("help", "h") 
+            Op::ShortPos('h', "help")
+                | Op::ShortPos('h', "h")
+                | Op::LongPos("help", "help")
+                | Op::LongPos("help", "h") 
                 => topic.push(&HelpTopic::Help),
-            Operand::ShortPos('h', "synopsis") 
-                | Operand::LongPos("help", "synopsis") 
+            Op::ShortPos('h', "synopsis") 
+                | Op::LongPos("help", "synopsis") 
                 => topic.push(&HelpTopic::Default),
-            Operand::ShortPos('h', "V")
-                | Operand::ShortPos('h', "version")
-                | Operand::LongPos("help", "V")
-                | Operand::LongPos("help", "version")
+            Op::ShortPos('h', "V")
+                | Op::ShortPos('h', "version")
+                | Op::LongPos("help", "V")
+                | Op::LongPos("help", "version")
                 => topic.push(&HelpTopic::Version),
-            Operand::ShortPos('h', "copyright") 
-                | Operand::LongPos("help", "copyright") 
+            Op::ShortPos('h', "copyright") 
+                | Op::LongPos("help", "copyright") 
                 => topic.push(&HelpTopic::Copyright),
-            Operand::ShortPos('h', "all")
-                | Operand::LongPos("help", "all")
-                | Operand::Short('a')
-                | Operand::Long("all") 
+            Op::ShortPos('h', "all")
+                | Op::LongPos("help", "all")
+                | Op::Short('a')
+                | Op::Long("all") 
                 => topic.extend(HELP_ALL.iter()),
-            Operand::ShortPos('h', topic) 
-                | Operand::LongPos("help", topic) 
+            Op::ShortPos('h', topic) 
+                | Op::LongPos("help", topic) 
                 => err!(ErrorKind::InvalidTopic(topic.into()))?,
            _ => args.invalid_operand()?,
         }
@@ -159,7 +157,7 @@ fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, 
 
 fn minimal(args: &mut Arguments) -> bool {
     match args.next().unwrap_or_default() { 
-        Operand::LongPos("version", "min") | Operand::ShortPos('V', "min") => true, _ => false
+        Op::LongPos("version", "min") | Op::ShortPos('V', "min") => true, _ => false
     }
 }
 
@@ -377,29 +375,36 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 
 {sub}-b, --base{reset_bold}
 {tab}{tab}Base container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
+{tab}{tab}
 {tab}{tab}This container type is used as the base layer for all downstream containers. Only one base container 
-{tab}{tab}dependency per slice or per root is supported. Filesystem and package deduplication via slices 
-{tab}{tab}and root containers is recommended, but optional.
+{tab}{tab}dependency per slice or aggregate is supported. Filesystem and package deduplication via slices and 
+{tab}{tab}aggregate containers are recommended, but optional.
 
 {sub}-s, --slice{reset_bold}
 {tab}{tab}Slice container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
-{tab}{tab}Requires a base dependency be specified, and one or more sliced dependencies, in order to ascertain
-{tab}{tab}foreign packages and influence ordering of downstream synchronization target(s). Container slicing 
-{tab}{tab}provides the ability to install packages in a lightweight, sliced filesytem, which aid in the 
-{tab}{tab}deduplication of common downstream package and filesystem dependencies e.g. graphics drivers, 
-{tab}{tab}graphical toolkits, fonts, etc..
+{tab}{tab}
+{tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
+{tab}{tab}packages and influence ordering of downstream synchronization target(s). Container slicing provies
+{tab}{tab}the ability to install packages in a lightweight, sliced filesytem, which aid in the deduplication 
+{tab}{tab}of common downstream package and filesystem dependencies.
+{tab}{tab}
+{tab}{tab}Useful for graphics drivers, graphical toolkits, fonts, etc.; these are not meant for applications.
 
-{sub}-r, --root{reset_bold}
-{tab}{tab}Root container type. Specify alongside {bold}-c, --create{reset_bold} to this assign container type during creation.
-{tab}{tab}Requires a base dependency be specified, and optionally one or more sliced dependencies, in order 
-{tab}{tab}to ascertain foreign packages and influence ordering of this target. These containers are ideal 
-{tab}{tab}for installing software in with the least amount of filesystem and package synchronization overhead.
+{sub}-a, --aggegrate{reset_bold}
+{tab}{tab}Aggregate container type. Specify alongside {bold}-c, --create{reset_bold} to this assign container type during creation.
+{tab}{tab}
+{tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, in order to acertain foreign
+{tab}{tab}packages and amalgamate the target. These containers are ideal for installing software with the aid of
+{tab}{tab}filesystem and package deduplication. 
+{tab}{tab}
+{tab}{tab}Useful for all general purpose applications, browsers, e-mail clients, and even terminal user interface 
+{tab}{tab}applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
 
 {sub}-t, --target=TARGET{reset_bold}
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub}-d, --dep=DEPEND{reset_bold}
-{tab}{tab}Specify a dependency container for the specified operation.
+{tab}{tab}Specify a dependent container for the specified operation.
 
 {sub}-o, --target-only{reset_bold}
 {tab}{tab}Apply specified operation on the specified target only.

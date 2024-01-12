@@ -28,13 +28,13 @@ use crate::{exec::args::ExecutionArgs,
     utils::check_socket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PULSEAUDIO {
+struct Pulseaudio {
     #[serde(skip_serializing_if = "is_default_socket", default = "default_socket")]
     socket: String,
 }
 
-#[typetag::serde]
-impl Permission for PULSEAUDIO {
+#[typetag::serde(name="pulseaudio")]
+impl Permission for Pulseaudio {
     fn check(&self) -> Result<Option<Condition>, PermError> {  
         if ! Path::new(&self.socket).exists() {
             Err(Warn(format!("Pulseaudio socket not found.")))?
@@ -52,7 +52,7 @@ impl Permission for PULSEAUDIO {
     }
 
     fn module(&self) -> &'static str {
-        "PULSEAUDIO"
+        "pulseaudio"
     }
 }
 

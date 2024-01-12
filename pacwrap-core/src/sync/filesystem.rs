@@ -151,7 +151,7 @@ impl <'a>FileSystemStateSync<'a> {
 
             write_chan = self.link(&inshandle.metadata().dependencies(), write_chan)?;
             
-            if let ROOT = inshandle.metadata().container_type() {
+            if let Aggregate = inshandle.metadata().container_type() {
                 self.link_instance(inshandle, tx.clone())?; 
             } else {
                 self.obtain_slice(inshandle, tx.clone())?; 

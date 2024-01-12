@@ -29,8 +29,8 @@ use pacwrap_core::{err,
     sync::transaction::TransactionType,
     utils::check_root,
     utils::arguments::{Arguments, 
-        InvalidArgument, 
-        Operand},
+        InvalidArgument::*, 
+        Operand as Op},
     config::{InstanceType, 
         InstanceHandle,
         init::init,
@@ -39,7 +39,10 @@ use pacwrap_core::{err,
     sync::{instantiate_trust, transaction::{TransactionFlags, TransactionAggregator}}, 
     constants::{BAR_GREEN, BOLD, RESET, ARROW_GREEN}};
 
-pub fn synchronize(args: &mut Arguments) -> Result<()> {
+pub fn synchronize(args: &mut Arguments) -> Result<()> { 
+    check_root()?;
+    init()?;
+
     let mut logger = Logger::new("pacwrap-sync").init().unwrap(); 
     let mut cache = cache::populate()?;
     let action = {
@@ -48,8 +51,8 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
 
         while let Some(arg) = args.next() {
             match arg {
-                Operand::Short('y') | Operand::Long("refresh") => y += 1,
-                Operand::Short('u') | Operand::Long("upgrade") => u += 1,
+                Op::Short('y') | Op::Long("refresh") => y += 1,
+                Op::Short('u') | Op::Long("upgrade") => u += 1,
                 _ => continue,
             }
         }
@@ -57,21 +60,18 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
         TransactionType::Upgrade(u > 0, y > 0, y > 1)
     };
 
-    check_root()?;
-    init()?;
-
     if create(args) { 
         if let TransactionType::Upgrade(upgrade, refresh, _) = action { 
             if ! refresh {
-                err!(InvalidArgument::UnsuppliedOperand("--refresh", "Required for container creation."))?
+                err!(UnsuppliedOperand("--refresh", "Required for container creation."))?
             } else if ! upgrade {
-                err!(InvalidArgument::UnsuppliedOperand("--upgrade", "Required for container creation."))?
+                err!(UnsuppliedOperand("--upgrade", "Required for container creation."))?
             }
         }
 
         instantiate_trust()?; 
         instantiate(&mut logger, &mut cache, acquire_depends(args)?)?;
-   }
+    }
 
     engage_aggregator(&cache, action, args, &mut logger)
 }
@@ -81,51 +81,55 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
     let mut current_target = "";
     let mut instype = None;
 
-    while let Some(arg) = args.next() { 
+    while let Some(arg) = args.next() {
         match arg {
-            Operand::ShortPos('d', dep) 
-            | Operand::LongPos("dep", dep) => match deps.get_mut(current_target) {
-                Some(d) => {
-                    if let Some(instype) = instype {
-                        if let InstanceType::BASE = instype {
-                            err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
-                        }
+            Op::Short('b') | Op::Long("base") => instype = Some(InstanceType::Base),
+            Op::Short('s') | Op::Long("slice") => instype = Some(InstanceType::Slice),
+            Op::Short('a') | Op::Long("agg") => instype = Some(InstanceType::Aggregate),
+            Op::ShortPos('d', dep) | Op::LongPos("dep", dep) => match instype {     
+                Some(instance) => { 
+                    if let InstanceType::Base = instance {     
+                        err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?     
                     }
-     
-                    d.1.push(dep); 
+
+                    match dep.contains(",") { 
+                        true => for dep in dep.split(",") { 
+                            match deps.get_mut(current_target) {
+                                Some(d) => d.1.push(dep),
+                                None => err!(TargetUnspecified)?
+                            } 
+                        },
+                        false => match deps.get_mut(current_target) {
+                            Some(d) => d.1.push(dep),
+                            None => err!(TargetUnspecified)?
+                        },
+                    }
                 },
-                None => err!(InvalidArgument::TargetUnspecified)?
+                None => err!(TargetUnspecified)? 
             },
-            Operand::Short('b') 
-            | Operand::Long("base") => instype = Some(InstanceType::BASE),
-            Operand::Short('s') 
-            | Operand::Long("slice") => instype = Some(InstanceType::DEP),
-            Operand::Short('r') 
-            | Operand::Long("root") => instype = Some(InstanceType::ROOT),
-            Operand::ShortPos('t', target) 
-                | Operand::LongPos("target", target) => match instype {
-                    Some(instype) => {
-                        current_target = target;
-                        deps.insert(current_target, (instype, vec!()));
-                    },
-                    None => err!(ErrorKind::Message("Container type not specified."))?,
+            Op::ShortPos('t', target) | Op::LongPos("target", target) => match instype {
+                Some(instype) => {     
+                    current_target = target;
+                    deps.insert(current_target, (instype, vec!()));
+                },
+                None => err!(ErrorKind::Message("Container type not specified."))?,
             },          
             _ => continue,
         }
     }
 
     for dep in deps.iter() {
-        if let InstanceType::BASE = dep.1.0 {
+        if let InstanceType::Base = dep.1.0 {
             continue;
         } 
             
         if dep.1.1.is_empty() {
-        err!(ErrorKind::Message("Dependencies not specified."))?
+            err!(ErrorKind::Message("Dependencies not specified."))?
         }
     }
 
     if current_target.len() == 0 {
-        err!(InvalidArgument::TargetUnspecified)?
+        err!(TargetUnspecified)?
     }
 
     Ok(deps)
@@ -134,7 +138,7 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
 
 fn create(args: &mut Arguments) -> bool {
     for arg in args { 
-        if let Operand::Short('c') | Operand::Long("create") = arg {
+        if let Op::Short('c') | Op::Long("create") = arg {
             return true;
         } 
     }
@@ -161,7 +165,7 @@ fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>
         err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))? 
     }
 
-    if let InstanceType::ROOT | InstanceType::BASE = instype { 
+    if let InstanceType::Aggregate | InstanceType::Base = instype { 
         if let Err(err) = std::fs::create_dir(handle.vars().home()) {
             if err.kind() != std::io::ErrorKind::AlreadyExists {
                 err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
@@ -195,42 +199,36 @@ fn engage_aggregator<'a>(
     let mut current_target = "";
     let mut base = false;
 
-    if let Operand::None = args.next().unwrap_or_default() {
-        err!(InvalidArgument::OperationUnspecified)?
+    if let Op::Nothing = args.next().unwrap_or_default() {
+        err!(OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
-        match arg {
-                Operand::Short('d') 
-                | Operand::Long("dep") | Operand::LongPos("dep", _)
-                | Operand::Short('s') | Operand::Long("slice")
-                | Operand::Short('r') | Operand::Long("root")
-                | Operand::Short('t') | Operand::Long("target") 
-                | Operand::Short('y') | Operand::Long("refresh")
-                | Operand::Short('u') | Operand::Long("upgrade") => continue,
-            Operand::Short('o') 
-                | Operand::Long("target-only") 
-                => action_flags = action_flags | TransactionFlags::TARGET_ONLY,
-            Operand::Short('f') 
-                | Operand::Long("filesystem") 
-                => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
-            Operand::Short('p') 
-                | Operand::Long("preview") 
-                => action_flags = action_flags | TransactionFlags::PREVIEW,
-            Operand::Short('c') 
-                | Operand::Long("create") 
-                => action_flags = action_flags | TransactionFlags::CREATE 
-                    | TransactionFlags::FORCE_DATABASE,
-            Operand::Short('b') | 
-                Operand::Long("base") => base = true,
-            Operand::Long("dbonly") 
-                => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
-            Operand::Long("force-foreign") 
-                => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
-            Operand::Long("noconfirm") 
-                => action_flags = action_flags | TransactionFlags::NO_CONFIRM, 
-            Operand::ShortPos('t', target) 
-                | Operand::LongPos("target", target) => { 
+        match arg { 
+            Op::Short('a')  
+                | Op::Short('s') 
+                | Op::Short('d') 
+                | Op::Short('t') 
+                | Op::Short('y') 
+                | Op::Short('u')
+                | Op::Long("aggregate")
+                | Op::Long("slice")
+                | Op::Long("dep") 
+                | Op::Long("target") 
+                | Op::Long("refresh") 
+                | Op::Long("upgrade")
+                | Op::LongPos("dep", _) => continue,
+            Op::Short('b') | Op::Long("base") => base = true,  
+            Op::Short('o') | Op::Long("target-only") => action_flags = action_flags | TransactionFlags::TARGET_ONLY,
+            Op::Short('f') | Op::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC, 
+            Op::Short('p') | Op::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW, 
+            Op::Long("dbonly") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
+            Op::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
+            Op::Long("noconfirm") => action_flags = action_flags | TransactionFlags::NO_CONFIRM, 
+            Op::Short('c') | Op::Long("create") => {
+                action_flags = action_flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE
+            },
+            Op::ShortPos('t', target) | Op::LongPos("target", target) => { 
                 cache.get_instance(target)?;
                 current_target = target;
                 targets.push(target);
@@ -240,8 +238,7 @@ fn engage_aggregator<'a>(
                     base = false;  
                 }
             },
-            Operand::LongPos(_, package) 
-            | Operand::Value(package) => if current_target != "" {
+            Op::LongPos(_, package) | Op::Value(package) => if current_target != "" {
                 match queue.get_mut(current_target.into()) {
                     Some(vec) => vec.push(package.into()),
                     None => { queue.insert(current_target.into(), vec!(package)); },
@@ -254,7 +251,7 @@ fn engage_aggregator<'a>(
     let current_target = match action_flags.intersects(TransactionFlags::TARGET_ONLY) {
         true => {
             if current_target == "" && ! action_flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
-                err!(InvalidArgument::TargetUnspecified)?
+                err!(TargetUnspecified)?
             }
 
             Some(current_target)
@@ -262,7 +259,7 @@ fn engage_aggregator<'a>(
         false => {
             if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
                 if ! upgrade && ! refresh {
-                    err!(InvalidArgument::OperationUnspecified)?
+                    err!(OperationUnspecified)?
                 }
             }
        

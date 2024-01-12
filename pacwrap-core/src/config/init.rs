@@ -125,11 +125,12 @@ fn write_to_file(location: &str, contents: &str) -> Result<()> {
 }
 
 pub fn init() -> Result<()> {
+    write_to_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
+    write_to_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)?;
+
     let _ = *CONFIG;
 
     config_layout().instantiate()?;
     data_layout().instantiate()?;
-    cache_layout().instantiate()?;
-    write_to_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
-    write_to_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)
+    cache_layout().instantiate()
 }

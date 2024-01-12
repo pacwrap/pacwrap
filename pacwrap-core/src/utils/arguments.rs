@@ -10,7 +10,7 @@ pub enum Operand<'a> {
     Long(&'a str),
     LongPos(&'a str, &'a str),
     Value(&'a str),
-    None
+    Nothing,
 }
 
 #[derive(Debug)]
@@ -135,13 +135,13 @@ impl <'a>Iterator for Arguments<'a> {
 
 impl <'a>Default for &Operand<'a> {
     fn default() -> Self {
-        &Operand::None
+        &Operand::Nothing
     }
 }
 
 impl <'a>Default for Operand<'a> {
     fn default() -> Self {
-        Self::None
+        Self::Nothing
     }
 }
 
@@ -153,7 +153,7 @@ impl <'a>Display for Operand<'a> {
             Operand::Short(char) => write!(fmt, "-{}", char),
             Operand::ShortPos(str, eq) => write!(fmt, "-{} {}", str, eq),
             Operand::Value(str) => write!(fmt, "{}", str),
-            Operand::None => write!(fmt, "None"),
+            Operand::Nothing => write!(fmt, "None"),
         }
     }
 }

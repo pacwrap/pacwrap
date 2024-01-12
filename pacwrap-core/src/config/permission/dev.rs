@@ -26,12 +26,12 @@ use crate::{exec::args::ExecutionArgs,
     config::permission::{Condition::Success, PermError::Fail}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct DEV {
+struct Dev {
     devices: Vec<String>
 }
 
-#[typetag::serde]
-impl Permission for DEV {
+#[typetag::serde(name="dev")]
+impl Permission for Dev {
     fn check(&self) -> Result<Option<Condition>, PermError> {   
         for device in self.devices.iter() {
             if ! Path::new(&format!("/dev/{}", device)).exists() {

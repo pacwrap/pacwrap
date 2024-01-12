@@ -32,20 +32,12 @@ use super::{InsVars,
 
 pub struct InstanceCache<'a> {
     instances: HashMap<&'a str, InstanceHandle<'a>>,
-    registered: Vec<&'a str>,
-    registered_base: Vec<&'a str>,
-    registered_dep: Vec<&'a str>,
-    registered_root: Vec<&'a str>
 }
 
 impl <'a>InstanceCache<'a> {
     pub fn new() -> Self {
         Self {
             instances: HashMap::new(),
-            registered: Vec::new(),
-            registered_base: Vec::new(),
-            registered_dep: Vec::new(),
-            registered_root: Vec::new(),
         }
     }
 
@@ -97,36 +89,29 @@ impl <'a>InstanceCache<'a> {
         }))
     }
 
-    fn register(&mut self, ins: &'a str, handle: InstanceHandle<'a>) {
-        match handle.metadata().container_type() {
-            InstanceType::BASE => self.registered_base.push(ins),
-            InstanceType::DEP => self.registered_dep.push(ins),
-            InstanceType::ROOT => self.registered_root.push(ins),
-            InstanceType::LINK => return,
+    fn register(&mut self, ins: &'a str, handle: InstanceHandle<'a>) { 
+        if let InstanceType::Symbolic = handle.metadata().container_type() {
+            return
         } 
 
         self.instances.insert(ins, handle);
-        self.registered.push(ins);
     }
 
-    pub fn registered(&self) -> &Vec<&'a str> { 
-        &self.registered 
+    pub fn registered(&self) -> Vec<&'a str> { 
+        self.instances.iter()
+            .map(|a| *a.0)
+            .collect()
     }
    
-    pub fn registered_base(&self) -> &Vec<&'a str> { 
-        &self.registered_base 
+    pub fn filter(&self, filter: Vec<InstanceType>) -> Vec<&'a str> { 
+        self.instances.iter()
+            .filter(|a| filter.contains(a.1.metadata().container_type()))
+            .map(|a| *a.0)
+            .collect() 
     }
     
-    pub fn registered_dep(&self) -> &Vec<&'a str> { 
-        &self.registered_dep 
-    }
-
-    pub fn registered_root(&self) -> &Vec<&'a str> { 
-        &self.registered_root 
-    }
-
     pub fn obtain_base_handle(&self) -> Option<&InstanceHandle> {
-        match self.registered_base.get(0) {
+        match self.filter(vec![InstanceType::Base]).get(0) {
             Some(instance) => self.instances.get(instance), None => None,
         }
     }

@@ -89,7 +89,7 @@ impl Transaction for Stage {
 
 fn check_keyring(ag: &TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> bool {
     match inshandle.metadata().container_type() {
-        InstanceType::BASE => {
+        InstanceType::Base => {
             if ag.is_keyring_synced() {
                 return false
             }

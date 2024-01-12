@@ -83,14 +83,14 @@ impl Transaction for Prepare {
 
                 if let TransactionType::Remove(..) = action {
                     Ok(TransactionState::Stage)
-                } else if let InstanceType::BASE = instype {
+                } else if let InstanceType::Base = instype {
                     Ok(TransactionState::Stage)
                 } else {
                     Ok(TransactionState::PrepareForeign)    
                 }
             },
             TransactionState::PrepareForeign => {
-                if let InstanceType::BASE = inshandle.metadata().container_type() {
+                if let InstanceType::Base = inshandle.metadata().container_type() {
                     return Ok(TransactionState::Complete(false)) 
                 }
 

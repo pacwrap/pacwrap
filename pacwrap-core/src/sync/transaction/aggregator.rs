@@ -35,7 +35,7 @@ use crate::{err,
             TransactionType,
             TransactionFlags, 
             TransactionMetadata}},
-	config::{InstanceHandle, InstanceType::ROOT,cache::InstanceCache, CONFIG}};
+	config::{InstanceHandle, cache::InstanceCache, CONFIG}};
 
 pub struct TransactionAggregator<'a> {
     queried: Vec<&'a str>,
@@ -86,36 +86,38 @@ impl <'a>TransactionAggregator<'a> {
         let target = match self.target {
             Some(s) => self.cache.get_instance_option(s), None => None
         };
+        let downstream = self.cache.filter(vec![InstanceType::Aggregate]);
+        let upstream = self.cache.filter(vec![InstanceType::Base, InstanceType::Slice]);
+        let containers = (upstream, downstream);
 
-        if let Some(inshandle) = target { 
-            if let InstanceType::BASE | InstanceType::DEP = inshandle.metadata().container_type() {
-                self.transact(inshandle)?; 
+        if let Some(ins) = target { 
+            if let InstanceType::Base | InstanceType::Slice = ins.metadata().container_type() {
+                self.transact(ins)?; 
             }
         } else if upgrade {
-            self.transaction(self.cache.registered_base())?;
-            self.transaction(self.cache.registered_dep())?;
+            self.transaction(&containers.0)?;
         }
 
         if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) 
         || self.updated.len() > 0 {
-            if self.cache.registered_root().len() > 0 {
+            if containers.1.len() > 0 {
                 let file = self.cache.registered();
                 let linker = self.fs_sync().unwrap();
 
                 linker.prepare(file.len());
-                linker.engage(file)?;
+                linker.engage(&file)?;
                 linker.finish();
             }
         
             self.filesystem_state = self.filesystem_state.unwrap().release();  
         }
 
-        if let Some(inshandle) = target {
-            if let InstanceType::ROOT = inshandle.metadata().container_type() {
-                self.transact(inshandle)?; 
+        if let Some(ins) = target {
+            if let InstanceType::Aggregate = ins.metadata().container_type() {
+                self.transact(ins)?; 
             }
         } else if upgrade {
-            self.transaction(self.cache.registered_root())?;
+            self.transaction(&containers.1)?;
         }
 
         println!("{} Transaction complete.", *ARROW_GREEN);
@@ -128,7 +130,9 @@ impl <'a>TransactionAggregator<'a> {
                 continue;
             }
 
-            let inshandle = self.cache.get_instance(ins).unwrap();
+            let inshandle = match self.cache.get_instance_option(ins) {
+                Some(ins) => ins, None => continue,
+            };
 
             self.queried.push(ins);
             self.transaction(&inshandle.metadata().dependencies())?;
@@ -192,7 +196,7 @@ impl <'a>TransactionAggregator<'a> {
     }
 
     pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) -> Result<()> { 
-        if let ROOT = inshandle.metadata().container_type() {
+        if let InstanceType::Aggregate = inshandle.metadata().container_type() {
             return Ok(());
         }
 

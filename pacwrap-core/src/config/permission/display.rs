@@ -30,10 +30,10 @@ use crate::{exec::args::ExecutionArgs,
     utils::check_socket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct DISPLAY;
+struct Display;
 
-#[typetag::serde]
-impl Permission for DISPLAY {
+#[typetag::serde(name="display")]
+impl Permission for Display {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         let mut bound = None;
 
@@ -69,7 +69,7 @@ impl Permission for DISPLAY {
     }
 
     fn module(&self) -> &'static str {
-        "DISPLAY"
+        "display"
     }
 }
 

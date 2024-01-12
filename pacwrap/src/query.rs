@@ -17,14 +17,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use alpm::{Alpm, PackageReason};
+use alpm::PackageReason;
 
-use pacwrap_core::{config,
+use pacwrap_core::{err,
+    error::*,
+    config,
     constants::{RESET, BOLD_GREEN},
     utils::arguments::{Operand, InvalidArgument},
     utils::{arguments::Arguments, check_root},
-    error::*, 
-    err};
+    sync::instantiate_alpm};
 
 pub fn query(arguments: &mut Arguments) -> Result<()> {
     let mut target = "";
@@ -47,8 +48,7 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
     }
 
     let handle = config::provide_handle(target)?;
-    let root = handle.vars().root().as_ref(); 
-    let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
+    let handle = instantiate_alpm(&handle);
 
     for pkg in handle.localdb().pkgs() {
         if explicit && pkg.reason() != PackageReason::Explicit {

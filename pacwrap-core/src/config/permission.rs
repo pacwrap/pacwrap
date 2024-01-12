@@ -44,7 +44,7 @@ pub enum PermError {
     Warn(String),
 }
 
-#[typetag::serde(tag = "permission")]
+#[typetag::serde(tag = "module")]
 pub trait Permission: DynClone {
     fn check(&self) -> Result<Option<Condition>, PermError>;
     fn register(&self, args: &mut ExecutionArgs);
