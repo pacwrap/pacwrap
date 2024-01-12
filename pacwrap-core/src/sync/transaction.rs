@@ -52,7 +52,7 @@ pub enum TransactionState {
     Complete(bool),
     Prepare,
     UpToDate,
-    PrepareForeign,
+    PrepareForeign(bool),
     Stage,
     StageForeign,
     Commit(bool),
@@ -137,7 +137,7 @@ impl TransactionState {
     fn from(self, ag: &TransactionAggregator) -> Box<dyn Transaction> {
         match self {
             Self::Prepare => Prepare::new(self, ag),
-            Self::PrepareForeign => Prepare::new(self, ag), 
+            Self::PrepareForeign(_) => Prepare::new(self, ag), 
             Self::UpToDate => UpToDate::new(self, ag),
             Self::Stage => Stage::new(self, ag),
             Self::StageForeign => Stage::new(self, ag), 

@@ -137,7 +137,7 @@ fn next_state<'a>(handle: &mut TransactionHandle, action: &TransactionType, stat
     match action {
         TransactionType::Remove(..) => Ok(match state {
             TransactionState::CommitForeign => TransactionState::Complete(updated),
-            TransactionState::Commit(_) => TransactionState::PrepareForeign, 
+            TransactionState::Commit(_) => TransactionState::PrepareForeign(updated), 
             _ => unreachable!()
         }),
         TransactionType::Upgrade(..) => Ok(match state {
@@ -154,7 +154,7 @@ fn ready_state<'a>(handle: &mut TransactionHandle, action: &TransactionType, sta
     match action { 
         TransactionType::Remove(..) => match state { 
             TransactionState::CommitForeign => None,
-            TransactionState::Commit(_) => Some(Ok(TransactionState::PrepareForeign)),
+            TransactionState::Commit(_) => Some(Ok(TransactionState::PrepareForeign(false))),
             _ => unreachable!()
         },
         TransactionType::Upgrade(..) => match state { 

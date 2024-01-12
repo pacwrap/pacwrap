@@ -86,22 +86,26 @@ impl Transaction for Prepare {
                 } else if let InstanceType::Base = instype {
                     Ok(TransactionState::Stage)
                 } else {
-                    Ok(TransactionState::PrepareForeign)    
+                    Ok(TransactionState::PrepareForeign(false))    
                 }
             },
-            TransactionState::PrepareForeign => {
+            TransactionState::PrepareForeign(updated) => {
                 if let InstanceType::Base = inshandle.metadata().container_type() {
                     return Ok(TransactionState::Complete(false)) 
                 }
+
 
                 if ! ag.flags().contains(TransactionFlags::FORCE_DATABASE) { 
                     if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) { 
                         if ag.deps_updated(inshandle) {
                             return Ok(TransactionState::StageForeign)
                         }
-
-                        return Ok(TransactionState::Stage)
-                    }
+                
+                        return match ag.action() {
+                            TransactionType::Remove(..) => Ok(TransactionState::Complete(updated)),
+                            TransactionType::Upgrade(..) => Ok(TransactionState::Stage),
+                        };
+                   }
                 }
 
                 Ok(TransactionState::StageForeign)

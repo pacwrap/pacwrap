@@ -147,7 +147,7 @@ fn create(args: &mut Arguments) -> bool {
 }
 
 fn instantiate<'a>(logger: &mut Logger, cache: &mut InstanceCache<'a>, targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>) -> Result<()> { 
-    println!("{} {}Instantiating container...{}{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
+    println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for target in targets {
         cache.add(target.0, target.1.0, target.1.1)?;
