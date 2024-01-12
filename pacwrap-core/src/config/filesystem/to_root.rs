@@ -70,11 +70,15 @@ impl Filesystem for ToRoot {
     }
 
     fn module(&self) -> &'static str {
-        "to_home"
+        "to_root"
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, src: &str, dest: &str) {
+fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, src: &str, dest: &str) { 
+    let dest = match dest.is_empty() {
+        true => src, false => dest,
+    };
+
     match permission == "rw" {
         false => args.robind(src, dest),
         true => args.bind(src, dest),
