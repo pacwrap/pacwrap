@@ -1,6 +1,6 @@
 [package]
 name = "pacwrap"
-version = "0.5.3"
+version = "0.6.0"
 authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
@@ -12,19 +12,15 @@ homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://git.sapphirus.org/pacwrap/pacwrap"
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core/", version = "0.5.0" }
-command-fds = "0.2.2"
+pacwrap-core = { path = "../pacwrap-core/", version = "0.6.0" }
+indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 nix = "0.22.3, <= 0.22.3"
-
-# Container runtime
-os_pipe = "1.1.4"
-signal-hook = "0.3.15"
 lazy_static = "1.4.0"
 
-# Serialization
-serde = { version = "1.0", features = ["derive", "rc"] }
-serde_yaml = "0.9"
-indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
+# Container runtime
+command-fds = "0.2.2"
+signal-hook = "0.3.15"
+os_pipe = "1.1.4"
 
 # Packaging
 alpm = { version = "2.2.2", features = ["checkver"] }
