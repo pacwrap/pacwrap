@@ -376,7 +376,7 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 {tab}{tab}Slice container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
 {tab}{tab}
 {tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
-{tab}{tab}packages and influence ordering of downstream synchronization target(s). Container slicing provies
+{tab}{tab}packages and influence ordering of downstream synchronization target(s). Container slicing provides
 {tab}{tab}the ability to install packages in a lightweight, sliced filesytem, which aid in the deduplication 
 {tab}{tab}of common downstream package and filesystem dependencies.
 {tab}{tab}
