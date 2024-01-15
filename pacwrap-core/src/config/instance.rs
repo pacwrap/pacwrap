@@ -106,10 +106,10 @@ pub struct InstanceRuntime {
     enable_userns: bool,
     #[serde(default)]
     retain_session: bool,
-    #[serde(default = "default_true")]
-    seccomp: bool,
     #[serde(default)]
     allow_forking: bool,
+    #[serde(default = "default_true")]
+    seccomp: bool,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     filesystems: Vec<Box<dyn Filesystem>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
