@@ -1,6 +1,6 @@
 /*
  * pacwrap-agent
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -18,7 +18,7 @@
  */
 
 fn main() {
-    if ! cfg!(target_os="linux") || ! cfg!(target_family="unix") {
+    if !cfg!(target_os = "linux") || !cfg!(target_family = "unix") {
         panic!("Unsupported build target. Please refer to the documentation for further information.")
     }
 }

@@ -1,6 +1,6 @@
 /*
  * pacwrap
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,32 +17,32 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::process::Command;
-use std::env::var;
+use std::{env::var, process::Command};
 
 fn head() -> String {
     match Command::new("git").args(["rev-parse", "--short", "HEAD"]).output() {
-        Ok(output) =>  String::from_utf8(output.stdout).unwrap_or("N/A".into()),
+        Ok(output) => String::from_utf8(output.stdout).unwrap_or("N/A".into()),
         Err(_) => "N/A".into(),
-    }  
+    }
 }
 
 fn time(debug: bool) -> String {
     match debug {
         false => match Command::new("git").args(["log", "-1", "--date=format:%d/%m/%Y", "--format=%ad"]).output() {
-            Ok(output) =>  String::from_utf8(output.stdout).unwrap_or("N/A".into()),
+            Ok(output) => String::from_utf8(output.stdout).unwrap_or("N/A".into()),
             Err(_) => "N/A".into(),
         },
         true => match Command::new("date").args(["+%d/%m/%Y %T"]).output() {
-            Ok(output) =>  String::from_utf8(output.stdout).unwrap_or("N/A".into()),
+            Ok(output) => String::from_utf8(output.stdout).unwrap_or("N/A".into()),
             Err(_) => "N/A".into(),
-        }
+        },
     }
 }
 
 fn release(debug: bool) -> &'static str {
     match debug {
-        true => "DEV", false => "RELEASE",
+        true => "DEV",
+        false => "RELEASE",
     }
 }
 
@@ -51,7 +51,7 @@ fn is_debug() -> bool {
 }
 
 fn main() {
-    if ! cfg!(target_os="linux") || ! cfg!(target_family="unix") {
+    if !cfg!(target_os = "linux") || !cfg!(target_family = "unix") {
         panic!("Unsupported build target. Please refer to the documentation for further information.")
     }
 

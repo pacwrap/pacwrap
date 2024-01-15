@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -16,35 +16,45 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use crate::{err, 
-    Error, 
-    Result, 
-    config::{InstanceHandle, InstanceType},     
-    sync::{self,
-        SyncError,
-        transaction::{Transaction, 
-            TransactionState,
-            TransactionMode,
-            TransactionType,
-            TransactionHandle, 
+use crate::{
+    config::{InstanceHandle, InstanceType},
+    constants::UNIX_TIMESTAMP,
+    err,
+    sync::{
+        self,
+        transaction::{
+            SyncReqResult,
+            Transaction,
             TransactionAggregator,
             TransactionFlags,
-            SyncReqResult}}, constants::UNIX_TIMESTAMP};
+            TransactionHandle,
+            TransactionMode,
+            TransactionState::{self, *},
+            TransactionType::*,
+        },
+        SyncError,
+    },
+    Error,
+    Result,
+};
 
 pub struct Prepare {
     state: TransactionState,
 }
 
-impl Transaction for Prepare { 
+impl Transaction for Prepare {
     fn new(new_state: TransactionState, _: &TransactionAggregator) -> Box<Self> {
-        Box::new(Self {
-            state: new_state,
-        })
+        Box::new(Self { state: new_state })
     }
 
-    fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
+    fn engage(
+        &self,
+        ag: &mut TransactionAggregator,
+        handle: &mut TransactionHandle,
+        inshandle: &InstanceHandle,
+    ) -> Result<TransactionState> {
         match self.state {
-            TransactionState::Prepare => {
+            Prepare => {
                 let deps: Vec<&str> = inshandle.metadata().dependencies();
                 let instype = inshandle.metadata().container_type();
                 let action = ag.action();
@@ -52,61 +62,64 @@ impl Transaction for Prepare {
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
-                            Some(dep_handle) => { 
+                            Some(dep_handle) => {
                                 let dep_handle = &sync::instantiate_alpm(dep_handle);
                                 let create = ag.flags().contains(TransactionFlags::CREATE);
                                 let timestamp = inshandle.metadata().timestamp();
                                 let present = *UNIX_TIMESTAMP;
 
                                 handle.enumerate_package_lists(dep_handle, create && present == timestamp)
-                            },
+                            }
                             None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
-                    }   
+                    }
                 }
 
-                if let TransactionType::Upgrade(upgrade, ..) = action {
-                    if ! upgrade && handle.metadata().queue.len() == 0 {
+                if let Upgrade(upgrade, ..) = action {
+                    if !upgrade && handle.metadata().queue.len() == 0 {
                         err!(SyncError::NothingToDo(true))?
                     }
                 } else {
                     if handle.metadata().queue.len() == 0 {
                         err!(SyncError::NothingToDo(true))?
-                    }  
+                    }
                 }
 
                 if handle.metadata().queue.len() == 0 {
-                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Local) { 
-                        return Ok(TransactionState::UpToDate)
+                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Local) {
+                        return Ok(UpToDate);
                     }
                 }
 
-                if let TransactionType::Remove(..) = action {
-                    Ok(TransactionState::Stage)
-                } else if let InstanceType::BASE = instype {
-                    Ok(TransactionState::Stage)
+                if let Remove(..) = action {
+                    Ok(Stage)
+                } else if let InstanceType::Base = instype {
+                    Ok(Stage)
                 } else {
-                    Ok(TransactionState::PrepareForeign)    
+                    Ok(PrepareForeign(false))
                 }
-            },
-            TransactionState::PrepareForeign => {
-                if let InstanceType::BASE = inshandle.metadata().container_type() {
-                    return Ok(TransactionState::Complete(false)) 
+            }
+            PrepareForeign(updated) => {
+                if let InstanceType::Base = inshandle.metadata().container_type() {
+                    return Ok(Complete(false));
                 }
 
-                if ! ag.flags().contains(TransactionFlags::FORCE_DATABASE) { 
-                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) { 
+                if !ag.flags().contains(TransactionFlags::FORCE_DATABASE) {
+                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) {
                         if ag.deps_updated(inshandle) {
-                            return Ok(TransactionState::StageForeign)
+                            return Ok(StageForeign);
                         }
 
-                        return Ok(TransactionState::Stage)
+                        return match ag.action() {
+                            Remove(..) => Ok(Complete(updated)),
+                            Upgrade(..) => Ok(Stage),
+                        };
                     }
                 }
 
-                Ok(TransactionState::StageForeign)
+                Ok(StageForeign)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

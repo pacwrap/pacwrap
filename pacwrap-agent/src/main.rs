@@ -1,6 +1,6 @@
 /*
  * pacwrap-agent
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,20 +17,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use pacwrap_core::{err, Error, utils::{Arguments, arguments::Operand}};
+use pacwrap_core::{
+    err,
+    utils::{arguments::Operand, Arguments},
+    Error,
+};
 
 use crate::error::AgentError;
 
-mod error;
 mod agent;
+mod error;
 
 fn main() {
     let arguments = &mut Arguments::new().populate();
     let param = arguments.next().unwrap_or_default();
     let result = match param {
-        Operand::Value("transact") => agent::transact(), _ => err!(AgentError::DirectExecution) 
+        Operand::Value("transact") => agent::transact(),
+        _ => err!(AgentError::DirectExecution),
     };
- 
+
     if let Err(error) = result {
         error.handle();
     }

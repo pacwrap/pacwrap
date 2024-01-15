@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -20,9 +20,13 @@
 use std::process::exit;
 
 use lazy_static::lazy_static;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{Result, config::{config, save}, constants::CONFIG_FILE};
+use crate::{
+    config::{config, save},
+    constants::CONFIG_FILE,
+    Result,
+};
 
 lazy_static! {
     pub static ref CONFIG: Global = Global::load();
@@ -58,27 +62,27 @@ impl Default for ProgressKind {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Global {
-    #[serde(default = "Configuration::new")]  
+    #[serde(default = "Configuration::new")]
     config: Configuration,
-    #[serde(default = "AlpmConfiguration::new")]  
+    #[serde(default = "AlpmConfiguration::new")]
     alpm: AlpmConfiguration,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Progress {
-    #[serde(default = "ProgressKind::default")] 
+    #[serde(default = "ProgressKind::default")]
     transact: ProgressKind,
-     #[serde(default = "ProgressKind::default")] 
+    #[serde(default = "ProgressKind::default")]
     download: ProgressKind,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Configuration {
-    #[serde(default = "Verbosity::default")] 
+    #[serde(default = "Verbosity::default")]
     summary: Verbosity,
-    #[serde(default = "Verbosity::default")] 
+    #[serde(default = "Verbosity::default")]
     logging: Verbosity,
-    #[serde(default = "Progress::new")] 
+    #[serde(default = "Progress::new")]
     progress: Progress,
 }
 
@@ -88,15 +92,15 @@ pub struct AlpmConfiguration {
     ignore_pkg: Vec<String>,
     #[serde(default = "hold_pkg")]
     hold_pkg: Vec<String>,
-    #[serde(default = "sig_level")] 
+    #[serde(default = "sig_level")]
     sig_level: String,
-    #[serde(default = "sig_level_opt")]  
+    #[serde(default = "sig_level_opt")]
     sig_level_local: String,
-    #[serde(default = "parallel_downloads")] 
+    #[serde(default = "parallel_downloads")]
     parallel_downloads: u32,
-    #[serde(default = "default_true")]  
+    #[serde(default = "default_true")]
     check_space: bool,
-    #[serde(default = "default_true")]  
+    #[serde(default = "default_true")]
     download_timeout: bool,
 }
 
@@ -126,7 +130,7 @@ impl Progress {
     fn new() -> Self {
         Self {
             transact: ProgressKind::CondensedForeign,
-            download: ProgressKind::CondensedForeign, 
+            download: ProgressKind::CondensedForeign,
         }
     }
 }
@@ -136,8 +140,8 @@ impl AlpmConfiguration {
         Self {
             ignore_pkg: ignore_pkg(),
             hold_pkg: hold_pkg(),
-            sig_level:  sig_level(),
-            sig_level_local: sig_level_opt(), 
+            sig_level: sig_level(),
+            sig_level_local: sig_level_opt(),
             parallel_downloads: parallel_downloads(),
             check_space: true,
             download_timeout: true,
@@ -149,7 +153,7 @@ impl AlpmConfiguration {
     }
 
     pub fn download_timeout(&self) -> bool {
-        ! self.download_timeout
+        !self.download_timeout
     }
 
     pub fn parallel_downloads(&self) -> u32 {
@@ -210,7 +214,7 @@ fn sig_level() -> String {
 }
 
 fn sig_level_opt() -> String {
-    "Optional".into() 
+    "Optional".into()
 }
 
 fn parallel_downloads() -> u32 {

@@ -1,8 +1,11 @@
-use dialoguer::{theme::ColorfulTheme, Input, console::{style, Style}};
+use dialoguer::{
+    console::{style, Style},
+    theme::ColorfulTheme,
+    Input,
+};
 
-pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool)  -> Result<(),()> {
-    if let Ok(value) = create_prompt(prompt.into(), prefix, 
-        if yn_prompt { "[Y/n]" } else { "[N/y]" }) {  
+pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool) -> Result<(), ()> {
+    if let Ok(value) = create_prompt(prompt.into(), prefix, if yn_prompt { "[Y/n]" } else { "[N/y]" }) {
         if value.to_lowercase() == "y" || (yn_prompt && value.is_empty()) {
             Ok(())
         } else {
@@ -19,14 +22,11 @@ fn create_prompt(message: String, prefix: &str, prompt: &str) -> Result<String, 
         prompt_prefix: style(prefix.into()).blue().bold(),
         error_prefix: style(prefix.into()).red().bold(),
         prompt_suffix: style(prompt.to_string()).bold(),
-        success_suffix: style(prompt.to_string()).bold(), 
+        success_suffix: style(prompt.to_string()).bold(),
         prompt_style: Style::new(),
         values_style: Style::new(),
         ..ColorfulTheme::default()
     };
 
-    return Input::with_theme(&theme)
-            .with_prompt(message)
-            .allow_empty(true)
-            .interact_text();
+    return Input::with_theme(&theme).with_prompt(message).allow_empty(true).interact_text();
 }

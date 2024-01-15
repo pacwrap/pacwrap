@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,22 +19,26 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs,
-    config::{Permission, permission::*},
-    config::permission::Condition::Success};
+use crate::{
+    config::{
+        permission::{Condition::Success, *},
+        Permission,
+    },
+    exec::args::ExecutionArgs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NONE;
+pub struct None;
 
-#[typetag::serde]
-impl Permission for NONE {
-    fn check(&self) -> Result<Option<Condition>, PermError> { 
-        Ok(Some(Success)) 
+#[typetag::serde(name = "none")]
+impl Permission for None {
+    fn check(&self) -> Result<Option<Condition>, PermError> {
+        Ok(Some(Success))
     }
 
     fn register(&self, _: &mut ExecutionArgs) {}
 
-    fn module(&self) -> &'static str { 
-        "NONE" 
+    fn module(&self) -> &'static str {
+        "none"
     }
 }

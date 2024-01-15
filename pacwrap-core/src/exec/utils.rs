@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,52 +17,61 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{process::Child, io::Read, os::fd::AsRawFd};
+use std::{io::Read, os::fd::AsRawFd, process::Child};
 
 use os_pipe::{PipeReader, PipeWriter};
 use serde::Serialize;
 use serde_yaml::Value;
 
-use crate::{err,
-    error::*,
-    ErrorKind,
-    constants::BWRAP_EXECUTABLE, 
+use crate::{
     config::{InstanceHandle, CONFIG},
-    sync::{SyncError, transaction::{TransactionParameters, 
-        TransactionMetadata}, 
-        DEFAULT_ALPM_CONF}};
+    constants::BWRAP_EXECUTABLE,
+    err,
+    error::*,
+    sync::{
+        transaction::{TransactionMetadata, TransactionParameters},
+        SyncError,
+        DEFAULT_ALPM_CONF,
+    },
+    ErrorKind,
+};
 
 pub fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
     match super::fakeroot_container(ins, arguments)?.wait() {
         Ok(_) => Ok(()),
-        Err(err) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, err.kind()))
+        Err(err) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, err.kind())),
     }
 }
 
-pub fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32> { 
+pub fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32> {
     let mut output = String::new();
-  
+
     drop(writer);
-    reader.read_to_string(&mut output).unwrap();    
-   
+    reader.read_to_string(&mut output).unwrap();
+
     match serde_yaml::from_str::<Value>(&output) {
         Ok(value) => match value["child-pid"].as_u64() {
-            Some(value) => Ok(value as i32), 
+            Some(value) => Ok(value as i32),
             None => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
         },
         Err(_) => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
     }
 }
 
-pub fn agent_params(reader: &PipeReader, writer: &PipeWriter, params: &TransactionParameters, metadata: &TransactionMetadata) -> Result<i32> {
-    serialize(params, writer)?;  
+pub fn agent_params(
+    reader: &PipeReader,
+    writer: &PipeWriter,
+    params: &TransactionParameters,
+    metadata: &TransactionMetadata,
+) -> Result<i32> {
+    serialize(params, writer)?;
     serialize(&*CONFIG, writer)?;
     serialize(&*DEFAULT_ALPM_CONF, writer)?;
     serialize(metadata, writer)?;
     Ok(reader.as_raw_fd())
 }
 
-fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> { 
+fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> {
     match bincode::serialize_into::<&PipeWriter, T>(file, input) {
         Ok(()) => Ok(()),
         Err(error) => err!(SyncError::TransactionFailure(format!("Agent data serialization failed: {}", error))),
@@ -76,9 +85,9 @@ pub fn handle_process(name: &'static str, result: std::result::Result<Child, std
     }
 }
 
-pub fn wait_on_process(name: &'static str, mut child: Child) -> Result<()> { 
+pub fn wait_on_process(name: &'static str, mut child: Child) -> Result<()> {
     match child.wait() {
         Ok(_) => Ok(()),
-        Err(error) => err!(ErrorKind::ProcessWaitFailure(name, error.kind()))
+        Err(error) => err!(ErrorKind::ProcessWaitFailure(name, error.kind())),
     }
 }

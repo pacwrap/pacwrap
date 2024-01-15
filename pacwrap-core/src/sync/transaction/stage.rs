@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -18,17 +18,24 @@
  */
 use alpm::TransFlag;
 
-use crate::{err, 
-    Error, Result, 
-    config::{InstanceType, InstanceHandle},
-    sync::{SyncError,
-        transaction::{Transaction, 
-            TransactionState,
-            TransactionMode,
-            TransactionType,
-            TransactionHandle, 
+use crate::{
+    config::{InstanceHandle, InstanceType},
+    err,
+    sync::{
+        transaction::{
+            Transaction,
             TransactionAggregator,
-            TransactionFlags}}};
+            TransactionFlags,
+            TransactionHandle,
+            TransactionMode::{self, *},
+            TransactionState::{self, *},
+            TransactionType::*,
+        },
+        SyncError,
+    },
+    Error,
+    Result,
+};
 
 pub struct Stage {
     state: TransactionState,
@@ -36,31 +43,36 @@ pub struct Stage {
     flags: TransFlag,
 }
 
-impl Transaction for Stage { 
-    fn new(new: TransactionState, ag: &TransactionAggregator) -> Box<Self> { 
+impl Transaction for Stage {
+    fn new(new: TransactionState, ag: &TransactionAggregator) -> Box<Self> {
         let mut flag;
         let modeset;
 
         if let TransactionState::Stage = new {
-            modeset = TransactionMode::Local;
+            modeset = Local;
             flag = TransFlag::NO_DEP_VERSION;
-                
+
             if ag.flags().contains(TransactionFlags::DATABASE_ONLY) {
                 flag = flag | TransFlag::DB_ONLY;
             }
         } else {
-            modeset = TransactionMode::Foreign;
+            modeset = Foreign;
             flag = TransFlag::NO_DEP_VERSION | TransFlag::DB_ONLY;
         }
 
-        Box::new(Self { 
+        Box::new(Self {
             state: new,
             flags: flag,
-            mode: modeset
+            mode: modeset,
         })
     }
 
-    fn engage(&self, ag: &mut TransactionAggregator,  handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> { 
+    fn engage(
+        &self,
+        ag: &mut TransactionAggregator,
+        handle: &mut TransactionHandle,
+        inshandle: &InstanceHandle,
+    ) -> Result<TransactionState> {
         if let Err(error) = handle.alpm().trans_init(self.flags) {
             err!(SyncError::InitializationFailure(error.to_string().into()))?
         }
@@ -71,43 +83,44 @@ impl Transaction for Stage {
         handle.set_flags(ag.flags(), self.flags);
 
         match ag.action() {
-            TransactionType::Upgrade(upgrade, downgrade, _) => {  
+            Upgrade(upgrade, downgrade, _) => {
                 if *upgrade {
                     handle.alpm().sync_sysupgrade(*downgrade).unwrap();
                 }
 
-                handle.prepare(ag.action(), ag.flags())?; 
+                handle.prepare(ag.action(), ag.flags())?;
                 next_state(&self.state, check_keyring(ag, handle, inshandle))
-            },
-            TransactionType::Remove(_,_,_) => { 
+            }
+            Remove(..) => {
                 handle.prepare(ag.action(), ag.flags())?;
                 next_state(&self.state, false)
-            },
+            }
         }
     }
 }
 
 fn check_keyring(ag: &TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> bool {
     match inshandle.metadata().container_type() {
-        InstanceType::BASE => {
+        InstanceType::Base => {
             if ag.is_keyring_synced() {
-                return false
+                return false;
             }
- 
-            handle.alpm()
+
+            handle
+                .alpm()
                 .trans_add()
                 .iter()
                 .find_map(|a| Some(a.name() == "archlinux-keyring"))
                 .unwrap_or(false)
-        },
-        _ => false
+        }
+        _ => false,
     }
 }
 
 fn next_state(state: &TransactionState, option: bool) -> Result<TransactionState> {
     Ok(match state {
-        TransactionState::Stage => TransactionState::Commit(option),
-        TransactionState::StageForeign => TransactionState::CommitForeign,
-        _ => unreachable!()
+        Stage => Commit(option),
+        StageForeign => CommitForeign,
+        _ => unreachable!(),
     })
 }

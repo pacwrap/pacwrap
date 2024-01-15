@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -18,23 +18,23 @@
  */
 
 pub mod download;
-pub mod query;
 pub mod progress;
+pub mod query;
 
 fn whitespace(total: usize, current: usize) -> String {
     let total = log10(total);
-    let current = log10(current); 
+    let current = log10(current);
     let mut whitespace = String::new();
-    let difference = total-current;
-  
-    for _ in 0..difference {
+    let difference = total - current;
+
+    for _ in 0 .. difference {
         whitespace.push_str(" ");
-    } 
+    }
 
     whitespace
 }
 
-fn log10(mut value: usize) -> usize { 
+fn log10(mut value: usize) -> usize {
     let mut length = 0;
 
     while value > 0 {

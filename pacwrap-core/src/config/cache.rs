@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,33 +19,24 @@
 
 use std::{collections::HashMap, fs::read_dir};
 
-use crate::{err, 
-    ErrorKind,
+use crate::{
+    config::{self, InstanceHandle},
+    constants::DATA_DIR,
+    err,
     error::*,
-    constants::DATA_DIR, 
-    config::{self, InstanceHandle}};
+    ErrorKind,
+};
 
-use super::{InsVars, 
-    ConfigError, 
-    Instance, 
-    instance::InstanceType};
+use super::{instance::InstanceType, ConfigError, InsVars, Instance};
 
 pub struct InstanceCache<'a> {
     instances: HashMap<&'a str, InstanceHandle<'a>>,
-    registered: Vec<&'a str>,
-    registered_base: Vec<&'a str>,
-    registered_dep: Vec<&'a str>,
-    registered_root: Vec<&'a str>
 }
 
-impl <'a>InstanceCache<'a> {
+impl<'a> InstanceCache<'a> {
     pub fn new() -> Self {
         Self {
             instances: HashMap::new(),
-            registered: Vec::new(),
-            registered_base: Vec::new(),
-            registered_dep: Vec::new(),
-            registered_root: Vec::new(),
         }
     }
 
@@ -57,87 +48,84 @@ impl <'a>InstanceCache<'a> {
         for dep in deps.iter() {
             if let None = self.instances.get(dep) {
                 err!(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
-            } 
+            }
         }
 
         let deps = deps.iter().map(|a| (*a).into()).collect();
         let handle = match config::provide_new_handle(ins) {
-            Ok(mut handle) => { 
-                handle.metadata_mut().set(deps, vec!()); 
-                handle 
-            },
+            Ok(mut handle) => {
+                handle.metadata_mut().set(deps, vec![]);
+                handle
+            }
             Err(err) => match err.downcast::<ConfigError>() {
                 Ok(error) => match error {
                     ConfigError::ConfigNotFound(_) => {
-                        let vars = InsVars::new(ins);         
-                        let cfg = Instance::new(instype, deps, vec!());
-                        
-                        InstanceHandle::new(cfg, vars)        
-                    },
+                        let vars = InsVars::new(ins);
+                        let cfg = Instance::new(instype, deps, vec![]);
+
+                        InstanceHandle::new(cfg, vars)
+                    }
                     _ => Err(err)?,
-                }
+                },
                 _ => Err(err)?,
             },
         };
 
-        Ok(self.register(ins, handle)) 
+        Ok(self.register(ins, handle))
     }
 
-    fn map(&mut self, ins: &'a str) -> Result<()>  {
+    fn map(&mut self, ins: &'a str) -> Result<()> {
         if let Some(_) = self.instances.get(ins) {
             err!(ConfigError::AlreadyExists(ins.to_owned()))?
         }
 
-        Ok(self.register(ins, match config::provide_handle(ins) {
-            Ok(ins) => ins, 
-            Err(error) => { 
-                error.warn();
-                return Ok(())
-            }
-        }))
+        Ok(self.register(
+            ins,
+            match config::provide_handle(ins) {
+                Ok(ins) => ins,
+                Err(error) => {
+                    error.warn();
+                    return Ok(());
+                }
+            },
+        ))
     }
 
     fn register(&mut self, ins: &'a str, handle: InstanceHandle<'a>) {
-        match handle.metadata().container_type() {
-            InstanceType::BASE => self.registered_base.push(ins),
-            InstanceType::DEP => self.registered_dep.push(ins),
-            InstanceType::ROOT => self.registered_root.push(ins),
-            InstanceType::LINK => return,
-        } 
+        if let InstanceType::Symbolic = handle.metadata().container_type() {
+            return;
+        }
 
         self.instances.insert(ins, handle);
-        self.registered.push(ins);
     }
 
-    pub fn registered(&self) -> &Vec<&'a str> { 
-        &self.registered 
-    }
-   
-    pub fn registered_base(&self) -> &Vec<&'a str> { 
-        &self.registered_base 
-    }
-    
-    pub fn registered_dep(&self) -> &Vec<&'a str> { 
-        &self.registered_dep 
+    pub fn registered(&self) -> Vec<&'a str> {
+        self.instances.iter().map(|a| *a.0).collect()
     }
 
-    pub fn registered_root(&self) -> &Vec<&'a str> { 
-        &self.registered_root 
+    pub fn filter(&self, filter: Vec<InstanceType>) -> Vec<&'a str> {
+        self.instances
+            .iter()
+            .filter(|a| filter.contains(a.1.metadata().container_type()))
+            .map(|a| *a.0)
+            .collect()
     }
 
     pub fn obtain_base_handle(&self) -> Option<&InstanceHandle> {
-        match self.registered_base.get(0) {
-            Some(instance) => self.instances.get(instance), None => None,
+        match self.filter(vec![InstanceType::Base]).get(0) {
+            Some(instance) => self.instances.get(instance),
+            None => None,
         }
     }
 
-    pub fn get_instance(&self, ins: &str) -> Result<&InstanceHandle> { 
+    pub fn get_instance(&self, ins: &str) -> Result<&InstanceHandle> {
         match self.instances.get(ins) {
-            Some(ins) => Ok(ins), None => err!(ErrorKind::InstanceNotFound(ins.into())),
+            Some(ins) => Ok(ins),
+            None => err!(ErrorKind::InstanceNotFound(ins.into())),
         }
     }
 
-    pub fn get_instance_option(&self, ins: &str) -> Option<&InstanceHandle> { 
+    pub fn get_instance_option(&self, ins: &str) -> Option<&InstanceHandle> {
         self.instances.get(ins)
     }
 }
@@ -156,22 +144,25 @@ pub fn populate<'a>() -> Result<InstanceCache<'a>> {
     populate_from(&roots()?)
 }
 
-fn roots<'a>() -> Result<Vec<&'a str>> { 
+fn roots<'a>() -> Result<Vec<&'a str>> {
     match read_dir(format!("{}/root", *DATA_DIR)) {
-        Ok(dir) => Ok(dir.filter(|f| match f {
-            Ok(f) => match f.metadata() {
-                Ok(meta) => meta.is_dir() | meta.is_symlink(), Err(_) => false 
-            }, 
-            Err(_) => false 
-        })
-        .map(|s| match s {
+        Ok(dir) => Ok(dir
+            .filter(|f| match f {
+                Ok(f) => match f.metadata() {
+                    Ok(meta) => meta.is_dir() | meta.is_symlink(),
+                    Err(_) => false,
+                },
+                Err(_) => false,
+            })
+            .map(|s| match s {
                 Ok(f) => match f.file_name().to_str() {
-                    Some(f) => f.to_owned().leak(), None => "", 
+                    Some(f) => f.to_owned().leak(),
+                    None => "",
                 },
                 Err(_) => "",
             })
-        .filter(|e| ! e.is_empty())
-        .collect()),
+            .filter(|e| !e.is_empty())
+            .collect()),
         Err(error) => err!(ErrorKind::IOError(format!("{}/root", *DATA_DIR), error.kind())),
     }
 }

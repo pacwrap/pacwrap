@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,9 +19,13 @@
 
 use std::collections::HashSet;
 
-use alpm::{Package, Alpm};
+use alpm::{Alpm, Package};
 
-use crate::{err, Error, sync::{SyncError, utils::AlpmUtils}};
+use crate::{
+    err,
+    sync::{utils::AlpmUtils, SyncError},
+    Error,
+};
 
 pub struct DependencyResolver<'a> {
     resolved: HashSet<&'a str>,
@@ -30,9 +34,9 @@ pub struct DependencyResolver<'a> {
     ignored: &'a HashSet<String>,
     handle: &'a Alpm,
     depth: isize,
-} 
+}
 
-impl <'a>DependencyResolver<'a> {
+impl<'a> DependencyResolver<'a> {
     pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<String>) -> Self {
         Self {
             resolved: HashSet::new(),
@@ -45,17 +49,17 @@ impl <'a>DependencyResolver<'a> {
     }
 
     fn check_depth(&mut self) -> Result<(), Error> {
-        if self.depth == 50 { 
+        if self.depth == 50 {
             err!(SyncError::RecursionDepthExceeded(self.depth))?
         }
 
         self.depth += 1;
         Ok(())
     }
-    
+
     pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<Package<'a>>), Error> {
-        let mut synchronize: Vec<&'a str> = Vec::new(); 
-        
+        let mut synchronize: Vec<&'a str> = Vec::new();
+
         for pkg in packages {
             if let Some(_) = self.resolved.get(pkg) {
                 continue;
@@ -65,28 +69,29 @@ impl <'a>DependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(pkg) = self.handle.get_package(pkg) {   
+            if let Some(pkg) = self.handle.get_package(pkg) {
                 self.packages.push(pkg);
                 self.resolved.insert(pkg.name());
-                synchronize.extend(pkg.depends()
-                    .iter()
-                    .filter_map(|p| 
-                        match self.handle.get_local_package(p.name()) {
-                            None => match self.handle.get_package(p.name()) {  
-                                Some(dep) => Some(dep.name()), None => None,
+                synchronize.extend(
+                    pkg.depends()
+                        .iter()
+                        .filter_map(|p| match self.handle.get_local_package(p.name()) {
+                            None => match self.handle.get_package(p.name()) {
+                                Some(dep) => Some(dep.name()),
+                                None => None,
                             },
                             Some(_) => None,
-                        }
-                    )
-                    .collect::<Vec<&str>>());
+                        })
+                        .collect::<Vec<&str>>(),
+                );
 
                 if self.depth > 0 {
                     self.keys.push(pkg.name().into());
                 }
-            }             
+            }
         }
 
-        if synchronize.len() > 0 { 
+        if synchronize.len() > 0 {
             self.check_depth()?;
             self.enumerate(&synchronize)
         } else {

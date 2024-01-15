@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -21,28 +21,32 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs,
-    config::{Permission, permission::*},
-    config::permission::{Condition::Success, PermError::Fail}};
+use crate::{
+    config::{
+        permission::{Condition::Success, PermError::Fail, *},
+        Permission,
+    },
+    exec::args::ExecutionArgs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct DEV {
-    devices: Vec<String>
+struct Dev {
+    devices: Vec<String>,
 }
 
-#[typetag::serde]
-impl Permission for DEV {
-    fn check(&self) -> Result<Option<Condition>, PermError> {   
+#[typetag::serde(name = "dev")]
+impl Permission for Dev {
+    fn check(&self) -> Result<Option<Condition>, PermError> {
         for device in self.devices.iter() {
-            if ! Path::new(&format!("/dev/{}", device)).exists() {
+            if !Path::new(&format!("/dev/{}", device)).exists() {
                 Err(Fail(format!("/dev/{} is inaccessible.", device)))?
             }
         }
 
         Ok(Some(Success))
     }
-    
-    fn register(&self, args: &mut  ExecutionArgs) { 
+
+    fn register(&self, args: &mut ExecutionArgs) {
         for device in self.devices.iter() {
             args.dev(&format!("/dev/{}", device));
         }

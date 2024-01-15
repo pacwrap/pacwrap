@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -21,18 +21,22 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs, 
-    config::InsVars, 
-    config::filesystem::{Filesystem, BindError}};
+use crate::{
+    config::{
+        filesystem::{BindError, Filesystem},
+        InsVars,
+    },
+    exec::args::ExecutionArgs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HOME;
+pub struct Home;
 
-#[typetag::serde]
-impl Filesystem for HOME {
+#[typetag::serde(name = "home")]
+impl Filesystem for Home {
     fn check(&self, vars: &InsVars) -> Result<(), BindError> {
-        if ! Path::new(vars.home()).exists() {
-            Err(BindError::Fail(format!("INSTANCE_HOME not found.")))?
+        if !Path::new(vars.home()).exists() {
+            Err(BindError::Fail(format!("Specified home directory not found.")))?
         }
         Ok(())
     }
@@ -40,10 +44,10 @@ impl Filesystem for HOME {
     fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
         args.bind(vars.home(), vars.home_mount());
         args.env("HOME", vars.home_mount());
-        args.env("USER", vars.user());   
+        args.env("USER", vars.user());
     }
 
     fn module(&self) -> &'static str {
-        "HOME"
+        "home"
     }
 }

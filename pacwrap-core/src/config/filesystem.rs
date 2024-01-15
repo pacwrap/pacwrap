@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,22 +19,21 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::exec::args::ExecutionArgs;
-use crate::config::InsVars;
+use crate::{config::InsVars, exec::args::ExecutionArgs};
 
-use dyn_clone::{DynClone, clone_trait_object};
+use dyn_clone::{clone_trait_object, DynClone};
 
+mod dir;
 pub mod home;
 pub mod root;
+mod sys;
 mod to_home;
 mod to_root;
-mod dir;
-mod sys;
 
 pub enum Condition {
     Success,
     SuccessWarn(String),
-    Nothing
+    Nothing,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +47,6 @@ impl Display for BindError {
         match self {
             Self::Fail(error) => write!(fmter, "{}", error),
             Self::Warn(error) => write!(fmter, "{}", error),
- 
         }
     }
 }

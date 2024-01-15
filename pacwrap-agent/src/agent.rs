@@ -1,6 +1,6 @@
 /*
  * pacwrap-agent
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -16,57 +16,64 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use std::{fs::{self, File}, io::ErrorKind::NotFound, os::unix::prelude::FileExt, env};
+use std::{
+    env,
+    fs::{self, File},
+    io::ErrorKind::NotFound,
+    os::unix::prelude::FileExt,
+};
 
 use serde::Deserialize;
 
-use pacwrap_core::{err,
+use pacwrap_core::{
+    config::Global,
+    err,
+    sync::{
+        self,
+        event::{
+            download::{self, DownloadEvent},
+            progress::{self, ProgressEvent},
+            query,
+        },
+        transaction::{TransactionHandle, TransactionMetadata, TransactionParameters, TransactionType, MAGIC_NUMBER},
+        utils::{erroneous_preparation, erroneous_transaction},
+        AlpmConfigData,
+        SyncError,
+    },
+    utils::{print_warning, read_le_32},
     Error,
     Result,
-    sync::{self, 
-        SyncError, 
-        AlpmConfigData,
-        utils::{erroneous_transaction, 
-            erroneous_preparation}, 
-            transaction::{TransactionHandle,
-            TransactionType,
-            TransactionMetadata,
-            TransactionParameters,
-            MAGIC_NUMBER}, 
-    event::{download::{self, DownloadEvent}, 
-            progress::{self, ProgressEvent}, 
-            query}}, 
-    utils::{print_warning, read_le_32}, config::Global};
+};
 
 use crate::error::AgentError;
 
 static AGENT_PARAMS: &'static str = "/mnt/agent_params";
 
 pub fn transact() -> Result<()> {
-    let mut header_buffer = vec![0; 7]; 
+    let mut header_buffer = vec![0; 7];
     let mut file = match File::open(AGENT_PARAMS) {
         Ok(file) => file,
         Err(error) => {
             if let Ok(var) = env::var("SHELL") {
-                if ! var.is_empty() {
+                if !var.is_empty() {
                     err!(AgentError::DirectExecution)?
                 }
             }
 
             err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
-        },
-    }; 
+        }
+    };
 
     if let Err(error) = file.read_exact_at(&mut header_buffer, 0) {
         err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
     }
-    
+
     decode_header(&header_buffer)?;
 
     let params: TransactionParameters = deserialize(&mut file)?;
     let config: Global = deserialize(&mut file)?;
     let alpm_remotes: AlpmConfigData = deserialize(&mut file)?;
-    let mut metadata: TransactionMetadata = deserialize(&mut file)?; 
+    let mut metadata: TransactionMetadata = deserialize(&mut file)?;
     let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes);
     let mut handle = TransactionHandle::new(&config, alpm, &mut metadata);
 
@@ -74,11 +81,11 @@ pub fn transact() -> Result<()> {
 }
 
 fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
-    let flags = handle.retrieve_flags(); 
+    let flags = handle.retrieve_flags();
     let mode = agent.mode();
     let action = agent.action();
     let config = config.config();
-    let progress = config.progress();
+    let pkind = config.progress();
     let bytes = agent.bytes();
     let files = agent.files();
 
@@ -86,12 +93,12 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
         err!(SyncError::InitializationFailure(error.to_string().into()))?
     }
 
-    handle.ignore(true);  
+    handle.ignore(true);
 
-    if let TransactionType::Upgrade(upgrade, downgrade, _) = action {  
+    if let TransactionType::Upgrade(upgrade, downgrade, _) = action {
         if upgrade {
             handle.alpm().sync_sysupgrade(downgrade).unwrap();
-        }    
+        }
     }
 
     handle.prepare(&action, &flags.0.unwrap())?;
@@ -100,17 +107,12 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
         erroneous_preparation(error)?
     }
 
-    let progress_cb = ProgressEvent::new()
-        .style(progress.0)
-        .configure(&action);
-    let download_cb = DownloadEvent::new()
-        .style(progress.0) 
-        .total(bytes, files)
-        .configure(&mode, progress.1);
+    let progress_cb = ProgressEvent::new().style(pkind.0).configure(&action);
+    let download_cb = DownloadEvent::new().style(pkind.0).total(bytes, files).configure(&mode, pkind.1);
 
     handle.alpm().set_question_cb((), query::callback);
-    handle.alpm().set_progress_cb(progress_cb, progress::callback(&mode, progress.0));
-    handle.alpm().set_dl_cb(download_cb, download::callback(progress.1));
+    handle.alpm().set_progress_cb(progress_cb, progress::callback(&mode, pkind.0));
+    handle.alpm().set_dl_cb(download_cb, download::callback(pkind.1));
 
     if let Err(error) = handle.alpm_mut().trans_commit() {
         erroneous_transaction(error)?
@@ -121,7 +123,8 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
 
     if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/fs/etc/ld.so.cache") {
         match error.kind() {
-            NotFound => (), _ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)), 
+            NotFound => (),
+            _ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)),
         }
     }
 
@@ -139,7 +142,7 @@ fn decode_header(buffer: &Vec<u8>) -> Result<()> {
     }
 
     if major.0 != major.1 || minor.0 != minor.1 || patch.0 != patch.1 {
-        err!(AgentError::InvalidVersion(major.0,minor.0,patch.0,major.1,minor.1,patch.1))?;
+        err!(AgentError::InvalidVersion(major.0, minor.0, patch.0, major.1, minor.1, patch.1))?;
     }
 
     Ok(())
@@ -148,6 +151,6 @@ fn decode_header(buffer: &Vec<u8>) -> Result<()> {
 fn deserialize<T: for<'de> Deserialize<'de>>(stdin: &mut File) -> Result<T> {
     match bincode::deserialize_from::<&mut File, T>(stdin) {
         Ok(meta) => Ok(meta),
-        Err(error) => err!(AgentError::DeserializationError(error.as_ref().to_string()))
+        Err(error) => err!(AgentError::DeserializationError(error.as_ref().to_string())),
     }
 }

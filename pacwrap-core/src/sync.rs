@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -16,36 +16,41 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use std::{fmt::{Display, Formatter}, path::Path};
+use std::{
+    fmt::{Display, Formatter},
+    path::Path,
+    process::exit,
+};
 
-use alpm::{Alpm,  SigLevel, Usage};
+use alpm::{Alpm, SigLevel, Usage};
 use lazy_static::lazy_static;
 use pacmanconf;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{err,
-    impl_error,
+use crate::{
+    config::{cache::InstanceCache, global::ProgressKind, Global, InsVars, InstanceHandle, CONFIG},
+    constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET},
+    err,
+    error,
     error::*,
-    ErrorKind,
-    utils::print_warning,
     exec::pacman_key,
-    constants::{BAR_GREEN, RESET, BOLD, CACHE_DIR, DATA_DIR, CONFIG_DIR, ARROW_RED},
+    impl_error,
     sync::event::download::{self, DownloadEvent},
-	config::{InsVars,
-    InstanceHandle,
-    cache::InstanceCache, CONFIG, Global, global::ProgressKind}};
+    utils::print_warning,
+    ErrorKind,
+};
 
 pub mod event;
-pub mod utils;
-pub mod transaction;
 pub mod filesystem;
 mod resolver;
 mod resolver_local;
+pub mod transaction;
+pub mod utils;
 
 lazy_static! {
-    static ref PACMAN_CONF: pacmanconf::Config = pacmanconf::Config::from_file(format!("{}/repositories.conf", *CONFIG_DIR)).unwrap(); 
-    static ref DEFAULT_SIGLEVEL: SigLevel = signature(&CONFIG.alpm().sig_level(), SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL);
     pub static ref DEFAULT_ALPM_CONF: AlpmConfigData = AlpmConfigData::new();
+    static ref PACMAN_CONF: pacmanconf::Config = load_repositories();
+    static ref DEFAULT_SIGLEVEL: SigLevel = default_signature();
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -67,36 +72,41 @@ pub enum SyncError {
     InternalError(String),
     NoCompatibleRemotes,
     UnableToLocateKeyrings,
+    RepoConfError(String, String),
 }
 
 impl_error!(SyncError);
 
 impl Display for SyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
-       match self {
-            Self::DependentContainerMissing(u) => write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET), 
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::DependentContainerMissing(u) =>
+                write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET),
+            Self::TargetNotAvailable(pkg) =>
+                write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
+            Self::TargetUpstream(pkg) =>
+                write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
             Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET), 
-            Self::TargetNotAvailable(pkg) => write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),   
-            Self::TargetUpstream(pkg) => write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET), 
+            Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
+            Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."),
+            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
             Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
             Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
             Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
             Self::DeserializationFailure => write!(fmter, "Deserialization of input parameters failed."),
             Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
             Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
-            Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
-            Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."), 
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
             Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
+            Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
             Self::NothingToDo(_) => write!(fmter, "Nothing to do."),
             _ => Ok(()),
         }?;
 
-        //Temporary until command and control pipeline is implemented for pacwrap-agent 
+        //Temporary until command and control pipeline is implemented for pacwrap-agent
         match self {
-            Self::TransactionFailureAgent => Ok(()), 
-            _ => write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
+            Self::TransactionFailureAgent => Ok(()),
+            _ => write!(fmter, "\n{} Transaction failed.", *ARROW_RED),
         }
     }
 }
@@ -126,50 +136,55 @@ impl AlpmConfigData {
             remotes.push((repo.name.clone(), signature(&repo.sig_level, *DEFAULT_SIGLEVEL).bits(), repo.servers.clone()));
         }
 
-        remotes.push(("pacwrap".into(), 
-            (SigLevel::PACKAGE_MARGINAL_OK | SigLevel::DATABASE_MARGINAL_OK).bits(), 
-            vec![format!("file://{}", env!("PACWRAP_DIST_REPO")), format!("file:///mnt/share/dist-repo/")]));
- 
-        Self {
-            repos: remotes,
-        }
+        remotes.push((
+            "pacwrap".into(),
+            (SigLevel::PACKAGE_MARGINAL_OK | SigLevel::DATABASE_MARGINAL_OK).bits(),
+            vec![
+                format!("file://{}", env!("PACWRAP_DIST_REPO")),
+                format!("file:///mnt/share/dist-repo/"),
+            ],
+        ));
+
+        Self { repos: remotes }
     }
 }
 
 pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm {
     let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").unwrap();
 
-    handle.set_logfile("/mnt/share/pacwrap.log").unwrap(); 
-    handle.set_hookdirs(vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"].iter()).unwrap();
+    handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
+    handle
+        .set_hookdirs(vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"].iter())
+        .unwrap();
     handle.set_cachedirs(vec!["/mnt/share/cache"].iter()).unwrap();
     handle.set_gpgdir("/mnt/share/gnupg").unwrap();
     handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
     handle.set_check_space(false);
     handle.set_disable_dl_timeout(config.alpm().download_timeout());
     handle.set_parallel_downloads(config.alpm().parallel_downloads());
-    handle = register_remote(handle, remotes); 
+    handle = register_remote(handle, remotes);
     handle
 }
 
-pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm { 
+pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm {
     alpm_handle(inshandle.vars(), format!("{}/var/lib/pacman/", inshandle.vars().root()), &*DEFAULT_ALPM_CONF)
 }
 
-fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> Alpm { 
+fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> Alpm {
     let root = insvars.root();
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
     handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
     handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).unwrap();
     handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).unwrap();
-    handle.set_parallel_downloads(CONFIG.alpm().parallel_downloads()); 
+    handle.set_parallel_downloads(CONFIG.alpm().parallel_downloads());
     handle.set_check_space(CONFIG.alpm().check_space());
     handle.set_disable_dl_timeout(CONFIG.alpm().download_timeout());
-    handle = register_remote(handle, remotes); 
+    handle = register_remote(handle, remotes);
     handle
 }
 
-//TODO: Port pacman-key to Rust 
+//TODO: Port pacman-key to Rust
 
 pub fn instantiate_trust() -> Result<()> {
     let path = &format!("{}/pacman/gnupg/", *DATA_DIR);
@@ -180,7 +195,7 @@ pub fn instantiate_trust() -> Result<()> {
 
     println!("{} {}Initializing package trust database...{}", *BAR_GREEN, *BOLD, *RESET);
 
-    if ! Path::new("/usr/share/pacman/keyrings").exists() {
+    if !Path::new("/usr/share/pacman/keyrings").exists() {
         err!(SyncError::UnableToLocateKeyrings)?
     }
 
@@ -192,10 +207,9 @@ pub fn instantiate_trust() -> Result<()> {
     pacman_key(path, vec!["--populate"])
 }
 
-fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm { 
+fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     for repo in &config.repos {
-        let core = handle.register_syncdb_mut(repo.0.clone(), 
-            SigLevel::from_bits(repo.1).unwrap()).unwrap();
+        let core = handle.register_syncdb_mut(repo.0.clone(), SigLevel::from_bits(repo.1).unwrap()).unwrap();
 
         for server in &repo.2 {
             core.add_server(server.as_str()).unwrap();
@@ -208,32 +222,32 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
 }
 
 fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
-     match cache.obtain_base_handle() {
+    match cache.obtain_base_handle() {
         Some(ins) => {
             let db_path = format!("{}/pacman/", *DATA_DIR);
             let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
-            println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET); 
+            println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
             handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
 
             if let Err(err) = handle.syncdbs_mut().update(force) {
                 err!(SyncError::InitializationFailure(err.to_string()))?
             }
-           
-            Alpm::release(handle).unwrap();  
+
+            Alpm::release(handle).unwrap();
 
             for i in cache.registered().iter() {
                 let ins: &InstanceHandle = cache.get_instance(i).unwrap();
                 let vars: &InsVars = ins.vars();
-                let src = &format!("{}/pacman/sync/pacwrap.db",*DATA_DIR);
+                let src = &format!("{}/pacman/sync/pacwrap.db", *DATA_DIR);
                 let dest = &format!("{}/var/lib/pacman/sync/pacwrap.db", vars.root());
-                
+
                 if let Err(error) = filesystem::create_hard_link(src, dest) {
-                     print_warning(error);
+                    print_warning(error);
                 }
 
                 for repo in PACMAN_CONF.repos.iter() {
-                    let src = &format!("{}/pacman/sync/{}.db",*DATA_DIR, repo.name);
+                    let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
                     if let Err(error) = filesystem::create_hard_link(src, dest) {
                         print_warning(error);
@@ -242,8 +256,8 @@ fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
             }
 
             Ok(())
-        },
-        None => err!(SyncError::NoCompatibleRemotes), 
+        }
+        None => err!(SyncError::NoCompatibleRemotes),
     }
 }
 
@@ -252,25 +266,45 @@ fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
         let mut sig = SigLevel::empty();
 
         for level in sigs {
-            sig = sig | if level == "Required" || level == "PackageRequired" {
-                SigLevel::PACKAGE
-            } else if level == "DatabaseRequired" || level == "DatabaseTrustedOnly" {
-                SigLevel::DATABASE
-            } else if level == "PackageOptional" {
-                SigLevel::PACKAGE_OPTIONAL
-            } else if level == "PackageTrustAll" {
-                SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK
-            } else if level == "DatabaseOptional" {
-                SigLevel::DATABASE_OPTIONAL
-            } else if level == "DatabaseTrustAll" {
-                SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK
-            } else {
-                SigLevel::empty()
-            }
+            sig = sig
+                | if level == "Required" || level == "PackageRequired" {
+                    SigLevel::PACKAGE
+                } else if level == "DatabaseRequired" || level == "DatabaseTrustedOnly" {
+                    SigLevel::DATABASE
+                } else if level == "PackageOptional" {
+                    SigLevel::PACKAGE_OPTIONAL
+                } else if level == "PackageTrustAll" {
+                    SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK
+                } else if level == "DatabaseOptional" {
+                    SigLevel::DATABASE_OPTIONAL
+                } else if level == "DatabaseTrustAll" {
+                    SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK
+                } else {
+                    SigLevel::empty()
+                }
         }
 
-        sig 
+        sig
     } else {
         default
     }
+}
+
+fn load_repositories() -> pacmanconf::Config {
+    let path = format!("{}/repositories.conf", *CONFIG_DIR);
+
+    match pacmanconf::Config::from_file(&path) {
+        Ok(config) => config,
+        Err(error) => {
+            let error = error.to_string();
+            let error = error.split("error: ").collect::<Vec<_>>()[1].split("\n").collect::<Vec<&str>>()[0];
+            let error = error!(SyncError::RepoConfError(path, error.to_string()));
+
+            exit(error.error());
+        }
+    }
+}
+
+fn default_signature() -> SigLevel {
+    signature(&CONFIG.alpm().sig_level(), SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL)
 }

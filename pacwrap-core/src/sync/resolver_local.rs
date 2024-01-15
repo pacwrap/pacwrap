@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,9 +19,13 @@
 
 use std::collections::HashSet;
 
-use alpm::{Package, Alpm, PackageReason};
+use alpm::{Alpm, Package, PackageReason};
 
-use crate::{err, Error, sync::{SyncError, transaction::TransactionType, utils::AlpmUtils}};
+use crate::{
+    err,
+    sync::{transaction::TransactionType, utils::AlpmUtils, SyncError},
+    Error,
+};
 
 pub struct LocalDependencyResolver<'a> {
     resolved: HashSet<&'a str>,
@@ -30,9 +34,9 @@ pub struct LocalDependencyResolver<'a> {
     handle: &'a Alpm,
     depth: isize,
     flags: (bool, bool, bool),
-} 
+}
 
-impl <'a>LocalDependencyResolver<'a> {
+impl<'a> LocalDependencyResolver<'a> {
     pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<String>, trans_type: &TransactionType) -> Self {
         Self {
             resolved: HashSet::new(),
@@ -51,14 +55,14 @@ impl <'a>LocalDependencyResolver<'a> {
         if self.depth == 50 {
             err!(SyncError::RecursionDepthExceeded(self.depth))?
         }
-            
+
         self.depth += 1;
         Ok(())
     }
-    
+
     pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<Vec<Package<'a>>, Error> {
         let mut synchronize: Vec<&'a str> = Vec::new();
-        
+
         for pkg in packages {
             if let Some(_) = self.resolved.get(pkg) {
                 continue;
@@ -68,50 +72,46 @@ impl <'a>LocalDependencyResolver<'a> {
                 continue;
             }
 
-            if let Some(pkg) = self.handle.get_local_package(pkg) {    
+            if let Some(pkg) = self.handle.get_local_package(pkg) {
                 if self.depth > 0 {
                     //TODO: Implement proper explicit package handling
-                    if ! self.flags.1
-                    && pkg.reason() == PackageReason::Explicit {
+                    if !self.flags.1 && pkg.reason() == PackageReason::Explicit {
                         continue;
                     }
- 
-                    if pkg.required_by()
+
+                    if pkg
+                        .required_by()
                         .iter()
-                        .filter_map(|p|
-                        match self.resolved.get(p) {
-                            None => Some(()), Some(_) => None
+                        .filter_map(|p| match self.resolved.get(p) {
+                            None => Some(()),
+                            Some(_) => None,
                         })
-                        .count() > 0 {
+                        .count()
+                        > 0
+                    {
                         continue;
                     }
                 }
 
                 self.packages.push(pkg);
                 self.resolved.insert(pkg.name());
-                
-                if ! self.flags.0 {
+
+                if !self.flags.0 {
                     continue;
                 }
 
-                synchronize.extend(pkg.depends()
-                    .iter()
-                    .map(|pkg| pkg.name())
-                    .collect::<Vec<&str>>());
+                synchronize.extend(pkg.depends().iter().map(|pkg| pkg.name()).collect::<Vec<&str>>());
 
-                if ! self.flags.1 {
+                if !self.flags.1 {
                     continue;
                 }
 
-                for package in self.handle.localdb().pkgs() { 
-                    if package.depends()
-                        .iter()
-                        .filter_map(|d| self.resolved.get(d.name()))
-                        .count() > 0 {
+                for package in self.handle.localdb().pkgs() {
+                    if package.depends().iter().filter_map(|d| self.resolved.get(d.name())).count() > 0 {
                         synchronize.push(package.name());
                     }
                 }
-            }             
+            }
         }
 
         if synchronize.len() > 0 && self.flags.0 {

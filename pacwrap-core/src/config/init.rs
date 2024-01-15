@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,14 +17,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{path::Path, fs::File, io::Write};
+use std::{fs::File, io::Write, path::Path};
 
-use crate::{err,
-    Error,
-    Result,
-    ErrorKind,
+use crate::{
+    config::global::CONFIG,
     constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
-    config::global::CONFIG};
+    err,
+    Error,
+    ErrorKind,
+    Result,
+};
 
 static REPO_CONF_DEFAULT: &'static str = r###"## See the pacman.conf(5) manpage for information on repository directives.
 ## All other libalpm-related options therein are ignored.
@@ -72,7 +74,7 @@ impl DirectoryLayout {
     fn instantiate(self) -> Result<()> {
         for dir in self.dirs {
             let path: &str = &format!("{}{}", self.root, dir);
-            
+
             if Path::new(path).exists() {
                 continue;
             }
@@ -88,22 +90,22 @@ impl DirectoryLayout {
 
 fn data_layout() -> DirectoryLayout {
     DirectoryLayout {
-        dirs: vec!("/root", "/home", "/state", "/pacman/sync"),
+        dirs: vec!["/root", "/home", "/state", "/pacman/sync"],
         root: *DATA_DIR,
     }
 }
 
 fn cache_layout() -> DirectoryLayout {
     DirectoryLayout {
-        dirs: vec!("/pkg"),
-        root: *CACHE_DIR
+        dirs: vec!["/pkg"],
+        root: *CACHE_DIR,
     }
 }
 
 fn config_layout() -> DirectoryLayout {
     DirectoryLayout {
-        dirs: vec!("/instance"),
-        root: *CONFIG_DIR
+        dirs: vec!["/instance"],
+        root: *CONFIG_DIR,
     }
 }
 
@@ -114,9 +116,9 @@ fn write_to_file(location: &str, contents: &str) -> Result<()> {
 
     let mut f = match File::create(&location) {
         Ok(f) => f,
-        Err(error) => err!(ErrorKind::IOError(location.into(), error.kind()))?
+        Err(error) => err!(ErrorKind::IOError(location.into(), error.kind()))?,
     };
-   
+
     if let Err(error) = write!(f, "{contents}") {
         err!(ErrorKind::IOError(location.into(), error.kind()))?
     }
@@ -125,11 +127,13 @@ fn write_to_file(location: &str, contents: &str) -> Result<()> {
 }
 
 pub fn init() -> Result<()> {
-    let _ = *CONFIG;
-
     config_layout().instantiate()?;
     data_layout().instantiate()?;
     cache_layout().instantiate()?;
     write_to_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
-    write_to_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)
+    write_to_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)?;
+
+    let _ = *CONFIG;
+
+    Ok(())
 }

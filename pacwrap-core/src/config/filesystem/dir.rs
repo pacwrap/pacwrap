@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,23 +19,27 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs, 
-    config::InsVars, 
-    config::filesystem::{Filesystem, BindError}};
+use crate::{
+    config::{
+        filesystem::{BindError, Filesystem},
+        InsVars,
+    },
+    exec::args::ExecutionArgs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DIR {
+pub struct Dir {
     #[serde(default)]
-    path: Vec<String>
+    path: Vec<String>,
 }
 
-#[typetag::serde]
-impl Filesystem for DIR {
+#[typetag::serde(name = "dir")]
+impl Filesystem for Dir {
     fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
         if self.path.len() == 0 {
             Err(BindError::Fail(format!("Path not specified.")))?
         }
-       
+
         Ok(())
     }
 
@@ -46,6 +50,6 @@ impl Filesystem for DIR {
     }
 
     fn module(&self) -> &'static str {
-        "DIR"
+        "dir"
     }
 }

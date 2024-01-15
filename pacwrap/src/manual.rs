@@ -1,6 +1,6 @@
 /*
  * pacwrap
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,26 +19,27 @@
 
 use indexmap::IndexSet;
 use lazy_static::lazy_static;
-use std::fmt::{Write, Formatter, Display};
+use std::fmt::{Display, Formatter, Write};
 
-use pacwrap_core::{err, 
+use pacwrap_core::{
+    err,
     impl_error,
+    utils::{arguments::Operand, is_color_terminal, is_truecolor_terminal, Arguments},
     Error,
     ErrorTrait,
-    utils::{Arguments, 
-    arguments::Operand,
-    is_color_terminal, 
-    is_truecolor_terminal}};
+};
 
 lazy_static! {
-    static ref HELP_ALL: Vec<HelpTopic> = 
-        [HelpTopic::Execute, 
+    static ref HELP_ALL: Vec<HelpTopic> = [
+        HelpTopic::Execute,
         HelpTopic::Sync,
         HelpTopic::Process,
         HelpTopic::Utils,
         HelpTopic::Help,
-        HelpTopic::Version, 
-        HelpTopic::Copyright].into();
+        HelpTopic::Version,
+        HelpTopic::Copyright
+    ]
+    .into();
 }
 
 #[derive(Debug)]
@@ -63,11 +64,12 @@ pub fn help(mut args: &mut Arguments) -> Result<(), Error> {
     let mut buffer = String::new();
 
     for topic in help.0 {
-        topic.write(&mut buffer, help.1).unwrap(); 
+        topic.write(&mut buffer, help.1).unwrap();
     }
 
     match help.1 {
-        HelpLayout::Console => print!("\x1b[?7l{buffer}\x1b[?7h"), _ => print!("{buffer}"),
+        HelpLayout::Console => print!("\x1b[?7l{buffer}\x1b[?7h"),
+        _ => print!("{buffer}"),
     }
 
     Ok(())
@@ -75,91 +77,64 @@ pub fn help(mut args: &mut Arguments) -> Result<(), Error> {
 
 fn ascertain_help<'a>(args: &mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout), Error> {
     let mut layout = match is_color_terminal() {
-        true => &HelpLayout::Console, false => &HelpLayout::Dumb,
+        true => &HelpLayout::Console,
+        false => &HelpLayout::Dumb,
     };
-    let mut topic: Vec<&HelpTopic> = vec!(&HelpTopic::Default);
+    let mut topic: Vec<&HelpTopic> = vec![&HelpTopic::Default];
     let mut more = false;
 
-    while let Some(arg) = args.next() { 
+    while let Some(arg) = args.next() {
         match arg {
-            Operand::Long("format")
-                | Operand::Long("help")
-                | Operand::Short('f')
-                | Operand::Short('h') 
-                => continue,
-            Operand::Short('m') 
-                | Operand::Long("more") 
-                => more = true,
-            Operand::LongPos("format", "dumb") 
-                | Operand::ShortPos('f', "dumb") 
-                => layout = &HelpLayout::Dumb, 
-            Operand::LongPos("format", "markdown") 
-                | Operand::ShortPos('f', "markdown") 
-                => layout = &HelpLayout::Markdown,
-            Operand::LongPos("format", "man") 
-                | Operand::ShortPos('f', "man") 
-                => layout = &HelpLayout::Man,
-            Operand::LongPos("format", "ansi") 
-                | Operand::ShortPos('f', "ansi") 
-                => layout = &HelpLayout::Console,
+            Operand::Long("format") | Operand::Long("help") | Operand::Short('f') | Operand::Short('h') => continue,
+            Operand::Short('m') | Operand::Long("more") => more = true,
+            Operand::ShortPos('f', "man") | Operand::LongPos("format", "man") => layout = &HelpLayout::Man,
+            Operand::ShortPos('f', "ansi") | Operand::LongPos("format", "ansi") => layout = &HelpLayout::Console,
+            Operand::ShortPos('f', "dumb") | Operand::LongPos("format", "dumb") => layout = &HelpLayout::Dumb,
+            Operand::ShortPos('f', "markdown") | Operand::LongPos("format", "markdown") => layout = &HelpLayout::Markdown,
             Operand::ShortPos('h', "sync")
-                | Operand::ShortPos('h', "S")
-                | Operand::LongPos("help", "sync")
-                | Operand::LongPos("help", "S") 
-                => topic.push(&HelpTopic::Sync),
+            | Operand::ShortPos('h', "S")
+            | Operand::LongPos("help", "sync")
+            | Operand::LongPos("help", "S") => topic.push(&HelpTopic::Sync),
             Operand::ShortPos('h', "E")
-                | Operand::ShortPos('h', "exec")
-                | Operand::LongPos("help", "E")
-                | Operand::LongPos("help", "exec") 
-                => topic.push(&HelpTopic::Execute),
+            | Operand::ShortPos('h', "exec")
+            | Operand::LongPos("help", "E")
+            | Operand::LongPos("help", "exec") => topic.push(&HelpTopic::Execute),
             Operand::ShortPos('h', "process")
-                | Operand::ShortPos('h', "P")
-                | Operand::LongPos("help", "process")
-                | Operand::LongPos("help", "P")
-                => topic.push(&HelpTopic::Process),
+            | Operand::ShortPos('h', "P")
+            | Operand::LongPos("help", "process")
+            | Operand::LongPos("help", "P") => topic.push(&HelpTopic::Process),
             Operand::ShortPos('h', "utils")
-                | Operand::ShortPos('h', "U")
-                | Operand::LongPos("help", "utils")
-                | Operand::LongPos("help", "U") 
-                => topic.push(&HelpTopic::Utils),
+            | Operand::ShortPos('h', "U")
+            | Operand::LongPos("help", "utils")
+            | Operand::LongPos("help", "U") => topic.push(&HelpTopic::Utils),
             Operand::ShortPos('h', "help")
-                | Operand::ShortPos('h', "h")
-                | Operand::LongPos("help", "help")
-                | Operand::LongPos("help", "h") 
-                => topic.push(&HelpTopic::Help),
-            Operand::ShortPos('h', "synopsis") 
-                | Operand::LongPos("help", "synopsis") 
-                => topic.push(&HelpTopic::Default),
+            | Operand::ShortPos('h', "h")
+            | Operand::LongPos("help", "help")
+            | Operand::LongPos("help", "h") => topic.push(&HelpTopic::Help),
             Operand::ShortPos('h', "V")
-                | Operand::ShortPos('h', "version")
-                | Operand::LongPos("help", "V")
-                | Operand::LongPos("help", "version")
-                => topic.push(&HelpTopic::Version),
-            Operand::ShortPos('h', "copyright") 
-                | Operand::LongPos("help", "copyright") 
-                => topic.push(&HelpTopic::Copyright),
-            Operand::ShortPos('h', "all")
-                | Operand::LongPos("help", "all")
-                | Operand::Short('a')
-                | Operand::Long("all") 
-                => topic.extend(HELP_ALL.iter()),
-            Operand::ShortPos('h', topic) 
-                | Operand::LongPos("help", topic) 
-                => err!(ErrorKind::InvalidTopic(topic.into()))?,
-           _ => args.invalid_operand()?,
+            | Operand::ShortPos('h', "version")
+            | Operand::LongPos("help", "V")
+            | Operand::LongPos("help", "version") => topic.push(&HelpTopic::Version),
+            Operand::ShortPos('h', "copyright") | Operand::LongPos("help", "copyright") => topic.push(&HelpTopic::Copyright),
+            Operand::ShortPos('h', "synopsis") | Operand::LongPos("help", "synopsis") => topic.push(&HelpTopic::Default),
+            Operand::ShortPos('h', "all") | Operand::LongPos("help", "all") | Operand::Short('a') | Operand::Long("all") =>
+                topic.extend(HELP_ALL.iter()),
+            Operand::ShortPos('h', topic) | Operand::LongPos("help", topic) => err!(ErrorKind::InvalidTopic(topic.into()))?,
+            _ => args.invalid_operand()?,
         }
     }
 
     let len = topic.len();
-    let start = if more || len == 1 || len > 7 { 0 } else { 1 }; 
+    let start = if more || len == 1 || len > 7 { 0 } else { 1 };
 
     args.set_index(1);
-    Ok((topic.drain(start..).collect(), layout))
+    Ok((topic.drain(start ..).collect(), layout))
 }
 
 fn minimal(args: &mut Arguments) -> bool {
-    match args.next().unwrap_or_default() { 
-        Operand::LongPos("version", "min") | Operand::ShortPos('V', "min") => true, _ => false
+    match args.next().unwrap_or_default() {
+        Operand::LongPos("version", "min") | Operand::ShortPos('V', "min") => true,
+        _ => false,
     }
 }
 
@@ -172,14 +147,14 @@ enum HelpTopic {
     Process,
     Help,
     Copyright,
-    Version
+    Version,
 }
 
-enum HelpLayout { 
+enum HelpLayout {
     Man,
     Dumb,
     Markdown,
-    Console
+    Console,
 }
 
 impl HelpLayout {
@@ -196,7 +171,7 @@ impl HelpLayout {
         match self {
             Self::Console => "    [37;1m",
             Self::Markdown => "* **",
-            Self::Man => ".TP\n\\fB", 
+            Self::Man => ".TP\n\\fB",
             Self::Dumb => "    ",
         }
     }
@@ -204,17 +179,15 @@ impl HelpLayout {
     fn sub_text(&self) -> &str {
         match self {
             Self::Console | Self::Dumb => "    ",
-            Self::Man => ".PP\n", 
-            Self::Markdown => "", 
+            Self::Man => ".PP\n",
+            Self::Markdown => "",
         }
     }
 
     fn reset(&self) -> &str {
         match self {
             Self::Console => "[0m",
-            Self::Markdown 
-                | Self::Man 
-                | Self::Dumb => ""
+            Self::Markdown | Self::Man | Self::Dumb => "",
         }
     }
 
@@ -223,7 +196,7 @@ impl HelpLayout {
             Self::Console => "[0m",
             Self::Man => "\\fP",
             Self::Markdown => "**",
-            Self::Dumb => ""
+            Self::Dumb => "",
         }
     }
 
@@ -247,21 +220,21 @@ impl HelpLayout {
 impl HelpTopic {
     fn write(&self, buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
         match self {
-            Self::Default => default(buf,layout),
-            Self::Sync => sync(buf,layout),
-            Self::Execute => execute(buf,layout),
-            Self::Process => process(buf,layout),
-            Self::Utils => utils(buf,layout),
-            Self::Help => meta(buf,layout),
-            Self::Copyright => copyright(buf,layout),
-            Self::Version => version(buf,layout),
+            Self::Default => default(buf, layout),
+            Self::Sync => sync(buf, layout),
+            Self::Execute => execute(buf, layout),
+            Self::Process => process(buf, layout),
+            Self::Utils => utils(buf, layout),
+            Self::Help => meta(buf, layout),
+            Self::Copyright => copyright(buf, layout),
+            Self::Version => version(buf, layout),
         }
     }
 }
 
 fn default(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
     let head = layout.head();
-    let tab = layout.tab(); 
+    let tab = layout.tab();
     let sub = layout.sub();
     let bold = layout.bold();
     let reset = layout.reset();
@@ -269,20 +242,28 @@ fn default(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error>
     let name = env!("CARGO_PKG_NAME");
 
     match layout {
-        HelpLayout::Man => writeln!(buf, ".nh\n.TH {name} 1 \"{}-{} ({})\" {name} \"User Manual\"\n",
-            env!("CARGO_PKG_VERSION"), 
-            env!("PACWRAP_BUILDSTAMP"), 
-            env!("PACWRAP_BUILDTIME"))?,
-        HelpLayout::Markdown => writeln!(buf, "# Pacwrap User Manual
+        HelpLayout::Man => writeln!(
+            buf,
+            ".nh\n.TH {name} 1 \"{}-{} ({})\" {name} \"User Manual\"\n",
+            env!("CARGO_PKG_VERSION"),
+            env!("PACWRAP_BUILDSTAMP"),
+            env!("PACWRAP_BUILDTIME")
+        )?,
+        HelpLayout::Markdown => writeln!(
+            buf,
+            "# Pacwrap User Manual
 
-This document was generated by the {name} binary on {} with version {}-{} of the program.\n", 
-            env!("PACWRAP_BUILDTIME"), 
-            env!("CARGO_PKG_VERSION"), 
-            env!("PACWRAP_BUILDSTAMP"))?,
-        _ => ()
+This document was generated by the {name} binary on {} with version {}-{} of the program.\n",
+            env!("PACWRAP_BUILDTIME"),
+            env!("CARGO_PKG_VERSION"),
+            env!("PACWRAP_BUILDSTAMP")
+        )?,
+        _ => (),
     }
 
-    writeln!(buf, "{head}NAME{reset}
+    writeln!(
+        buf,
+        "{head}NAME{reset}
 {tab}pacwrap - Command-line application which facilitates the creation, management, and execution of unprivileged, 
 {tab}sandboxed containers with bubblewrap and libalpm.
 
@@ -307,7 +288,8 @@ This document was generated by the {name} binary on {} with version {}-{} of the
 {tab}{tab}Invoke a printout of this manual to {bold}STDOUT{reset_bold}.
 
 {sub}-V, --version{reset_bold}
-{tab}{tab}Display version and copyright information in {bold}STDOUT{reset_bold}.\n")
+{tab}{tab}Display version and copyright information in {bold}STDOUT{reset_bold}.\n"
+    )
 }
 
 fn execute(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
@@ -317,13 +299,16 @@ fn execute(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error>
     let reset = layout.reset();
     let reset_bold = layout.reset_bold();
 
-    writeln!(buf, "{head}EXECUTE{reset}
+    writeln!(
+        buf,
+        "{head}EXECUTE{reset}
 
 {sub}-r, --root{reset_bold}
 {tab}{tab}Execute operation with fakeroot and fakechroot. Facilitates a command with faked privileges.
 	
 {sub}-s, --shell{reset_bold}
-{tab}{tab}Invoke a bash shell\n")
+{tab}{tab}Invoke a bash shell\n"
+    )
 }
 
 fn meta(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
@@ -334,7 +319,9 @@ fn meta(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
     let reset_bold = layout.reset_bold();
     let tab = layout.tab();
 
-    writeln!(buf, "{head}HELP{reset}
+    writeln!(
+             buf,
+             "{head}HELP{reset}
 
 {sub}-m, --more{reset_bold}
 {tab}{tab}When specifying a topic to display, show the default topic in addition to specified options.
@@ -345,7 +332,8 @@ fn meta(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 {tab}{tab}outside the context of package maintenance. 'man' option produces troff-formatted documents for man pages.
 
 {sub}-a, --all, --help=all{reset_bold}
-{tab}{tab}Display all help topics.\n")
+{tab}{tab}Display all help topics.\n"
+    )
 }
 
 fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
@@ -353,10 +341,12 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
     let bold = layout.bold();
     let tab = layout.tab();
     let sub = layout.sub();
-    let reset = layout.reset(); 
+    let reset = layout.reset();
     let reset_bold = layout.reset_bold();
 
-    writeln!(buf, "{head}SYNCHRONIZATION{reset}
+    writeln!(
+             buf,
+             "{head}SYNCHRONIZATION{reset}
 
 {sub}-y, --refresh{reset_bold}
 {tab}{tab}Synchronize remote package databases. Specify up to 2 times to force a refresh.
@@ -377,29 +367,36 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 
 {sub}-b, --base{reset_bold}
 {tab}{tab}Base container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
+{tab}{tab}
 {tab}{tab}This container type is used as the base layer for all downstream containers. Only one base container 
-{tab}{tab}dependency per slice or per root is supported. Filesystem and package deduplication via slices 
-{tab}{tab}and root containers is recommended, but optional.
+{tab}{tab}dependency per slice or aggregate is supported. Filesystem and package deduplication via slices and 
+{tab}{tab}aggregate containers are recommended, but optional.
 
 {sub}-s, --slice{reset_bold}
 {tab}{tab}Slice container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
-{tab}{tab}Requires a base dependency be specified, and one or more sliced dependencies, in order to ascertain
-{tab}{tab}foreign packages and influence ordering of downstream synchronization target(s). Container slicing 
-{tab}{tab}provides the ability to install packages in a lightweight, sliced filesytem, which aid in the 
-{tab}{tab}deduplication of common downstream package and filesystem dependencies e.g. graphics drivers, 
-{tab}{tab}graphical toolkits, fonts, etc..
+{tab}{tab}
+{tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
+{tab}{tab}packages and influence ordering of downstream synchronization target(s). Container slicing provies
+{tab}{tab}the ability to install packages in a lightweight, sliced filesytem, which aid in the deduplication 
+{tab}{tab}of common downstream package and filesystem dependencies.
+{tab}{tab}
+{tab}{tab}Useful for graphics drivers, graphical toolkits, fonts, etc.; these are not meant for applications.
 
-{sub}-r, --root{reset_bold}
-{tab}{tab}Root container type. Specify alongside {bold}-c, --create{reset_bold} to this assign container type during creation.
-{tab}{tab}Requires a base dependency be specified, and optionally one or more sliced dependencies, in order 
-{tab}{tab}to ascertain foreign packages and influence ordering of this target. These containers are ideal 
-{tab}{tab}for installing software in with the least amount of filesystem and package synchronization overhead.
+{sub}-a, --aggegrate{reset_bold}
+{tab}{tab}Aggregate container type. Specify alongside {bold}-c, --create{reset_bold} to this assign container type during creation.
+{tab}{tab}
+{tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, in order to acertain foreign
+{tab}{tab}packages and amalgamate the target. These containers are ideal for installing software with the aid of
+{tab}{tab}filesystem and package deduplication. 
+{tab}{tab}
+{tab}{tab}Useful for all general purpose applications, browsers, e-mail clients, and even terminal user interface 
+{tab}{tab}applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
 
 {sub}-t, --target=TARGET{reset_bold}
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub}-d, --dep=DEPEND{reset_bold}
-{tab}{tab}Specify a dependency container for the specified operation.
+{tab}{tab}Specify a dependent container for the specified operation.
 
 {sub}-o, --target-only{reset_bold}
 {tab}{tab}Apply specified operation on the specified target only.
@@ -413,17 +410,20 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 {tab}{tab}Transact on resident containers with a database-only transaction.
 
 {sub}--noconfirm{reset_bold}
-{tab}{tab}Override confirmation prompts and confirm all operations.\n")
-
+{tab}{tab}Override confirmation prompts and confirm all operations.\n"
+    )
 }
 
 fn process(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
     let head = layout.head();
     let tab = layout.tab();
     let reset = layout.reset();
- 
-    writeln!(buf, "{head}PROCESS{reset}
-{tab}{tab}-TODO-\n")
+
+    writeln!(
+        buf,
+        "{head}PROCESS{reset}
+{tab}{tab}-TODO-\n"
+    )
 }
 
 fn utils(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
@@ -431,8 +431,11 @@ fn utils(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
     let tab = layout.tab();
     let reset = layout.reset();
 
-    writeln!(buf, "{head}UTILITIES{reset}
-{tab}{tab}-TODO-\n")
+    writeln!(
+        buf,
+        "{head}UTILITIES{reset}
+{tab}{tab}-TODO-\n"
+    )
 }
 
 fn version(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
@@ -449,14 +452,17 @@ fn version(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error>
     let release = env!("PACWRAP_BUILD");
     let version_num = env!("CARGO_PKG_VERSION");
 
-    writeln!(buf, "{head}VERSION{reset}
+    writeln!(
+        buf,
+        "{head}VERSION{reset}
 
 {sub}-V, --version, --version=min{reset_bold}
 {tab}{tab}Sends version information to {bold}STDOUT{reset_bold} with colourful ASCII art. 
 {tab}{tab}The 'min' option provides a minimalistic output as is provided to non-colour terms.
 
 {sub_text}This documentation was generated by {name} v{version_num}-{suffix}-{release} ({timestamp}).
-{tab}Please seek relevant documentation if '{name} -V' mismatches with the aforementioned.\n")
+{tab}Please seek relevant documentation if '{name} -V' mismatches with the aforementioned.\n"
+    )
 }
 
 fn copyright(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
@@ -464,22 +470,25 @@ fn copyright(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Erro
     let tab = layout.tab();
     let reset = layout.reset();
 
-    writeln!(buf, "{head}COPYRIGHT{reset}
+    writeln!(
+        buf,
+        "{head}COPYRIGHT{reset}
 
 {tab}{tab}Copyright (C) 2023-2024 Xavier R.M.
 
 {tab}{tab}This program may be freely redistributed under the
-{tab}{tab}terms of the GNU General Public License v3 only.\n")
+{tab}{tab}terms of the GNU General Public License v3 only.\n"
+    )
 }
 
 pub fn print_version(mut args: &mut Arguments) -> Result<(), Error> {
-    let name = env!("CARGO_PKG_NAME"); 
-    let version = env!("CARGO_PKG_VERSION"); 
+    let name = env!("CARGO_PKG_NAME");
+    let version = env!("CARGO_PKG_VERSION");
     let suffix = env!("PACWRAP_BUILDSTAMP");
     let timestamp = env!("PACWRAP_BUILDTIME");
     let release = env!("PACWRAP_BUILD");
 
-    if ! minimal(&mut args) && is_truecolor_terminal() {
+    if !minimal(&mut args) && is_truecolor_terminal() {
         println!("\x1b[?7l\n               [0m[38;2;8;7;6m [0m[38;2;35;31;23mR[0m[38;2;62;56;41mP[0m[38;2;90;81;58mA[0m[38;2;117;105;76mA[0m[38;2;146;131;94mC[0m[38;2;174;156;111mW[0m[38;2;204;182;130mW[0m[38;2;225;200;142mR[0m[38;2;196;173;120mR[0m[38;2;149;130;91mA[0m[38;2;101;88;62mA[0m[38;2;53;46;33mP[0m[38;2;10;8;6m                 [0m
         [0m[38;2;14;12;10m [0m[38;2;40;36;26mR[0m[38;2;67;60;43mA[0m[38;2;93;83;60mP[0m[38;2;120;107;77mP[0m[38;2;147;132;95mP[0m[38;2;175;157;112mA[0m[38;2;201;180;129mC[0m[38;2;225;202;144mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;205;144mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;221;195;135mC[0m[38;2;180;158;110mA[0m[38;2;134;118;82mP[0m[38;2;86;76;53mA[0m[38;2;38;34;24mR[0m[38;2;3;3;2m            [0m
 [0m[38;2;9;8;6m [0m[38;2;38;34;25mR[0m[38;2;66;59;43mA[0m[38;2;94;84;60mP[0m[38;2;123;109;79mP[0m[38;2;151;135;97mP[0m[38;2;180;161;114mA[0m[38;2;209;190;115mC[0m[38;2;234;216;110m#[0m[38;2;238;221;100m#[0m[38;2;238;222;99m#[0m[38;2;237;219;106m#[0m[38;2;234;214;123m#[0m[38;2;230;207;143mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;206;146mC[0m[38;2;230;205;144mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;230;202;139mC[0m[38;2;211;186;129mC[0m[38;2;165;145;101mA[0m[38;2;117;103;72mP[0m[38;2;69;61;43mA[0m[38;2;22;19;14mR       [0m
@@ -502,14 +511,16 @@ pub fn print_version(mut args: &mut Arguments) -> Result<(), Error> {
               [0m[38;2;25;22;16mR[0m[38;2;127;113;79mP[0m[38;2;216;192;132mC[0m[38;2;226;201;137mC[0m[38;2;224;199;129mC[0m[38;2;223;197;123mC[0m[38;2;223;197;123mC[0m[38;2;223;197;123mC[0m[38;2;211;186;117mC[0m[38;2;157;139;88mP[0m[38;2;103;91;58mP[0m[38;2;48;42;28mR[0m[38;2;5;4;3m                    [0m
                 [0m[38;2;28;25;18mR[0m[38;2;137;123;85mP[0m[38;2;215;190;125mC[0m[38;2;174;154;98mA[0m[38;2;118;104;66mP[0m[38;2;61;54;35mA[0m[38;2;9;8;5m                        [0m\n\x1b[?7h");
     } else {
-        println!("{name} v{version}-{suffix}-{release} ({timestamp})
+        println!(
+            "{name} v{version}-{suffix}-{release} ({timestamp})
 Copyright (C) 2023-2024 Xavier R.M.
 
 Website: https://pacwrap.sapphirus.org/
 Github: https://github.com/sapphirusberyl/pacwrap
 
 This program may be freely redistributed under the
-terms of the GNU General Public License v3 only.\n");
+terms of the GNU General Public License v3 only.\n"
+        );
     }
     Ok(())
 }

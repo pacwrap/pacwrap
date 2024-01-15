@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,57 +17,66 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::result::Result as StdResult;
 use alpm::Alpm;
 use dialoguer::console::Term;
-use simplebyteunit::simplebyteunit::{SI, ToByteUnit};
+use simplebyteunit::simplebyteunit::{ToByteUnit, SI};
+use std::result::Result as StdResult;
 
-use crate::{err,
+use crate::{
+    config::InstanceHandle,
+    constants::{BOLD, DIM, RESET},
+    err,
+    exec::transaction_agent,
+    sync::{
+        self,
+        transaction::{
+            Transaction,
+            TransactionAggregator,
+            TransactionFlags,
+            TransactionHandle,
+            TransactionParameters,
+            TransactionState::{self, *},
+            TransactionType::{self, *},
+        },
+        utils::erroneous_preparation,
+        SyncError,
+    },
+    utils::prompt::prompt,
     Error,
     Result,
-    exec::transaction_agent, 
-    sync::{self,
-        SyncError,
-        transaction::{Transaction, 
-            TransactionState, 
-            TransactionType,
-            TransactionHandle, 
-            TransactionAggregator,
-            TransactionFlags, 
-            TransactionParameters},
-        utils::erroneous_preparation}, 
-    utils::prompt::prompt,
-    constants::{RESET, BOLD, DIM},
-    config::InstanceHandle};
-
+};
 
 pub struct Commit {
     state: TransactionState,
     keyring: bool,
 }
 
-impl Transaction for Commit { 
+impl Transaction for Commit {
     fn new(new: TransactionState, _: &TransactionAggregator) -> Box<Self> {
-        let kr = match new { 
-            TransactionState::Commit(bool) => bool, _ => false
+        let kr = match new {
+            Commit(bool) => bool,
+            _ => false,
         };
 
-        Box::new(Self { 
-            state: new,
-            keyring: kr,
-        })
+        Box::new(Self { state: new, keyring: kr })
     }
 
-    fn engage(&self, ag: &mut TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> Result<TransactionState> {
+    fn engage(
+        &self,
+        ag: &mut TransactionAggregator,
+        handle: &mut TransactionHandle,
+        inshandle: &InstanceHandle,
+    ) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
         let ready = handle.trans_ready(&ag.action());
         let state = self.state.as_str();
 
         if let Err(_) = ready {
-            match ready_state(handle, ag.action(), &self.state) { 
-                Some(result) => return result, None => ready?,
-            } 
-        } 
+            match ready_state(handle, ag.action(), &self.state) {
+                Some(result) => return result,
+                None => ready?,
+            }
+        }
 
         if let Err(error) = handle.alpm_mut().trans_prepare() {
             erroneous_preparation(error)?
@@ -75,12 +84,13 @@ impl Transaction for Commit {
 
         let result = confirm(&self.state, ag, handle);
         let result = match result {
-            Err(result) => return result, Ok(result) => result
+            Err(result) => return result,
+            Ok(result) => result,
         };
 
-        handle.set_alpm(None); 
+        handle.set_alpm(None);
 
-        let parameters =  &TransactionParameters::new(*ag.action(), *handle.get_mode(), result);
+        let parameters = &TransactionParameters::new(*ag.action(), *handle.get_mode(), result);
         let mut agent = transaction_agent(inshandle, parameters, handle.metadata())?;
 
         match agent.wait() {
@@ -90,84 +100,100 @@ impl Transaction for Commit {
                         ag.keyring_update(inshandle)?;
                     }
 
-                    handle.set_alpm(Some(sync::instantiate_alpm(inshandle))); 
-                    handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?; 
+                    handle.set_alpm(Some(sync::instantiate_alpm(inshandle)));
+                    handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
                     ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
                     next_state(handle, ag.action(), &self.state, true)
-                },
+                }
                 1 => err!(SyncError::TransactionFailureAgent),
                 2 => err!(SyncError::ParameterAcquisitionFailure),
-                3 => err!(SyncError::DeserializationFailure), 
+                3 => err!(SyncError::DeserializationFailure),
                 4 => err!(SyncError::InvalidMagicNumber),
                 5 => err!(SyncError::AgentVersionMismatch),
-                _ => err!(SyncError::TransactionFailure(format!("Generic failure of agent: Exit code {}", exit_status.code().unwrap_or(-1))))?,  
+                _ => err!(SyncError::TransactionFailure(format!(
+                    "Generic failure of agent: Exit code {}",
+                    exit_status.code().unwrap_or(-1)
+                )))?,
             },
             Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
         }
-    } 
+    }
 }
 
-fn confirm(state: &TransactionState, ag: &TransactionAggregator, handle: &mut TransactionHandle) -> StdResult<(u64, u64), Result<TransactionState>> {
+fn confirm(
+    state: &TransactionState,
+    ag: &TransactionAggregator,
+    handle: &mut TransactionHandle,
+) -> StdResult<(u64, u64), Result<TransactionState>> {
     let sum = summary(handle.alpm());
 
-    if ! handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
+    if !handle.get_mode().bool() || ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE) {
         println!("{}", sum.0);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            Err(next_state(handle, ag.action(), state, false))? 
-        } 
+            Err(next_state(handle, ag.action(), state, false))?
+        }
 
-        if ! ag.flags().contains(TransactionFlags::NO_CONFIRM) {
+        if !ag.flags().contains(TransactionFlags::NO_CONFIRM) {
             let action = ag.action().as_str();
             let query = format!("Proceed with {action}?");
 
             if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
                 Err(next_state(handle, ag.action(), state, false))?
             }
-        } 
+        }
     }
 
     handle.alpm_mut().trans_release().ok();
     Ok(sum.1)
 }
 
-fn next_state<'a>(handle: &mut TransactionHandle, action: &TransactionType, state: &TransactionState, updated: bool) -> Result<TransactionState> {
+fn next_state<'a>(
+    handle: &mut TransactionHandle,
+    action: &TransactionType,
+    state: &TransactionState,
+    updated: bool,
+) -> Result<TransactionState> {
     handle.alpm_mut().trans_release().ok();
-  
+
     match action {
-        TransactionType::Remove(..) => Ok(match state {
-            TransactionState::CommitForeign => TransactionState::Complete(updated),
-            TransactionState::Commit(_) => TransactionState::PrepareForeign, 
-            _ => unreachable!()
+        Remove(..) => Ok(match state {
+            CommitForeign => Complete(updated),
+            Commit(_) => PrepareForeign(updated),
+            _ => unreachable!(),
         }),
-        TransactionType::Upgrade(..) => Ok(match state {
-            TransactionState::Commit(_) => TransactionState::Complete(updated),
-            TransactionState::CommitForeign => TransactionState::Stage, 
-            _ => unreachable!()
+        Upgrade(..) => Ok(match state {
+            Commit(_) => Complete(updated),
+            CommitForeign => Stage,
+            _ => unreachable!(),
         }),
     }
 }
 
-fn ready_state<'a>(handle: &mut TransactionHandle, action: &TransactionType, state: &TransactionState) -> Option<Result<TransactionState>> {
+fn ready_state<'a>(
+    handle: &mut TransactionHandle,
+    action: &TransactionType,
+    state: &TransactionState,
+) -> Option<Result<TransactionState>> {
     handle.alpm_mut().trans_release().ok();
- 
-    match action { 
-        TransactionType::Remove(..) => match state { 
-            TransactionState::CommitForeign => None,
-            TransactionState::Commit(_) => Some(Ok(TransactionState::PrepareForeign)),
-            _ => unreachable!()
+
+    match action {
+        Remove(..) => match state {
+            CommitForeign => None,
+            Commit(_) => Some(Ok(PrepareForeign(false))),
+            _ => unreachable!(),
         },
-        TransactionType::Upgrade(..) => match state { 
-            TransactionState::Commit(_) => None,
-            TransactionState::CommitForeign => Some(Ok(TransactionState::Stage)),
-            _ => unreachable!()
+        Upgrade(..) => match state {
+            Commit(_) => None,
+            CommitForeign => Some(Ok(Stage)),
+            _ => unreachable!(),
         },
-    } 
+    }
 }
 
-fn summary(handle: &Alpm) -> (String, (u64, u64)) { 
+fn summary(handle: &Alpm) -> (String, (u64, u64)) {
     let mut installed_size: i64 = 0;
-    let mut installed_size_old: i64 = 0; 
+    let mut installed_size_old: i64 = 0;
     let mut download: i64 = 0;
     let mut files_to_download: u64 = 0;
     let mut current_line_len: usize = 0;
@@ -175,44 +201,49 @@ fn summary(handle: &Alpm) -> (String, (u64, u64)) {
     let packages = if remove { handle.trans_remove() } else { handle.trans_add() };
     let size = Term::size(&Term::stdout());
     let preface = format!("Packages ({}) ", packages.len());
-    let preface_newline = " ".repeat(preface.len()); 
+    let preface_newline = " ".repeat(preface.len());
     let line_delimiter = size.1 as usize - preface.len();
-    let mut pkglist: String = String::new(); 
+    let mut pkglist: String = String::new();
     let mut summary = format!("\n{}{preface}{}", *BOLD, *RESET);
 
-    for pkg_sync in packages { 
+    for pkg_sync in packages {
         let pkg = match handle.localdb().pkg(pkg_sync.name()) {
-            Ok(pkg) => pkg, Err(_) => pkg_sync,
+            Ok(pkg) => pkg,
+            Err(_) => pkg_sync,
         };
-        let output = format!("{}-{}{}{} ", pkg.name(), *DIM, pkg_sync.version(), *RESET); 
+        let output = format!("{}-{}{}{} ", pkg.name(), *DIM, pkg_sync.version(), *RESET);
         let download_size = pkg_sync.download_size();
         let string_len = pkg.name().len() + pkg_sync.version().len() + 2;
 
-        if current_line_len+string_len >= line_delimiter { 
+        if current_line_len + string_len >= line_delimiter {
             summary.push_str(&format!("{pkglist}\n"));
             pkglist = preface_newline.clone();
-            current_line_len = pkglist.len(); 
+            current_line_len = pkglist.len();
         }
 
         current_line_len += string_len;
-        installed_size_old += pkg.isize(); 
+        installed_size_old += pkg.isize();
         installed_size += pkg_sync.isize();
-        
+
         if download_size > 0 {
             download += download_size;
             files_to_download += 1;
         }
 
-        pkglist.push_str(&output);  
+        pkglist.push_str(&output);
     }
 
-    let total_str = if remove { "Total Removed Size" } else { "Total Installed Size" }; 
-    let net = installed_size-installed_size_old;
+    let total_str = if remove {
+        "Total Removed Size"
+    } else {
+        "Total Installed Size"
+    };
+    let net = installed_size - installed_size_old;
 
-    summary.push_str(&format!("{pkglist}\n\n{}{total_str}{}: {}\n", *BOLD, *RESET, installed_size.to_byteunit(SI))); 
-  
+    summary.push_str(&format!("{pkglist}\n\n{}{total_str}{}: {}\n", *BOLD, *RESET, installed_size.to_byteunit(SI)));
+
     if net != 0 {
-        summary.push_str(&format!("{}Net Upgrade Size{}: {}\n", *BOLD, *RESET, net.to_byteunit(SI))); 
+        summary.push_str(&format!("{}Net Upgrade Size{}: {}\n", *BOLD, *RESET, net.to_byteunit(SI)));
     }
 
     if download > 0 {

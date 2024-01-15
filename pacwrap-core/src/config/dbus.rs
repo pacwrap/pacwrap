@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,13 +19,13 @@
 
 use crate::exec::args::ExecutionArgs;
 
-use dyn_clone::{DynClone, clone_trait_object};
+use dyn_clone::{clone_trait_object, DynClone};
 
-mod socket;
 mod appindicator;
+mod socket;
 mod xdg_portal;
 
-#[typetag::serde(tag = "permission")]
+#[typetag::serde(tag = "module")]
 pub trait Dbus: DynClone {
     fn register(&self, args: &mut ExecutionArgs);
 }

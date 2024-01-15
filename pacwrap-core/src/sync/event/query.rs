@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -29,20 +29,20 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let pkg_a = x.conflict().package1();
             let pkg_b = x.conflict().package2();
             let prompt_string = format!("Conflict between {pkg_a} and {pkg_b}; Remove {pkg_b}?");
-            
+
             if let Ok(_) = prompt("->", prompt_string, false) {
                 x.set_remove(true);
             }
-        },
-        Replace(x) => { 
+        }
+        Replace(x) => {
             let old = x.oldpkg().name();
             let new = x.newpkg().name();
             let prompt_string = format!("Replace package {old} with {new}?");
-            
+
             if let Ok(_) = prompt("->", prompt_string, false) {
                 x.set_replace(true);
             }
-        },
+        }
         Corrupted(mut x) => {
             let filepath = x.filepath();
             let filename = Path::new(filepath).file_name().unwrap().to_str().unwrap();
@@ -52,18 +52,18 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             if let Ok(_) = prompt("::", prompt_string, true) {
                 x.set_remove(true);
             }
-        },
+        }
         ImportKey(mut x) => {
             let key = x.key();
             let fingerprint = key.fingerprint();
             let email = key.email();
             let name = key.name();
             let prompt_string = format!("Import key {fingerprint},\"{name} <{email}>\" to keyring?");
-            
+
             if let Ok(_) = prompt("->", prompt_string, true) {
                 x.set_import(true);
-            } 
-        },
+            }
+        }
         _ => (),
     }
 }

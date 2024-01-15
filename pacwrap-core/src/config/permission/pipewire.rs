@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -21,38 +21,42 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs,
-    config::{Permission, permission::*},
-    config::permission::{Condition::Success, PermError::Warn},
+use crate::{
+    config::{
+        permission::{Condition::Success, PermError::Warn, *},
+        Permission,
+    },
     constants::XDG_RUNTIME_DIR,
-    utils::check_socket};
+    exec::args::ExecutionArgs,
+    utils::check_socket,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PIPEWIRE {
+struct Pipewire {
     #[serde(skip_serializing_if = "is_default_socket", default = "default_socket")]
     socket: String,
 }
 
-#[typetag::serde]
-impl Permission for PIPEWIRE {
-    fn check(&self) -> Result<Option<Condition>, PermError> {  
-        if ! Path::new(&self.socket).exists() {
+#[typetag::serde(name = "pipewire")]
+impl Permission for Pipewire {
+    fn check(&self) -> Result<Option<Condition>, PermError> {
+        if !Path::new(&self.socket).exists() {
             Err(Warn(format!("Pipewire socket not found.")))?
         }
 
-        if ! check_socket(&self.socket) {          
+        if !check_socket(&self.socket) {
             Err(Warn(format!("'{}' is not a valid UNIX socket.", &self.socket)))?
         }
 
         Ok(Some(Success))
     }
-    
-    fn register(&self, args: &mut  ExecutionArgs) {
+
+    fn register(&self, args: &mut ExecutionArgs) {
         args.robind(&self.socket, default_socket());
     }
 
     fn module(&self) -> &'static str {
-        "PIPEWIRE"
+        "pipewire"
     }
 }
 

@@ -1,6 +1,6 @@
 /*
  * pacwrap
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,12 +19,14 @@
 
 use std::process::Command;
 
-use pacwrap_core::{config,
+use pacwrap_core::{
+    config,
+    err,
+    error::*,
     exec::utils::handle_process,
-    utils::arguments::{Arguments, Operand}, 
-    ErrorKind, 
-    error::*, 
-    err}; 
+    utils::arguments::{Arguments, Operand},
+    ErrorKind,
+};
 
 fn save_configuration() -> Result<()> {
     err!(ErrorKind::Message("This function has been deprecated."))?
@@ -35,10 +37,10 @@ fn print_configuration(instance: &str) -> Result<()> {
     let mut pkgs_string = String::new();
     let mut depends_string = String::new();
 
-    println!("INSTANCE_CONFIG[{},0]={}", instance, ins.metadata().container_type());   
+    println!("INSTANCE_CONFIG[{},0]={}", instance, ins.metadata().container_type());
 
     for i in ins.metadata().dependencies() {
-        depends_string.push_str(&format!("{} ", i));    
+        depends_string.push_str(&format!("{} ", i));
     }
     println!("INSTANCE_CONFIG[{},1]=\"{}\"", instance, depends_string);
 
@@ -54,12 +56,10 @@ pub fn compat(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
         Operand::Short('s') | Operand::Long("save") => save_configuration(),
         Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()?),
-        _ => args.invalid_operand()
+        _ => args.invalid_operand(),
     }
 }
 
-pub fn execute_bash(executable: &'static str, args: &mut Arguments) -> Result<()> { 
-    handle_process(&executable, Command::new(&executable)
-        .args(args.values())
-        .spawn())
+pub fn execute_bash(executable: &'static str, args: &mut Arguments) -> Result<()> {
+    handle_process(&executable, Command::new(&executable).args(args.values()).spawn())
 }

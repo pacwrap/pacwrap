@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,9 +17,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{any::Any, process::exit, fmt::{Display, Debug}};
+use std::{
+    any::Any,
+    fmt::{Debug, Display},
+    process::exit,
+};
 
-use crate::{utils::{print_error, print_warning}, sync::SyncError};
+use crate::{
+    sync::SyncError,
+    utils::{print_error, print_warning},
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -39,11 +46,11 @@ macro_rules! error {
 
 #[macro_export]
 macro_rules! impl_error {
-    ( $x:ident ) => { 
+    ( $x:ident ) => {
         impl ErrorTrait for $x {
             fn code(&self) -> i32 {
                 1
-            }            
+            }
         }
     };
 }
@@ -63,9 +70,7 @@ pub struct Error {
 
 impl Error {
     pub fn new(err: Box<dyn ErrorTrait>) -> Self {
-        Self {
-            kind: err,
-        }
+        Self { kind: err }
     }
 
     pub fn handle(&self) {
@@ -73,8 +78,8 @@ impl Error {
         match self.downcast::<SyncError>() {
             Ok(error) => match error {
                 SyncError::TransactionFailureAgent => (),
-                _ => print_error(&self.kind), 
-            } 
+                _ => print_error(&self.kind),
+            },
             Err(_) => print_error(&self.kind),
         }
 
@@ -82,7 +87,7 @@ impl Error {
     }
 
     pub fn error(&self) -> i32 {
-        print_error(&self.kind); 
+        print_error(&self.kind);
         self.kind.code()
     }
 
@@ -92,12 +97,16 @@ impl Error {
 
     pub fn downcast<T: 'static>(&self) -> std::result::Result<&T, &Self> {
         match self.kind.as_any().downcast_ref::<T>() {
-            Some(inner) => Ok(inner), None => Err(self),
+            Some(inner) => Ok(inner),
+            None => Err(self),
         }
     }
 }
 
-impl<T> Downcast for T where T: ErrorTrait + 'static {
+impl<T> Downcast for T
+where
+    T: ErrorTrait + 'static,
+{
     fn as_any(&self) -> &dyn Any {
         self
     }

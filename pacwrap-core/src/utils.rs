@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,41 +17,56 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{path::Path, env::var, os::unix::net::UnixStream, fmt::Display, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    env::var,
+    fmt::Display,
+    os::unix::net::UnixStream,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use nix::unistd::isatty;
 
-use crate::{err, Error, ErrorKind, Result, constants::{BOLD_RED, BOLD_YELLOW, RESET, TERM, COLORTERM, UID, GID}};
+use crate::{
+    constants::{BOLD_RED, BOLD_YELLOW, COLORTERM, GID, RESET, TERM, UID},
+    err,
+    Error,
+    ErrorKind,
+    Result,
+};
 
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
 
-pub mod termcontrol;
 pub mod arguments;
 pub mod prompt;
+pub mod termcontrol;
 
 pub fn print_warning(message: impl Into<String> + Display) {
-    eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET,  &message);
-} 
+    eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, &message);
+}
 
 pub fn print_error(message: impl Into<String> + Display) {
     eprintln!("{}error:{} {}", *BOLD_RED, *RESET, &message);
-} 
+}
 
 pub fn env_var(env: &'static str) -> Result<String> {
     match var(env) {
         Ok(var) => Ok(var),
-        Err(_) => err!(ErrorKind::EnvVarUnset(env))
+        Err(_) => err!(ErrorKind::EnvVarUnset(env)),
     }
 }
 
 pub fn check_socket(socket: &String) -> bool {
-    match UnixStream::connect(&Path::new(socket)) { Ok(_) => true, Err(_) => false, }
+    match UnixStream::connect(&Path::new(socket)) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
 }
 
 pub fn is_color_terminal() -> bool {
     let value = *TERM;
-    let is_dumb = ! value.is_empty() && value.to_lowercase() != "dumb";
+    let is_dumb = !value.is_empty() && value.to_lowercase() != "dumb";
 
     is_dumb && isatty(0).is_ok() && isatty(1).is_ok()
 }
@@ -60,18 +75,14 @@ pub fn is_truecolor_terminal() -> bool {
     let value = COLORTERM.to_lowercase();
 
     is_color_terminal() && value == "truecolor" || value == "24bit"
-
 }
 
 pub fn unix_time_as_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
 
 pub fn read_le_32(vec: &Vec<u8>, pos: usize) -> u32 {
-    ((vec[pos+0] as u32) << 0) + ((vec[pos+1] as u32) << 8) + ((vec[pos+2] as u32) << 16) + ((vec[pos+3] as u32) << 24) 
+    ((vec[pos + 0] as u32) << 0) + ((vec[pos + 1] as u32) << 8) + ((vec[pos + 2] as u32) << 16) + ((vec[pos + 3] as u32) << 24)
 }
 
 pub fn check_root() -> Result<()> {

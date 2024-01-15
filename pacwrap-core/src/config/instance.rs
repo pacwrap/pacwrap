@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,33 +17,39 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow,
-    fmt::{Display, Debug, Formatter},
-	vec::Vec};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display, Formatter},
+    vec::Vec,
+};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Result,
-    config::{permission::{Permission, none::NONE}, 
-        filesystem::{Filesystem, root::ROOT, home::HOME},
+use crate::{
+    config::{
         dbus::Dbus,
-        vars::InsVars, 
-        save}, 
-    constants::UNIX_TIMESTAMP};
+        filesystem::{home::Home, root::Root, Filesystem},
+        permission::{none::None, Permission},
+        save,
+        vars::InsVars,
+    },
+    constants::UNIX_TIMESTAMP,
+    Result,
+};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Instance<'a> {
-    #[serde(flatten)]  
+    #[serde(flatten)]
     metadata: InstanceMetadata<'a>,
     #[serde(flatten)]
     runtime: InstanceRuntime,
 }
 
-impl <'a>Instance<'a> { 
+impl<'a> Instance<'a> {
     pub fn new(ctype: InstanceType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
         Self {
-            metadata: InstanceMetadata::new(ctype,deps,pkgs),
-            runtime: InstanceRuntime::new(), 
+            metadata: InstanceMetadata::new(ctype, deps, pkgs),
+            runtime: InstanceRuntime::new(),
         }
     }
 }
@@ -54,7 +60,7 @@ pub struct InstanceHandle<'a> {
     vars: InsVars<'a>,
 }
 
-impl <'a>InstanceHandle<'a> {
+impl<'a> InstanceHandle<'a> {
     pub fn new(ins: Instance<'a>, ins_vars: InsVars<'a>) -> Self {
         Self {
             instance: ins,
@@ -87,7 +93,7 @@ impl <'a>InstanceHandle<'a> {
     }
 }
 
-impl <'a>Debug for InstanceHandle<'a> {
+impl<'a> Debug for InstanceHandle<'a> {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(fmter, "{:?}", self.vars())?;
         write!(fmter, "{:?}", self.config())
@@ -96,31 +102,31 @@ impl <'a>Debug for InstanceHandle<'a> {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InstanceRuntime {
-    #[serde(default)]  
-    enable_userns: bool, 
-    #[serde(default)]  
+    #[serde(default)]
+    enable_userns: bool,
+    #[serde(default)]
     retain_session: bool,
     #[serde(default = "default_true")]
     seccomp: bool,
-    #[serde(default)]  
-    allow_forking: bool,    
-    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
+    #[serde(default)]
+    allow_forking: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     filesystems: Vec<Box<dyn Filesystem>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     permissions: Vec<Box<dyn Permission>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    dbus: Vec<Box<dyn Dbus>>, 
+    dbus: Vec<Box<dyn Dbus>>,
 }
 
 impl InstanceRuntime {
     pub fn new() -> Self {
-        let default_fs: [Box<dyn Filesystem>; 2]  = [Box::new(ROOT {}), Box::new(HOME {})];  
-        let default_per: [Box<dyn Permission>; 1]  = [Box::new(NONE {})]; 
+        let default_fs: [Box<dyn Filesystem>; 2] = [Box::new(Root {}), Box::new(Home {})];
+        let default_per: [Box<dyn Permission>; 1] = [Box::new(None {})];
         let fs: Vec<Box<dyn Filesystem>> = Vec::from(default_fs);
-        let per: Vec<Box<dyn Permission>> = Vec::from(default_per); 
- 
+        let per: Vec<Box<dyn Permission>> = Vec::from(default_per);
+
         Self {
-            seccomp: true, 
+            seccomp: true,
             allow_forking: false,
             retain_session: false,
             enable_userns: false,
@@ -130,28 +136,28 @@ impl InstanceRuntime {
         }
     }
 
-    pub fn permissions(&self) -> &Vec<Box<dyn Permission>> { 
-        &self.permissions 
+    pub fn permissions(&self) -> &Vec<Box<dyn Permission>> {
+        &self.permissions
     }
-    
-    pub fn filesystem(&self) -> &Vec<Box<dyn Filesystem>> { 
-        &self.filesystems 
+
+    pub fn filesystem(&self) -> &Vec<Box<dyn Filesystem>> {
+        &self.filesystems
     }
-    
-    pub fn dbus(&self) -> &Vec<Box<dyn Dbus>> { 
-        &self.dbus 
-    } 
-    
-    pub fn allow_forking(&self) -> &bool { 
-        &self.allow_forking 
+
+    pub fn dbus(&self) -> &Vec<Box<dyn Dbus>> {
+        &self.dbus
     }
-    
-    pub fn enable_userns(&self) -> &bool { 
-        &self.enable_userns 
-    } 
-    
-    pub fn retain_session(&self) -> &bool { 
-        &self.retain_session 
+
+    pub fn allow_forking(&self) -> &bool {
+        &self.allow_forking
+    }
+
+    pub fn enable_userns(&self) -> &bool {
+        &self.enable_userns
+    }
+
+    pub fn retain_session(&self) -> &bool {
+        &self.retain_session
     }
 
     pub fn seccomp(&self) -> &bool {
@@ -170,30 +176,19 @@ impl Debug for InstanceRuntime {
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum InstanceType {
-    LINK,
-    BASE,
-    DEP,
-    ROOT
+    Symbolic,
+    Base,
+    Slice,
+    Aggregate,
 }
 
-#[allow(dead_code)]
 impl InstanceType {
-    pub fn new(instype: &str) -> Self {
-        match instype {
-            "BASE" => Self::BASE,
-            "ROOT" => Self::ROOT,
-            "DEP" => Self::DEP,
-            "LINK" => Self::LINK,
-            _ => Self::BASE
-        }
-    }
-
     fn as_str<'a>(&self) -> &'a str {
         match self {
-            Self::ROOT => "ROOT",
-            Self::LINK => "LINK",
-            Self::BASE => "BASE",
-            Self::DEP => "DEP"
+            Self::Symbolic => "LINK",
+            Self::Base => "BASE",
+            Self::Slice => "DEP",
+            Self::Aggregate => "ROOT",
         }
     }
 }
@@ -206,23 +201,23 @@ impl Display for InstanceType {
 
 impl Default for InstanceType {
     fn default() -> Self {
-        Self::BASE
+        Self::Base
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InstanceMetadata<'a> {
-    #[serde(default)]  
-    container_type: InstanceType, 
-    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    dependencies: Vec<Cow<'a, str>>,    
-    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
+    #[serde(default)]
+    container_type: InstanceType,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    dependencies: Vec<Cow<'a, str>>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     explicit_packages: Vec<Cow<'a, str>>,
     #[serde(default = "time_as_seconds")]
     meta_version: u64,
 }
 
-impl <'a>InstanceMetadata<'a> {
+impl<'a> InstanceMetadata<'a> {
     fn new(ctype: InstanceType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
         Self {
             container_type: ctype,
@@ -238,15 +233,15 @@ impl <'a>InstanceMetadata<'a> {
         self.meta_version = *UNIX_TIMESTAMP;
     }
 
-    pub fn container_type(&self) -> &InstanceType { 
-        &self.container_type 
+    pub fn container_type(&self) -> &InstanceType {
+        &self.container_type
     }
 
-    pub fn dependencies(&'a self) -> Vec<&'a str> { 
+    pub fn dependencies(&'a self) -> Vec<&'a str> {
         self.dependencies.iter().map(|a| a.as_ref()).collect()
     }
-    
-    pub fn explicit_packages(&'a self) -> Vec<&'a str> { 
+
+    pub fn explicit_packages(&'a self) -> Vec<&'a str> {
         self.explicit_packages.iter().map(|a| a.as_ref()).collect()
     }
 

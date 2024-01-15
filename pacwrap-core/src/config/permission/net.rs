@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -19,15 +19,19 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs,
-    config::{Permission, permission::*},
-    config::permission::Condition::Success};
+use crate::{
+    config::{
+        permission::{Condition::Success, *},
+        Permission,
+    },
+    exec::args::ExecutionArgs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NET;
+pub struct Network;
 
-#[typetag::serde]
-impl Permission for NET {
+#[typetag::serde(name = "net")]
+impl Permission for Network {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
@@ -38,6 +42,6 @@ impl Permission for NET {
     }
 
     fn module(&self) -> &'static str {
-        "NET"
+        "net"
     }
 }

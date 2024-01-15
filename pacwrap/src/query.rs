@@ -1,6 +1,6 @@
 /*
  * pacwrap
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,14 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use alpm::{Alpm, PackageReason};
+use alpm::PackageReason;
 
-use pacwrap_core::{config,
-    constants::{RESET, BOLD_GREEN},
-    utils::arguments::{Operand, InvalidArgument},
-    utils::{arguments::Arguments, check_root},
-    error::*, 
-    err};
+use pacwrap_core::{
+    config,
+    constants::{BOLD_GREEN, RESET},
+    err,
+    error::*,
+    sync::instantiate_alpm,
+    utils::{
+        arguments::{Arguments, InvalidArgument, Operand},
+        check_root,
+    },
+};
 
 pub fn query(arguments: &mut Arguments) -> Result<()> {
     let mut target = "";
@@ -47,19 +52,18 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
     }
 
     let handle = config::provide_handle(target)?;
-    let root = handle.vars().root().as_ref(); 
-    let handle = Alpm::new2(root, &format!("{}/var/lib/pacman/", root)).unwrap();
+    let handle = instantiate_alpm(&handle);
 
     for pkg in handle.localdb().pkgs() {
         if explicit && pkg.reason() != PackageReason::Explicit {
             continue;
         }
-        
+
         match quiet {
             true => println!("{} ", pkg.name()),
-            false => println!("{} {}{}{} ", pkg.name(), *BOLD_GREEN, pkg.version(), *RESET), 
-        } 
+            false => println!("{} {}{}{} ", pkg.name(), *BOLD_GREEN, pkg.version(), *RESET),
+        }
     }
-    
+
     Ok(())
 }

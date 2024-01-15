@@ -1,7 +1,9 @@
-use std::fmt::{Display, Formatter};
-use std::env;
+use std::{
+    env,
+    fmt::{Display, Formatter},
+};
 
-use crate::{error::*, impl_error, err};
+use crate::{err, error::*, impl_error};
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Operand<'a> {
@@ -10,7 +12,7 @@ pub enum Operand<'a> {
     Long(&'a str),
     LongPos(&'a str, &'a str),
     Value(&'a str),
-    None
+    Nothing,
 }
 
 #[derive(Debug)]
@@ -33,9 +35,9 @@ impl_error!(InvalidArgument);
 
 impl Display for InvalidArgument {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-       match self {
+        match self {
             Self::UnsuppliedOperand(params, message) => write!(fmter, "Option '{params}': {message}"),
-            Self::InvalidOperand(oper) => write!(fmter, "Invalid option '{oper}'"), 
+            Self::InvalidOperand(oper) => write!(fmter, "Invalid option '{oper}'"),
             Self::OperationUnspecified => write!(fmter, "Operation not specified."),
             Self::TargetUnspecified => write!(fmter, "Target not specified."),
         }?;
@@ -48,32 +50,35 @@ impl<'a> Arguments<'a> {
     pub fn new() -> Self {
         Self {
             values: env::args()
-            .skip(1)
-            .map(|a| { let a: &str = a.leak(); a })
-            .collect::<Vec<_>>(),
+                .skip(1)
+                .map(|a| {
+                    let a: &str = a.leak();
+                    a
+                })
+                .collect::<Vec<_>>(),
             operands: Vec::new(),
             idx: 0,
             cur: 0,
         }
     }
 
-    pub fn populate(mut self) -> Arguments<'a> { 
-        for string in &self.values { 
-            match string { 
-                string if string.starts_with("--") => { 
+    pub fn populate(mut self) -> Arguments<'a> {
+        for string in &self.values {
+            match string {
+                string if string.starts_with("--") =>
                     if string.contains('=') {
-                        let value: Vec<&'a str> = string[2..].splitn(2, '=').collect();
+                        let value: Vec<&'a str> = string[2 ..].splitn(2, '=').collect();
 
-                        self.operands.extend([Operand::Long(value[0]), Operand::LongPos(value[0], value[1])]); 
+                        self.operands.extend([Operand::Long(value[0]), Operand::LongPos(value[0], value[1])]);
                     } else {
-                        self.operands.push(Operand::Long(&string[2..]));
-                    }
-                },
-                string if string.starts_with("-") => if string.len() > 1 {
-                    for operand in string[1..].chars() {
-                        self.operands.push(Operand::Short(operand));
-                    }
-                },
+                        self.operands.push(Operand::Long(&string[2 ..]));
+                    },
+                string if string.starts_with("-") =>
+                    if string.len() > 1 {
+                        for operand in string[1 ..].chars() {
+                            self.operands.push(Operand::Short(operand));
+                        }
+                    },
                 _ => self.operands.push(match self.operands.last() {
                     Some(last) => match last {
                         Operand::Short(c) => Operand::ShortPos(*c, string),
@@ -90,15 +95,13 @@ impl<'a> Arguments<'a> {
 
     pub fn target(&mut self) -> Result<&'a str> {
         for op in self.into_iter() {
-            if let Operand::ShortPos(_, name) 
-            | Operand::LongPos(_, name) 
-            | Operand::Value(name) = op {
+            if let Operand::ShortPos(_, name) | Operand::LongPos(_, name) | Operand::Value(name) = op {
                 return Ok(name);
             }
         }
 
         err!(InvalidArgument::TargetUnspecified)
-    } 
+    }
 
     pub fn set_index(&mut self, index: usize) {
         self.idx = index;
@@ -116,8 +119,8 @@ impl<'a> Arguments<'a> {
         &self.values
     }
 }
- 
-impl <'a>Iterator for Arguments<'a> {
+
+impl<'a> Iterator for Arguments<'a> {
     type Item = Operand<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -126,35 +129,34 @@ impl <'a>Iterator for Arguments<'a> {
         if self.cur < self.operands.len() {
             self.idx += 1;
             Some(self.operands[self.cur])
-        } else {        
+        } else {
             self.set_index(0);
             None
         }
     }
 }
 
-impl <'a>Default for &Operand<'a> {
+impl<'a> Default for &Operand<'a> {
     fn default() -> Self {
-        &Operand::None
+        &Operand::Nothing
     }
 }
 
-impl <'a>Default for Operand<'a> {
+impl<'a> Default for Operand<'a> {
     fn default() -> Self {
-        Self::None
+        Self::Nothing
     }
 }
 
-impl <'a>Display for Operand<'a> {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>)  -> std::fmt::Result {
+impl<'a> Display for Operand<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Long(str) => write!(fmt, "--{}", str),
             Operand::LongPos(str, eq) => write!(fmt, "--{}={}", str, eq),
             Operand::Short(char) => write!(fmt, "-{}", char),
             Operand::ShortPos(str, eq) => write!(fmt, "-{} {}", str, eq),
             Operand::Value(str) => write!(fmt, "{}", str),
-            Operand::None => write!(fmt, "None"),
+            Operand::Nothing => write!(fmt, "None"),
         }
     }
 }
-

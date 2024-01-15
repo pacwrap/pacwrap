@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -17,23 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{path::Path,
-    fs::{OpenOptions, File}, 
-    io::Write, fmt::{Display, Formatter}};
+use std::{
+    fmt::{Display, Formatter},
+    fs::{File, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
-use time::{OffsetDateTime, 
-    format_description::FormatItem,
-    macros::format_description, UtcOffset};
+use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
 
-use crate::{err, 
-    impl_error, 
-    Error, 
-    ErrorKind, 
-    ErrorTrait, 
-    Result, 
-    constants::LOG_LOCATION};
+use crate::{constants::LOG_LOCATION, err, impl_error, Error, ErrorKind, ErrorTrait, Result};
 
-const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
+const DATE_FORMAT: &[FormatItem<'static>] =
+    format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
 const UTC_OFFSET: &[FormatItem<'static>] = format_description!("[offset_hour]");
 
 impl_error!(LoggerError);
@@ -58,20 +54,20 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn new(module_name: &'static str) -> Self { 
-       /*
-        * In order to deal with the potentiality of a race condition occurring 
-        * between libalpm and the time crate, we cache the offset during the 
-        * initalisation of this struct.
-        */ 
+    pub fn new(module_name: &'static str) -> Self {
+        /*
+         * In order to deal with the potentiality of a race condition occurring
+         * between libalpm and the time crate, we cache the offset during the
+         * initalisation of this struct.
+         */
         let ofs = OffsetDateTime::now_local()
             .unwrap_or(OffsetDateTime::now_utc())
             .format(UTC_OFFSET)
             .unwrap();
         let ofs = UtcOffset::parse(ofs.as_str(), UTC_OFFSET).unwrap();
 
-        Self { 
-            file:  None,
+        Self {
+            file: None,
             module: module_name,
             offset: ofs,
         }
@@ -79,29 +75,24 @@ impl Logger {
 
     pub fn init(mut self) -> Result<Self> {
         let path = Path::new(*LOG_LOCATION);
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .truncate(false)
-            .open(path);
+        let file = OpenOptions::new().create(true).write(true).append(true).truncate(false).open(path);
 
         self.file = Some(match file {
             Ok(file) => file,
-            Err(error) => err!(ErrorKind::IOError(LOG_LOCATION.to_string(), error.kind()))?, 
+            Err(error) => err!(ErrorKind::IOError(LOG_LOCATION.to_string(), error.kind()))?,
         });
 
         Ok(self)
     }
 
-    pub fn log(&mut self, msg: impl Into<String> + std::fmt::Display) -> Result<()> { 
-       /*
-        * We then attempt to update it here.
-        *
-        * If that fails, we use the previously cached value. This compromise ensures
-        * a stale offset value will eventually be updated to reflect the system's 
-        * time offset if a change were to occur whilst this application is running.
-        */
+    pub fn log(&mut self, msg: impl Into<String> + std::fmt::Display) -> Result<()> {
+        /*
+         * We then attempt to update it here.
+         *
+         * If that fails, we use the previously cached value. This compromise ensures
+         * a stale offset value will eventually be updated to reflect the system's
+         * time offset if a change were to occur whilst this application is running.
+         */
         if let Ok(local) = OffsetDateTime::now_local() {
             self.offset = UtcOffset::parse(local.format(UTC_OFFSET).unwrap().as_str(), UTC_OFFSET).unwrap();
         }
@@ -109,7 +100,7 @@ impl Logger {
         let time: OffsetDateTime = OffsetDateTime::now_utc().to_offset(self.offset);
         let write = match self.file.as_mut() {
             Some(file) => file.write(format!("[{}] [{}] {}\n", time.format(DATE_FORMAT).unwrap(), self.module, msg).as_bytes()),
-            None => err!(LoggerError::Uninitialized)?
+            None => err!(LoggerError::Uninitialized)?,
         };
 
         match write {

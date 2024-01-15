@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -21,39 +21,42 @@ use std::env;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs,
+use crate::{
+    config::{
+        permission::{Condition::Success, *},
+        Permission,
+    },
+    exec::args::ExecutionArgs,
     utils::print_warning,
-    config::{Permission, permission::*},
-    config::permission::Condition::Success};
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ENV { 
-    #[serde(skip_serializing_if = "String::is_empty", default)] 
+pub struct Environment {
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     var: String,
-    #[serde(skip_serializing_if = "String::is_empty", default)] 
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     set: String,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)] 
-    variables: Vec<Var>
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    variables: Vec<Var>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Var {
     var: String,
-    #[serde(skip_serializing_if = "String::is_empty", default)]   
-    set: String
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    set: String,
 }
 
-#[typetag::serde]
-impl Permission for ENV {
-
+#[typetag::serde(name = "env")]
+impl Permission for Environment {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
 
-    fn register(&self, args: &mut ExecutionArgs) {        
+    fn register(&self, args: &mut ExecutionArgs) {
         if self.var != "" {
             let set = env_var(&self.var, &self.set);
-            args.env(&self.var, set);         
+            args.env(&self.var, set);
         }
 
         for v in self.variables.iter() {
@@ -63,20 +66,20 @@ impl Permission for ENV {
     }
 
     fn module(&self) -> &'static str {
-        "ENV"
+        "env"
     }
 }
 
 fn env_var(var: &String, set: &String) -> String {
-     if set != "" { 
-        return set.to_owned(); 
+    if set != "" {
+        return set.to_owned();
     }
-    
-     match env::var(&var) { 
-        Ok(env) => env, 
+
+    match env::var(&var) {
+        Ok(env) => env,
         Err(_) => {
             print_warning(format!("Environment variable {} is unset.", var));
             "".into()
         }
-    } 
+    }
 }

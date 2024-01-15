@@ -18,10 +18,13 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-BOLD=$(tput bold)
-GREEN=$(tput setaf 2)
-RED=$(tput setaf 1)
-RESET=$(tput sgr0)
+if ! [[ -z $COLORTERM ]] || [[ $TERM == "dummy" ]]; then	
+	BOLD=$(tput bold)
+	GREEN=$(tput setaf 2)
+	RED=$(tput setaf 1)
+	RESET=$(tput sgr0)
+fi
+
 DIST_RUNTIME="./dist/runtime"
 DIST_BASE="./dist/pacwrap-base-dist"
 DIST_REPO="./dist/repo"

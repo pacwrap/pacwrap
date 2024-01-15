@@ -1,6 +1,6 @@
 /*
  * pacwrap-core
- * 
+ *
  * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -21,23 +21,27 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{exec::args::ExecutionArgs, 
-    config::InsVars, 
-    config::filesystem::{Filesystem, BindError}};
+use crate::{
+    config::{
+        filesystem::{BindError, Filesystem},
+        InsVars,
+    },
+    exec::args::ExecutionArgs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ROOT;
+pub struct Root;
 
-#[typetag::serde]
-impl Filesystem for ROOT {
+#[typetag::serde(name = "root")]
+impl Filesystem for Root {
     fn check(&self, vars: &InsVars) -> Result<(), BindError> {
-        if ! Path::new(vars.root()).exists() {
+        if !Path::new(vars.root()).exists() {
             Err(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
         }
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) { 
+    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
         args.robind(format!("{}/usr", vars.root()), "/usr");
         args.robind(format!("{}/etc", vars.root()), "/etc");
         args.symlink("/usr/lib", "/lib");
@@ -47,6 +51,6 @@ impl Filesystem for ROOT {
     }
 
     fn module(&self) -> &'static str {
-        "ROOT"
+        "root"
     }
 }

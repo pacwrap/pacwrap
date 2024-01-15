@@ -21,10 +21,13 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-BOLD=$(tput bold)
-RED=$(tput setaf 1)
-GREEN=$(tput setaf 2)
-RESET=$(tput sgr0)
+if ! [[ -z $COLORTERM ]] || [[ $TERM == "dummy" ]]; then
+	BOLD=$(tput bold)
+	RED=$(tput setaf 1)
+	GREEN=$(tput setaf 2)
+	RESET=$(tput sgr0)
+fi
+
 LIB_DIR="/lib"
 BIN_DIR="/bin"
 DEST_DIR="./dist/runtime"
