@@ -32,6 +32,10 @@ LIB_DIR="/lib"
 BIN_DIR="/bin"
 DEST_DIR="./dist/runtime"
 
+if [[ ! -d $DEST_DIR ]]; then
+	mkdir -p $DEST_DIR
+fi
+
 # Validate parameters
 
 if [[ -z $1 ]]; then
