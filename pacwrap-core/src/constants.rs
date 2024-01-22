@@ -66,6 +66,7 @@ lazy_static! {
     pub static ref WAYLAND_DISPLAY: &'static str = env_opt("WAYLAND_DISPLAY");
     pub static ref X11_DISPLAY: &'static str = env_opt("DISPLAY");
     pub static ref XAUTHORITY: &'static str = env_opt("XAUTHORITY");
+    pub static ref CONTAINER_DIR: &'static str = format_str!("{}/root/", *DATA_DIR);
     pub static ref CACHE_DIR: &'static str = env_default_dir("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
     pub static ref CONFIG_DIR: &'static str = env_default_dir("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
     pub static ref DATA_DIR: &'static str = env_default_dir("PACWRAP_DATA_DIR", PACWRAP_DATA_DIR);
@@ -80,15 +81,25 @@ lazy_static! {
     pub static ref BOLD: &'static str = bold();
     pub static ref RESET: &'static str = reset();
     pub static ref DIM: &'static str = dim();
+    pub static ref YELLOW: &'static str = yellow();
     pub static ref BOLD_WHITE: &'static str = bold_white();
     pub static ref BOLD_YELLOW: &'static str = bold_yellow();
     pub static ref BOLD_RED: &'static str = bold_red();
     pub static ref BOLD_GREEN: &'static str = bold_green();
     pub static ref BAR_GREEN: &'static str = bar_green();
     pub static ref BAR_CYAN: &'static str = bar_cyan();
+    pub static ref BAR_RED: &'static str = bar_red();
     pub static ref ARROW_CYAN: &'static str = arrow_cyan();
     pub static ref ARROW_RED: &'static str = arrow_red();
     pub static ref ARROW_GREEN: &'static str = arrow_green();
+}
+
+fn yellow() -> &'static str {
+    if *IS_COLOR_TERMINLAL {
+        "[33m"
+    } else {
+        ""
+    }
 }
 
 fn arrow_red() -> &'static str {
@@ -112,6 +123,14 @@ fn arrow_green() -> &'static str {
         "[1;32m->[0m"
     } else {
         "->"
+    }
+}
+
+fn bar_red() -> &'static str {
+    if *IS_COLOR_TERMINLAL {
+        "[1;31m::[0m"
+    } else {
+        "::"
     }
 }
 

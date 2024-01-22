@@ -21,7 +21,7 @@ use std::{collections::HashMap, fs::read_dir};
 
 use crate::{
     config::{self, InstanceHandle},
-    constants::DATA_DIR,
+    constants::{CONTAINER_DIR, DATA_DIR},
     err,
     error::*,
     ErrorKind,
@@ -145,7 +145,7 @@ pub fn populate<'a>() -> Result<InstanceCache<'a>> {
 }
 
 fn roots<'a>() -> Result<Vec<&'a str>> {
-    match read_dir(format!("{}/root", *DATA_DIR)) {
+    match read_dir(*CONTAINER_DIR) {
         Ok(dir) => Ok(dir
             .filter(|f| match f {
                 Ok(f) => match f.metadata() {

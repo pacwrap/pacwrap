@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Pacwrap -- common script
+#  pacwrap -- common script
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -42,11 +42,8 @@ ARROW="$CYAN$BOLD->$RESET"
 ARROW_GREEN="$GREEN$BOLD->$RESET"
 ARROW_RED="$RED$BOLD->$RESET"
 
-EXEC_SCRIPT="pacwrap"
 CREATE_SCRIPT="pacwrap"
-UTILS_SCRIPT="pacwrap-utils"
-SYNC_SCRIPT="pacwrap"
-PS_SCRIPT="pacwrap-ps"
+PS_SCRIPT="pacwrap"
 
 LOG_ERR_HELP=1
 LOG_ERR_WARN=2
@@ -61,39 +58,22 @@ CONF_PKGS=3
 [[ ! $PACWRAP_CACHE_DIR ]] && PACWRAP_CACHE_DIR="$HOME/.cache/pacwrap"
 [[ ! $PACWRAP_CONFIG_DIR ]] && PACWRAP_CONFIG_DIR="$HOME/.config/pacwrap"
 [[ ! $PACWRAP_PACCACHE_ARGUMENTS ]] && PACWRAP_PACCACHE_ARGUMENTS="-rk 1"
-[[ ! $PACWRAP_PASSTHROUGH_CMD ]] && PACWRAP_PASSTHROUGH_CMD="sudo pacman"
 
-VERBOSE="/dev/null"
-
-LOCK_FILE="$PACWRAP_DATA_DIR/pacwrap.lck"	
 LOG_FILE="$PACWRAP_DATA_DIR/pacwrap.log"
 OUTPUT_DEST=$LOG_FILE
 
 declare -A INSTANCE_CONFIG
-declare -A PKGLIST_EXPLICIT
 
 INSTANCE_ROOT_DIR=$PACWRAP_DATA_DIR/root
 INSTANCE_HOME_DIR=$PACWRAP_DATA_DIR/home
 INSTANCE_CONFIG_DIR=$PACWRAP_CONFIG_DIR/instance
-INSTANCE_LC_DIR=$PACWRAP_DATA_DIR/hlds
-INSTANCE_RUNTIME_DIR="$XDG_RUNTIME_DIR/.pacwrap"
 
-INSTANCE_PACMAN_DIR="$PACWRAP_DATA_DIR/pacman"
-INSTANCE_PACMAN_GNUPG="$INSTANCE_PACMAN_DIR/gnupg"
-INSTANCE_PACMAN_SYNC="$INSTANCE_PACMAN_DIR/sync"
-INSTANCE_PACMAN_MIRRORLIST="$PACWRAP_CONFIG_DIR/pacman.d/mirrorlist"	
 INSTANCE_PACMAN_CACHE="$PACWRAP_CACHE_DIR/pkg"
-INSTANCE_PACMAN_CFG_DIR="$PACWRAP_CONFIG_DIR/pacman"
 
 init() {	
 	[[ $SWITCH == *n* ]] && SWITCH_NO_CONFIRM=1
-	[[ $SWITCH == *v* ]] && VERBOSE="/dev/stdout"
 	[[ $SWITCH == *V* ]] ||
 	[[ $SWITCH == h* ]] && manual_script
-
-	[[ ! -f $LOG_FILE ]] && touch $LOG_FILE
-	[[ ! $1 ]] && [[ -f $LOCK_FILE ]] && 
-		log_error "pacwrap is locked: $LOCK_FILE$RESET" 2
 
 	script_init
 }
@@ -112,7 +92,7 @@ load_configuration() {
 }
 
 manual_script() {
-	pacwrap -V
+	pacwrap $RUNTIME_ARGS
 	exit
 }
 
@@ -165,18 +145,6 @@ return_dependency() {
 	echo ${deps[$((${#deps[@]} - 1))]}
 }
 
-return_pacman_template() {
-	echo "$INSTANCE_PACMAN_CFG_DIR/template/pacman.$1$INSTANCE.conf"
-}
-
-return_pacman_sync() {
-	echo "$INSTANCE_PACMAN_CFG_DIR/sync/pacman.$1$INSTANCE.conf"
-}
-
-return_pacman_syncdb() {
-	echo "$INSTANCE_PACMAN_CFG_DIR/syncdb/pacman.$1$INSTANCE.conf"
-}
-
 log () {
 	printf "%s$RESET\n" "$1"
 	[[ $2 ]] && case $2 in
@@ -190,7 +158,7 @@ log_error() {
 		$LOG_ERR_HELP)	printf "%s %s\n%s\n" "$EXEC_NAME error:" "$2" \
 					"Try 'pacwrap -h' for more information on valid operational parameters."
 				exit;;
-		$ARROW_RED)	printf "$ARROW_RED %s\n %s\n" "$2" "$3"	>&2
+		$ARROW_RED)	printf "$BOLD${RED}error:$RESET %s\n%s\n" "$2" "$3"	>&2
 				log_to_file "$2"
 				[[ $4 ]] && exit $4;;
 		$LOG_ERR_WARN)	printf "$BOLD$YELLOW%s$RESET %s\n" "warning:" "$2" >&2
@@ -202,70 +170,6 @@ log_error() {
 
 log_to_file() {
 	printf "[%s] [%s] %s\n" $(date '+%FT%H:%M:%S%z') $EXEC_NAME "$1" >>"$LOG_FILE"
-}
-
-print_progress_bar() {	
-	printf "\r$PROGRESS_LABEL$RESET"
-	printf "%-*s" $(($2+1)) '[' | tr ' ' '#'
-	printf "%*s% 3d%%\r"  $(($1-$2))  "]" "$3"
-}
-
-
-init_progress() {
-	TTY_SIZE=($(stty size))
-	PROGRESS_LENGTH=$((${TTY_SIZE[1]}/2))
-}
-
-set_progress_label() {
-	[[ $PROGRESS_OFF ]] && printf "\r%s" "$2 $1" && return
-
-	PROGRESS_LABEL="$1"
-
-	local label_length=${#PROGRESS_LABEL}
-	local padding_length=$(($PROGRESS_LENGTH-$label_length-8))
-	
-	[[ $2 ]] && PROGRESS_LABEL="$2 $1" && padding_length=$(($padding_length-3))
-
-
-	for ((i=0; i<=padding_length; i+=1)); do
-		PROGRESS_LABEL+=" "
-	done
-	
-	progress_bar
-}
-
-advance_progress() {
-	if [[ $amt ]]; then
-		((amt_done+=$1))
-		progress_bar
-	fi
-}
-
-progress_bar() {
-	[[ $PROGRESS_OFF ]] && return
-
-	local bar_percent=$(($((PROGRESS_LENGTH*2))*$amt_done/$amt % 2 + $PROGRESS_LENGTH*$amt_done/$amt))
-	local percent=$((200*$amt_done/$amt % 2 + 100*$amt_done/$amt))
-	
-	print_progress_bar $((PROGRESS_LENGTH+1)) $bar_percent $percent
-}
-
-obtain_explicit_packages() {
-	[[ ${PKGLIST_EXPLICIT[$1]} ]] && return
-	PKGLIST_EXPLICIT[$1]=$($EXEC_SCRIPT --exec --root --command $1 pacman -Qqe)
-	[[ $? != 0 ]] && 
-		log_error $ARROW_RED "Query of pacman database failed." \
-				     "Use pacwrap -Sv and examine stdout for details." 1
-}
-
-get_foreign_packages() {
-	local dbsyncpkgs=()
-	local deps=$(return_dependencies)	
-		
-	for dep in ${deps[@]}; do obtain_explicit_packages $dep
-		dbsyncpkgs+=("${PKGLIST_EXPLICIT[$dep]}"); done
-
-	echo ${dbsyncpkgs[@]}
 }
 
 query_confirm_yN () {
@@ -295,14 +199,6 @@ query_confirm_Yn () {
 		return	
 	fi
 	echo 1
-}
-
-initialize_data_directory() {
-	return
-}
-
-generate_config() {
-	return
 }
 
 log_invalid_arguments() {

@@ -40,6 +40,7 @@ pub use termcontrol::TermControl;
 
 pub mod arguments;
 pub mod prompt;
+pub mod table;
 pub mod termcontrol;
 
 pub fn print_warning(message: impl Into<String> + Display) {
@@ -91,4 +92,14 @@ pub fn check_root() -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn whitespace(amt: usize) -> String {
+    let mut vec = Vec::new();
+
+    for _ in 0 .. amt {
+        vec.push(' ');
+    }
+
+    String::from_iter(vec.iter())
 }

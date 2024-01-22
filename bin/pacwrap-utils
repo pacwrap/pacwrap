@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  PacWrap -- Utility Script
+#  pacwrap -- Utility Script
 # 
 #  Copyright (C) 2023 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
@@ -18,7 +18,7 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-source pacwrap-common
+source ./bin/pacwrap-common
 export PACWRAP_UTILS=1
 
 NUMFMT="numfmt --to=si --suffix=B --round=nearest --from-unit=1000 --format=%2f "
@@ -32,9 +32,7 @@ main () {
 	init
 
 	case $SWITCH in
-		Urc)		refresh_configuration;;
 		Uc*)		[[ $(type -p paccache) ]] && paccache --cachedir $INSTANCE_PACMAN_CACHE ${ARGS[@]};;
-		Uml)		initialize_data_directory;;
 		Ud*|Ulsd|Urmd)	desktop_entry;;
 		Uo*)		open;;
 		Urm*)		remove;;	
@@ -48,7 +46,6 @@ main () {
 }
 
 script_init () { 
-	[[ $SWITCH != Uls* ]] && log_to_file "Running '$RUNTIME_EXEC $RUNTIME_ARGS'"
 	[[ $SWITCH == *du* ]] && SHOW_SIZE=1
 	[[ $SWITCH == *b* ]] && NUMFMT="echo"
 	[[ $SWITCH == *f* ]] && FORCE_ACTION=1
@@ -61,9 +58,6 @@ script_init () {
 	for f in $linklist; do
 		links+=($f)
 	done
-
-	touch $LOCK_FILE
-	trap on_exit EXIT
 }
 
 parse_args () {
@@ -86,7 +80,7 @@ parse_args () {
 			--pacman|-p)			SWITCH+="p";;
 			--config|-c)			SWITCH+="c";;
 			--remove|-rm)			SWITCH+="rm";;
-			--home|-h)			SWITCH+="h";;
+			--home|-h|--help*)			SWITCH+="h";;
 			--replicate|-r|--root)		SWITCH+="r";;
 			--link|-l|--log)		SWITCH+="l";;
 			--tar|-t)			SWITCH+="t";;
@@ -248,7 +242,6 @@ link_root() {
 	ENV_VARS="${INSTANCE_CONFIG[$link,$CONF_ENV]}"
 
 	populate_configuration
-	generate_config
 
 	log "$ARROW_GREEN Process complete!" \
 	    "Created $instance -> $link" 
@@ -361,7 +354,6 @@ replicate_instance() {
 		LINK)	ln -s "$INSTANCE_ROOT_DIR/$depend" "$INSTANCE_ROOT_DIR/$instance"
 			mkdir -p "$INSTANCE_HOME_DIR/$instance"
 			echo 'PS1="'$instance'> "' > "$INSTANCE_HOME_DIR/$instance/.bashrc"
-			generate_config
 			printf "$ARROW_GREEN %s$RESET\n" "Replication of $BOLD$instance$RESET complete!"					
 			log_to_file "Replication of $instance complete!"
 			completed[$instance]=1
@@ -376,18 +368,6 @@ replicate_instance() {
 
 	REPLICATE_CMD+="$params -t $instance $(return_packages) $foreign_targets $depend_params "
 	completed[$instance]=1
-}
-
-refresh_configuration() {
-	load_configuration_all
-
-	local roots=(${BASEROOTDEPS[@]} ${ROOTDEPS[@]} ${ROOTS[@]} ${LINKS[@]})
-	
-	for instance in ${roots[@]}; do
-		generate_config $(return_packages)
-	done
-
-	log "$ARROW_GREEN Refreshed configurations."
 }
 
 remove() {
@@ -451,16 +431,6 @@ edit_file() {
 		tmpfile=$(mktemp)
 		
 		case $SWITCH in
-			*ml*)	file="$INSTANCE_PACMAN_MIRRORLIST"
-				error="Pacman Mirrorlist $file";;
-			*idb*)	file=$(return_pacman_syncdb $instance)
-				error="instanced pacman $file"
-				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
-				dissolve=1;;
-			*ips*)	file=$(return_pacman_sync $instance)
-				error="instanced template $file"
-				printf "##\n## %s\n" "For the purposes of overview or diagnostics only." > $tmpfile	
-				dissolve=1;;
 			*c*)	file="$INSTANCE_CONFIG_DIR/$instance.yml"
 				error="config file";;
 			*d*)	file="$HOME/.local/share/applications/pacwrap.$instance.desktop"
@@ -468,9 +438,7 @@ edit_file() {
 			*l*)	file="$PACWRAP_DATA_DIR/pacwrap.log"
 				error="$file"
 				dissolve=1;;
-			*pt*)	file=$(return_pacman_template $instance)
-				error="pacman template $file";;	
-			*p*)	file="$INSTANCE_PACMAN_CFG_DIR/pacman.conf"
+			*p*)	file="$INSTANCE_CONFIG_DIR/repositories.conf"
 				error="default pacman.conf";;	
 			*)	log_invalid_arguments 1
 		esac
@@ -516,10 +484,6 @@ check_active_instances() {
 	[[ ${#running_instances[@]} > 0 ]] && 
 		log_error $ARROW_RED "There are running instances of the containers specified." \
 				     "Please close or terminate them to perform this operation." 1
-}
-
-on_exit () {
-	[[ -f "$LOCK_FILE" ]] && rm "$LOCK_FILE"
 }
 
 main $@

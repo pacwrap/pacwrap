@@ -21,16 +21,10 @@ use std::process::Command;
 
 use pacwrap_core::{
     config,
-    err,
     error::*,
     exec::utils::handle_process,
     utils::arguments::{Arguments, Operand},
-    ErrorKind,
 };
-
-fn save_configuration() -> Result<()> {
-    err!(ErrorKind::Message("This function has been deprecated."))?
-}
 
 fn print_configuration(instance: &str) -> Result<()> {
     let ins = config::provide_new_handle(instance)?;
@@ -54,12 +48,11 @@ fn print_configuration(instance: &str) -> Result<()> {
 
 pub fn compat(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
-        Operand::Short('s') | Operand::Long("save") => save_configuration(),
         Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()?),
         _ => args.invalid_operand(),
     }
 }
 
-pub fn execute_bash(executable: &'static str, args: &mut Arguments) -> Result<()> {
-    handle_process(&executable, Command::new(&executable).args(args.values()).spawn())
+pub fn execute_utils(args: &mut Arguments) -> Result<()> {
+    handle_process("pacwrap-utils", Command::new("pacwrap-utils").args(args.values()).spawn())
 }
