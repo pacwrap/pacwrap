@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "pacwrap"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "alpm",
  "command-fds",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "pacwrap-agent"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "alpm",
  "bincode",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "pacwrap-core"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "alpm",
  "bincode",
