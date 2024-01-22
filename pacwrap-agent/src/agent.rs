@@ -108,7 +108,7 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
     }
 
     let progress_cb = ProgressEvent::new().style(pkind.0).configure(&action);
-    let download_cb = DownloadEvent::new().style(pkind.0).total(bytes, files).configure(&mode, pkind.1);
+    let download_cb = DownloadEvent::new().style(pkind.1).total(bytes, files).configure(&mode, pkind.1);
 
     handle.alpm().set_question_cb((), query::callback);
     handle.alpm().set_progress_cb(progress_cb, progress::callback(&mode, pkind.0));

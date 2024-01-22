@@ -48,7 +48,7 @@ pub struct DownloadEvent {
     total_bar: Option<ProgressBar>,
     condensed: bool,
     progress: MultiProgress,
-    bars: HashMap<&'static str, ProgressBar>,
+    bars: HashMap<String, ProgressBar>,
     style: Option<ProgressStyle>,
 }
 
@@ -152,12 +152,7 @@ impl DownloadEvent {
 
         pb.set_style(INIT.clone());
         pb.set_message(message(file));
-
-        /*
-         * alpm-rs expects our callback signature to provide a struct bound by a 'static lifetime,
-         * therefore allocate this literal and then leak it for use as a key.
-         */
-        self.bars.insert(file.to_owned().leak(), pb);
+        self.bars.insert(file.to_owned(), pb);
     }
 }
 
