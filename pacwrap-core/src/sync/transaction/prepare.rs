@@ -62,16 +62,17 @@ impl Transaction for Prepare {
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
-                            Some(dep_handle) => {
-                                let dep_handle = &sync::instantiate_alpm(dep_handle);
-                                let create = ag.flags().contains(TransactionFlags::CREATE);
-                                let timestamp = inshandle.metadata().timestamp();
-                                let present = *UNIX_TIMESTAMP;
-
-                                handle.enumerate_package_lists(dep_handle, create && present == timestamp)
-                            }
+                            Some(dep_handle) => handle.enumerate_package_lists(&sync::instantiate_alpm(dep_handle)),
                             None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
+                    }
+
+                    let create = ag.flags().contains(TransactionFlags::CREATE);
+                    let timestamp = inshandle.metadata().timestamp();
+                    let present = *UNIX_TIMESTAMP;
+
+                    if create && present == timestamp {
+                        handle.enumerate_foreign_queue();
                     }
                 }
 

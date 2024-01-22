@@ -66,7 +66,7 @@ pub enum TransactionType {
     Remove(bool, bool, bool),
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub enum TransactionMode {
     Foreign,
     Local,
@@ -250,32 +250,32 @@ impl<'a> TransactionHandle<'a> {
         SyncReqResult::NotRequired
     }
 
-    fn enumerate_package_lists(&mut self, dep_handle: &Alpm, queue: bool) {
-        let foreign_pkgs = dep_handle
-            .localdb()
-            .pkgs()
-            .iter()
-            .filter(|p| !self.meta.foreign_pkgs.contains(p.name()))
-            .map(|p| p.name().to_owned())
-            .collect::<Vec<_>>();
-        let resident_pkgs = self
-            .alpm()
-            .localdb()
-            .pkgs()
-            .iter()
-            .filter(|p| !self.meta.foreign_pkgs.contains(p.name()) && !self.meta.resident_pkgs.contains(p.name()))
-            .map(|a| a.name().to_owned())
-            .collect::<Vec<_>>();
+    fn enumerate_package_lists(&mut self, dep_handle: &Alpm) {
+        self.meta.foreign_pkgs.extend(
+            dep_handle
+                .localdb()
+                .pkgs()
+                .iter()
+                .filter(|p| !self.meta.foreign_pkgs.contains(p.name()))
+                .map(|p| p.name().into())
+                .collect::<Vec<_>>(),
+        );
+        self.meta.resident_pkgs.extend(
+            self.alpm()
+                .localdb()
+                .pkgs()
+                .iter()
+                .filter(|p| !self.meta.foreign_pkgs.contains(p.name()) && !self.meta.resident_pkgs.contains(p.name()))
+                .map(|a| a.name().into())
+                .collect::<Vec<_>>(),
+        );
+    }
 
-        if queue {
-            let to_queue = foreign_pkgs.iter().map(|p| p.to_owned().into()).collect::<Vec<_>>();
-
-            self.meta.queue.extend(to_queue);
-            self.fail = false;
-        }
-
-        self.meta.foreign_pkgs.extend(foreign_pkgs);
-        self.meta.resident_pkgs.extend(resident_pkgs);
+    fn enumerate_foreign_queue(&mut self) {
+        self.meta
+            .queue
+            .extend(self.meta.foreign_pkgs.iter().map(|p| p.to_owned().into()).collect::<Vec<_>>());
+        self.fail = false;
     }
 
     pub fn ignore(&mut self, silent: bool) {
