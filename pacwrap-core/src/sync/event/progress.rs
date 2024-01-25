@@ -17,9 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use std::collections::HashMap;
+
 use alpm::Progress as Event;
 use dialoguer::console::Term;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::{
     config::global::ProgressKind,
@@ -33,24 +35,23 @@ use crate::{
 #[derive(Clone)]
 pub struct ProgressEvent {
     current: Option<String>,
-    progress: Option<ProgressBar>,
-    offset: usize,
+    condensed: Option<ProgressBar>,
     style: Option<ProgressStyle>,
+    offset: usize,
+    progress: MultiProgress,
+    bars: HashMap<String, ProgressBar>,
 }
 
 impl ProgressEvent {
     pub fn new() -> Self {
         Self {
             current: None,
-            progress: None,
+            condensed: None,
             style: None,
             offset: 0,
+            progress: MultiProgress::new(),
+            bars: HashMap::new(),
         }
-    }
-
-    pub fn configure(mut self, state: &TransactionType) -> Self {
-        self.offset = state.pr_offset();
-        self
     }
 
     pub fn style(mut self, kind: &ProgressKind) -> Self {
@@ -69,34 +70,29 @@ impl ProgressEvent {
         self
     }
 
-    fn bar(&mut self, ident: Option<String>, name: &str, howmany: usize, current: usize, size: usize) {
+    pub fn configure(mut self, state: &TransactionType) -> Self {
+        self.offset = state.pr_offset();
+        self
+    }
+
+    fn insert(&mut self, ident: &str, name: &str, howmany: usize, current: usize, size: usize) -> &ProgressBar {
         let pos = current + self.offset;
         let total = howmany + self.offset;
         let whitespace = whitespace(total, pos);
-        let progress = ProgressBar::new(size as u64);
+        let pb = self.progress.add(ProgressBar::new(size as u64));
 
-        progress.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {name}", *BOLD, *RESET, *BOLD, *RESET));
-        progress.set_style(self.style.as_ref().unwrap().clone());
-
-        self.progress = Some(progress);
-        self.current = ident
+        pb.set_message(format!("({}{whitespace}{pos}{}/{}{total}{}) {name}", *BOLD, *RESET, *BOLD, *RESET));
+        pb.set_style(self.style.as_ref().unwrap().clone());
+        self.bars.insert(ident.to_owned(), pb);
+        self.bars.get(ident).unwrap()
     }
 }
 
 pub fn event(event: Event, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressEvent) {
     let ident = ident(event, pkgname);
-
-    match this.current.as_deref() {
-        Some(current_ident) =>
-            if ident != current_ident {
-                this.bar(Some(ident), &name(event, pkgname), howmany, current, 100)
-            },
-        None => this.bar(Some(ident), &name(event, pkgname), howmany, current, 100),
-    };
-
-    let progress = match this.progress.as_mut() {
+    let progress = match this.bars.get(ident) {
         Some(progress) => progress,
-        None => return,
+        None => this.insert(ident, &name(event, pkgname), howmany, current, 100),
     };
 
     progress.set_position(percent as u64);
@@ -106,21 +102,21 @@ pub fn event(event: Event, pkgname: &str, percent: i32, howmany: usize, current:
     }
 }
 
-pub fn simple(progress: Event, pkgname: &str, percent: i32, howmany: usize, current: usize, this: &mut ProgressEvent) {
-    if percent == 0 {
+pub fn simple(kind: Event, pkgname: &str, _: i32, howmany: usize, current: usize, this: &mut ProgressEvent) {
+    if let Some(pkg) = this.current.as_deref() {
+        if ident(kind, pkgname) != pkg {
+            this.current = None;
+        }
+    }
+
+    if let None = this.current.as_deref() {
         let pos = current + this.offset;
         let total = howmany + this.offset;
-        let progress_name: String = name(progress, pkgname);
+        let progress_name: String = name(kind, pkgname);
         let whitespace = whitespace(total, pos);
 
         eprintln!("{} ({}{whitespace}{pos}{}/{}{total}{}) {progress_name}", *ARROW_CYAN, *BOLD, *RESET, *BOLD, *RESET);
-
-        if current == howmany {
-            eprintln!(
-                "{} ({}{whitespace}{pos}{}/{}{total}{}) Synchronization complete",
-                *ARROW_CYAN, *BOLD, *RESET, *BOLD, *RESET
-            );
-        }
+        this.current = Some(ident(kind, pkgname).into());
     }
 }
 
@@ -130,14 +126,16 @@ pub fn condensed(kind: Event, pkgname: &str, percent: i32, howmany: usize, curre
         let total = howmany + this.offset;
         let progress_name: String = name(kind, pkgname);
         let whitespace = whitespace(total, pos);
-
-        if let Some(_) = this.current {
-            this.bar(None, &progress_name, howmany, current, howmany);
-        }
-
-        let progress = match this.progress.as_mut() {
+        let progress = match this.condensed.as_mut() {
             Some(progress) => progress,
-            None => return,
+            None => {
+                let progress = ProgressBar::new(howmany as u64);
+
+                progress.set_style(this.style.as_ref().unwrap().clone());
+
+                this.condensed = Some(progress);
+                this.condensed.as_mut().unwrap()
+            }
         };
 
         progress.set_position(current as u64);
@@ -171,7 +169,7 @@ fn name(progress: Event, pkgname: &str) -> String {
     }
 }
 
-fn ident(progress: Event, pkgname: &str) -> String {
+fn ident(progress: Event, pkgname: &str) -> &str {
     match progress {
         Event::KeyringStart => "keyring",
         Event::IntegrityStart => "integrity",
@@ -179,7 +177,6 @@ fn ident(progress: Event, pkgname: &str) -> String {
         Event::ConflictsStart => "conflicts",
         _ => pkgname,
     }
-    .to_owned()
 }
 
 pub fn callback(
