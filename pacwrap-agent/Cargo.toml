@@ -1,6 +1,6 @@
 [package]
 name = "pacwrap-agent"
-version = "0.6.2"
+version = "0.6.3"
 authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
@@ -11,7 +11,7 @@ homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://git.sapphirus.org/pacwrap/pacwrap"
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core", version = "0.6.2" }
+pacwrap-core = { path = "../pacwrap-core", version = "0.6.3" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
