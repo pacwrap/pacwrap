@@ -47,9 +47,23 @@ impl Display for TableError {
     }
 }
 
+pub enum ColumnAttribute {
+    AlignRight,
+    AlignLeft,
+    AlignLeftMax(usize),
+    AlignRightMax(usize),
+}
+
+impl Default for ColumnAttribute {
+    fn default() -> Self {
+        Self::AlignLeft
+    }
+}
+
 pub struct Entry<'a> {
     contents: &'a str,
-    whitespace: &'a str,
+    prefix: &'a str,
+    suffix: &'a str,
     width: usize,
     position: usize,
     margin: usize,
@@ -61,7 +75,7 @@ pub struct Table<'a> {
     columns: Vec<Vec<Entry<'a>>>,
     margins: Vec<usize>,
     marker: Vec<usize>,
-    column_max: Vec<usize>,
+    column_attr: Vec<ColumnAttribute>,
     width_max: usize,
     whitespace: String,
     spacing: usize,
@@ -78,7 +92,7 @@ impl<'a> Table<'a> {
             columns: Vec::new(),
             margins: Vec::new(),
             marker: Vec::new(),
-            column_max: Vec::new(),
+            column_attr: Vec::new(),
             width_max: width,
             whitespace: whitespace(width),
             spacing: 2,
@@ -87,8 +101,15 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn mark(&mut self, col: usize) {
-        self.marker.push(col);
+    pub fn header(mut self, vec: &'a Vec<&'a str>) -> Self {
+        self.rows.push(vec.iter().map(|a| a.to_string()).collect());
+        self.dimensions = (self.rows.len(), vec.len());
+
+        for _ in 0 .. self.dimensions.1 {
+            self.column_attr.push(ColumnAttribute::default());
+        }
+
+        self
     }
 
     pub fn spacing(mut self, spacing: usize) -> Self {
@@ -96,31 +117,38 @@ impl<'a> Table<'a> {
         self
     }
 
-    pub fn col_width(mut self, col: usize, width: usize) -> Self {
-        if self.column_max.len() <= self.dimensions.1 {
-            for i in 0 .. self.dimensions.1 {
-                self.column_max.insert(i, 0);
-            }
+    pub fn col_attribute(mut self, col: usize, attr: ColumnAttribute) -> Self {
+        self.column_attr[col] = attr;
+        self
+    }
+
+    pub fn new_line(mut self) -> Self {
+        self.insert_line();
+        self
+    }
+
+    pub fn insert_line(&mut self) -> usize {
+        let mut vec = Vec::new();
+
+        for _ in 0 .. self.dimensions.1 {
+            vec.push(String::new());
         }
 
-        self.column_max.insert(col, width);
-        self
-    }
-
-    pub fn marked(&self) -> bool {
-        self.marker.len() > 0
-    }
-
-    pub fn header(mut self, vec: &'a Vec<&'a str>) -> Self {
-        self.rows.push(vec.iter().map(|a| a.to_string()).collect());
-        self.dimensions = (self.rows.len(), vec.len());
-        self
+        self.insert(vec)
     }
 
     pub fn insert(&mut self, vec: Vec<String>) -> usize {
         self.rows.push(vec);
         self.dimensions = (self.rows.len(), self.dimensions.1);
         self.rows.len() - 1
+    }
+
+    pub fn mark(&mut self, col: usize) {
+        self.marker.push(col);
+    }
+
+    pub fn marked(&self) -> bool {
+        self.marker.len() > 0
     }
 
     pub fn build(&'a mut self) -> Result<&Self, Error> {
@@ -133,17 +161,14 @@ impl<'a> Table<'a> {
         for row in 0 .. self.dimensions.0 {
             for col in 0 .. self.dimensions.1 {
                 let item = match self.rows[row].get(col) {
-                    Some(val) => match self.column_max.get(col) {
-                        Some(max) =>
-                            if *max > 0 && max < &val.len() {
-                                Entry::new(val.split_at(*max).0)
-                            } else {
-                                Entry::new(val)
-                            },
-                        None => Entry::new(val),
+                    Some(val) => match &self.column_attr[col] {
+                        ColumnAttribute::AlignLeftMax(max) | ColumnAttribute::AlignRightMax(max) =>
+                            Entry::new(if max < &val.len() { val.split_at(*max).0 } else { val }),
+                        _ => Entry::new(val),
                     },
                     None => Entry::new(""),
                 };
+
                 let margin = match self.margins.get(col) {
                     Some(margin) => *margin,
                     None => {
@@ -170,12 +195,21 @@ impl<'a> Table<'a> {
                 let margin = self.margins[col];
                 let item = &mut self.columns[col][row];
 
-                item.margin = margin + self.spacing;
                 item.position = position;
                 item.overflow = self.width_max <= (margin + position + self.spacing);
 
                 if !item.overflow && item.width <= margin {
-                    item.whitespace = self.whitespace.split_at(item.margin - item.width).0;
+                    match &self.column_attr[col] {
+                        ColumnAttribute::AlignRight | ColumnAttribute::AlignRightMax(_) => {
+                            item.margin = margin;
+                            item.suffix = self.whitespace.split_at(self.spacing).0;
+                            item.prefix = self.whitespace.split_at(item.margin - item.width).0;
+                        }
+                        ColumnAttribute::AlignLeft | ColumnAttribute::AlignLeftMax(_) => {
+                            item.margin = margin + self.spacing;
+                            item.suffix = self.whitespace.split_at(item.margin - item.width).0
+                        }
+                    }
                 }
 
                 if position + (self.spacing * col) >= self.width_max {
@@ -203,7 +237,8 @@ impl<'a> Entry<'a> {
         Self {
             contents: content,
             width: content.len(),
-            whitespace: "",
+            prefix: "",
+            suffix: "",
             position: 0,
             margin: 0,
             overflow: false,
@@ -238,7 +273,7 @@ impl<'a> Display for Table<'a> {
                 }
 
                 if let Some(item) = self.columns[col].get(row) {
-                    write!(fmt, "{}{}", item.contents, item.whitespace)?;
+                    write!(fmt, "{}{}{}", item.prefix, item.contents, item.suffix)?
                 }
             }
 
@@ -274,7 +309,7 @@ mod test {
             columns: Vec::new(),
             margins: Vec::new(),
             marker: Vec::new(),
-            column_max: Vec::new(),
+            column_attr: Vec::new(),
             width_max: 80,
             whitespace: whitespace(80),
             spacing: 2,

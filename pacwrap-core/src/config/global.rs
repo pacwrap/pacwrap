@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{config, save},
     constants::CONFIG_FILE,
+    sync::event::summary::SummaryKind,
     Result,
 };
 
@@ -78,8 +79,8 @@ pub struct Progress {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Configuration {
-    #[serde(default = "Verbosity::default")]
-    summary: Verbosity,
+    #[serde(default = "SummaryKind::default")]
+    summary: SummaryKind,
     #[serde(default = "Verbosity::default")]
     logging: Verbosity,
     #[serde(default = "Progress::new")]
@@ -107,7 +108,7 @@ pub struct AlpmConfiguration {
 impl Configuration {
     fn new() -> Self {
         Self {
-            summary: Verbosity::Basic,
+            summary: SummaryKind::Basic,
             logging: Verbosity::Basic,
             progress: Progress::new(),
         }
@@ -118,10 +119,10 @@ impl Configuration {
     }
 
     pub fn logging(&self) -> &Verbosity {
-        &self.summary
+        &self.logging
     }
 
-    pub fn summary(&self) -> &Verbosity {
+    pub fn summary(&self) -> &SummaryKind {
         &self.summary
     }
 }

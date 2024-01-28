@@ -35,7 +35,7 @@ use pacwrap_core::{
         arguments::{InvalidArgument, Operand},
         print_warning,
         prompt,
-        table::Table,
+        table::{ColumnAttribute, Table},
         Arguments,
     },
     Error,
@@ -121,9 +121,16 @@ fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
         _ => vec!["PID", "Container"],
     };
     let mut table = if let (true, false, _) | (true, true, _) = col {
-        Table::new().header(&table_header).col_width(1, 15).col_width(2, 15)
+        Table::new()
+            .header(&table_header)
+            .col_attribute(0, ColumnAttribute::AlignRight)
+            .col_attribute(1, ColumnAttribute::AlignLeftMax(15))
+            .col_attribute(2, ColumnAttribute::AlignLeftMax(15))
     } else {
-        Table::new().header(&table_header).col_width(1, 15)
+        Table::new()
+            .header(&table_header)
+            .col_attribute(0, ColumnAttribute::AlignRight)
+            .col_attribute(1, ColumnAttribute::AlignLeftMax(15))
     };
 
     for process in list {

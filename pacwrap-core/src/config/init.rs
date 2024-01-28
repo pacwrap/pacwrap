@@ -48,7 +48,7 @@ static PACWRAP_CONF_DEFAULT: &'static str = r###"## See the pacwrap.yml(2) manpa
 
 config:
   logging: Basic
-  summmary: Basic
+  summary: Basic
   #progress:
     #transact: CondensedForeign
     #download: CondensedForeign

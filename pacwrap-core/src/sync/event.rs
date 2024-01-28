@@ -22,6 +22,7 @@ use crate::utils;
 pub mod download;
 pub mod progress;
 pub mod query;
+pub mod summary;
 
 fn whitespace(total: usize, current: usize) -> String {
     utils::whitespace(log10(total) - log10(current))
