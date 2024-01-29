@@ -1,6 +1,6 @@
 [package]
 name = "pacwrap"
-version = "0.6.3"
+version = "0.6.4"
 authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
@@ -12,7 +12,7 @@ homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://git.sapphirus.org/pacwrap/pacwrap"
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core/", version = "0.6.3" }
+pacwrap-core = { path = "../pacwrap-core/", version = "0.6.4" }
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 nix = "0.22.3, <= 0.22.3"
 lazy_static = "1.4.0"
