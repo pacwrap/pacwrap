@@ -19,7 +19,7 @@
 use alpm::TransFlag;
 
 use crate::{
-    config::{InstanceHandle, InstanceType},
+    config::{InstanceHandle, InstanceType::Base},
     err,
     sync::{
         transaction::{
@@ -99,20 +99,10 @@ impl Transaction for Stage {
     }
 }
 
+
 fn check_keyring(ag: &TransactionAggregator, handle: &mut TransactionHandle, inshandle: &InstanceHandle) -> bool {
     match inshandle.metadata().container_type() {
-        InstanceType::Base => {
-            if ag.is_keyring_synced() {
-                return false;
-            }
-
-            handle
-                .alpm()
-                .trans_add()
-                .iter()
-                .find_map(|a| Some(a.name() == "archlinux-keyring"))
-                .unwrap_or(false)
-        }
+        Base => !ag.is_keyring_synced() && handle.alpm().trans_add().iter().find(|a| a.name() == "archlinux-keyring").is_some(),
         _ => false,
     }
 }

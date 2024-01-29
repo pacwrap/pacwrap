@@ -20,7 +20,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File, Metadata},
-    io::Read,
+    io::{Seek, Read},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
@@ -230,7 +230,10 @@ impl<'a> FileSystemStateSync<'a> {
         let magic = read_le_32(&header_buffer, 0);
         let version = read_le_32(&header_buffer, 4);
 
-        if magic != MAGIC_NUMBER {
+
+        if let Err(err) = file.rewind() {
+            print_error(format!("'{}': {}", path, err.kind()));    
+        } else if magic != MAGIC_NUMBER {
             print_warning(format!("'{}{instance}{}.dat': Magic number mismatch ({MAGIC_NUMBER} != {magic})", *BOLD, *RESET));
             return self.blank_state(instance);
         } else if version != VERSION {
@@ -443,17 +446,12 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
         if let None = state.files.get(file.0) {
             let path: &str = &format!("{}{}", root, file.0);
             let path = Path::new(path);
-
-            if !path.exists() {
-                if let FileType::SymLink = file.1 .0 {
-                    if let Err(error) = remove_symlink(path) {
-                        print_warning(error);
-                    }
+            
+            if let FileType::SymLink = file.1 .0 {
+                if let Err(error) = remove_symlink(path) {
+                    print_warning(error);
                 }
-                return;
-            }
-
-            if let FileType::HardLink = file.1 .0 {
+            } else if let (true, FileType::HardLink) = (path.exists(), &file.1 .0) {
                 if let Err(error) = remove_file(path) {
                     print_warning(error);
                 }
