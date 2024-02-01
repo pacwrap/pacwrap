@@ -1,6 +1,7 @@
 use std::{
     env,
     fmt::{Display, Formatter},
+    ops::Index,
 };
 
 use crate::{err, error::*, impl_error};
@@ -17,7 +18,7 @@ pub enum Operand<'a> {
 
 #[derive(Debug)]
 pub struct Arguments<'a> {
-    values: Vec<&'a str>,
+    inner: Vec<&'a str>,
     operands: Vec<Operand<'a>>,
     idx: usize,
     cur: usize,
@@ -49,7 +50,7 @@ impl Display for InvalidArgument {
 impl<'a> Arguments<'a> {
     pub fn new() -> Self {
         Self {
-            values: env::args()
+            inner: env::args()
                 .skip(1)
                 .map(|a| {
                     let a: &str = a.leak();
@@ -63,14 +64,15 @@ impl<'a> Arguments<'a> {
     }
 
     pub fn populate(mut self) -> Arguments<'a> {
-        for string in &self.values {
+        for string in &self.inner {
             match string {
                 string if string.starts_with("--") =>
                     if string.contains('=') {
                         let value: Vec<&'a str> = string[2 ..].splitn(2, '=').collect();
-
-                        self.operands.extend([Operand::Long(value[0]), Operand::LongPos(value[0], value[1])]);
-                    } else {
+ 
+                        self.operands.push(Operand::Long(value[0]));
+                        self.operands.push(Operand::LongPos(value[0], value[1]));
+                    } else if string.len() > 2 {
                         self.operands.push(Operand::Long(&string[2 ..]));
                     },
                 string if string.starts_with("-") =>
@@ -93,6 +95,7 @@ impl<'a> Arguments<'a> {
         self
     }
 
+    //#[deprecated]
     pub fn target(&mut self) -> Result<&'a str> {
         for op in self.into_iter() {
             if let Operand::ShortPos(_, name) | Operand::LongPos(_, name) | Operand::Value(name) = op {
@@ -115,8 +118,24 @@ impl<'a> Arguments<'a> {
         }
     }
 
-    pub fn values(&self) -> &Vec<&'a str> {
-        &self.values
+    pub fn inner(&self) -> &Vec<&'a str> {
+        &self.inner
+    }
+
+    pub fn into_inner(&self, skip: usize) -> Vec<&'a str> {
+        self.inner.iter().map(|f| *f).skip(skip).collect()
+    }
+
+    pub fn len(&self) -> usize {
+        self.operands.len()
+    }
+}
+
+impl<'a> Index<usize> for Arguments<'a> {
+    type Output = Operand<'a>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.operands[index]
     }
 }
 
@@ -130,21 +149,9 @@ impl<'a> Iterator for Arguments<'a> {
             self.idx += 1;
             Some(self.operands[self.cur])
         } else {
-            self.set_index(0);
+            self.idx = 0;
             None
         }
-    }
-}
-
-impl<'a> Default for &Operand<'a> {
-    fn default() -> Self {
-        &Operand::Nothing
-    }
-}
-
-impl<'a> Default for Operand<'a> {
-    fn default() -> Self {
-        Self::Nothing
     }
 }
 
@@ -158,5 +165,17 @@ impl<'a> Display for Operand<'a> {
             Operand::Value(str) => write!(fmt, "{}", str),
             Operand::Nothing => write!(fmt, "None"),
         }
+    }
+}
+
+impl<'a> Default for &Operand<'a> {
+    fn default() -> Self {
+        &Operand::Nothing
+    }
+}
+
+impl<'a> Default for Operand<'a> {
+    fn default() -> Self {
+        Self::Nothing
     }
 }

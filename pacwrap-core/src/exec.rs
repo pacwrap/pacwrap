@@ -18,19 +18,22 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
-    process::{Child, Command, Stdio},
+    fmt::{Display, Error as FmtError, Formatter},
+    os::{fd::AsRawFd, unix::process::ExitStatusExt},
+    process::{Child, Command, ExitStatus, Stdio},
+    result::Result as StdResult,
 };
 
 use command_fds::{CommandFdExt, FdMapping};
 use lazy_static::lazy_static;
 
 use crate::{
-    config::InstanceHandle,
+    config::{InstanceHandle, InstanceType},
     constants::{
         BOLD,
         BWRAP_EXECUTABLE,
         COLORTERM,
+        DEFAULT_PATH,
         GID,
         LANG,
         LOG_LOCATION,
@@ -44,11 +47,11 @@ use crate::{
     err,
     exec::{
         seccomp::{provide_bpf_program, FilterType::*},
-        utils::{agent_params, wait_on_process},
+        utils::{agent_params, decode_info_json, wait_on_fakeroot, wait_on_process},
     },
-    impl_error,
     sync::transaction::{TransactionMetadata, TransactionParameters},
     to_static_str,
+    utils::TermControl,
     Error,
     ErrorKind,
     ErrorTrait,
@@ -56,6 +59,7 @@ use crate::{
 };
 
 pub mod args;
+pub mod path;
 pub mod seccomp;
 pub mod utils;
 
@@ -74,12 +78,12 @@ pub enum ExecutionError {
     UnabsoluteExec(String),
     DirectoryNotExecutable(String),
     SocketTimeout(String),
+    Container(i32),
+    Bwrap(ExitStatus),
 }
 
-impl_error!(ExecutionError);
-
 impl Display for ExecutionError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> StdResult<(), FmtError> {
         match self {
             Self::InvalidPathVar(dir, err) => write!(fmter, "Invalid {}PATH{} variable '{dir}': {err}", *BOLD, *RESET),
             Self::ExecutableUnavailable(exec) => write!(fmter, "'{}': Not available in container {}PATH{}.", exec, *BOLD, *RESET),
@@ -87,61 +91,120 @@ impl Display for ExecutionError {
             Self::UnabsoluteExec(path) => write!(fmter, "'{}': Executable path must be absolute.", path),
             Self::DirectoryNotExecutable(path) => write!(fmter, "'{}': Directories are not executables.", path),
             Self::SocketTimeout(socket) => write!(fmter, "Socket '{socket}': timed out."),
+            Self::Container(status) => write!(fmter, "Container exited with code: {}", status),
+            Self::Bwrap(status) => write!(fmter, "bubblewrap exited with {}", status),
             Self::RuntimeArguments => write!(fmter, "Invalid runtime arguments."),
         }
     }
 }
 
+impl ErrorTrait for ExecutionError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::Container(status) => *status,
+            Self::Bwrap(status) => 128 + status.signal().unwrap_or(0),
+            _ => 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ExecutionType {
+    Interactive,
+    NonInteractive,
+}
+
 #[rustfmt::skip]
-pub fn fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<Child> {
-	let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();
-	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_reader, sec_writer).unwrap();
-	let fd_mappings = vec![FdMapping { 
+pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
+    let term_control = TermControl::new(0);
+    let info_pipe = os_pipe::pipe().unwrap();
+    let sec_pipe = os_pipe::pipe().unwrap();
+	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).unwrap();
+    let info_fd = info_pipe.1.as_raw_fd();  
+    let fd_mappings = vec![
+	    FdMapping { 
 	        parent_fd: sec_fd, 
-	        child_fd: sec_fd }];
-	
-	match Command::new(BWRAP_EXECUTABLE).env_clear()
-	    .arg("--tmpfs").arg("/tmp")
-		.arg("--bind").arg(ins.vars().root()).arg("/")
-        .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/tmp/runtime")
-        .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
-        .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime")
-        .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/etc/pacman.d/gnupg")
-        .arg("--bind").arg(ins.vars().pacman_cache()).arg("/var/cache/pacman/pkg")
-        .arg("--bind").arg(ins.vars().home()).arg(ins.vars().home_mount())  
-        .arg("--dev").arg("/dev")
+	        child_fd: sec_fd 
+	    },
+        FdMapping { 
+	        parent_fd: info_fd, 
+	        child_fd: info_fd 
+	    },
+	];
+	let mut process = Command::new(BWRAP_EXECUTABLE);
+
+	process.env_clear()
+        .arg("--tmpfs").arg("/tmp")
         .arg("--proc").arg("/proc")
-        .arg("--unshare-all").arg("--share-net")
-        .arg("--hostname").arg("FakeChroot")
+        .arg("--dev").arg("/dev")
+        .arg("--ro-bind").arg(*DIST_IMG).arg("/usr")
+        .arg("--symlink").arg("usr/lib").arg("/lib")
+        .arg("--symlink").arg("usr/lib").arg("/lib64")
+        .arg("--symlink").arg("usr/bin").arg("/bin")
+        .arg("--symlink").arg("usr/bin").arg("/sbin")
+        .arg("--symlink").arg("usr/etc").arg("/etc")
+        .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs") 
+        .arg("--bind").arg(ins.vars().home()).arg("/mnt/fs/root")
+        .arg("--proc").arg("/mnt/fs/proc")
+        .arg("--dev").arg("/mnt/fs/dev")
+        .arg("--unshare-all")
+        .arg("--share-net")
         .arg("--new-session")
+        .arg("--setenv").arg("LD_PRELOAD").arg("/lib64/libfakechroot.so")
+        .arg("--setenv").arg("LD_LIBRARY_PATH").arg("/lib64:/usr/lib:/tmp/lib")
         .arg("--setenv").arg("TERM").arg("xterm")
-        .arg("--setenv").arg("PATH").arg("/usr/local/bin:/usr/bin")
-        .arg("--setenv").arg("CWD").arg(ins.vars().home_mount())
-        .arg("--setenv").arg("HOME").arg(ins.vars().home_mount())
+        .arg("--setenv").arg("COLORTERM").arg(*COLORTERM)
+        .arg("--setenv").arg("PATH").arg(DEFAULT_PATH)
         .arg("--setenv").arg("USER").arg(ins.vars().user())
+        .arg("--setenv").arg("HOME").arg("/root")
         .arg("--die-with-parent")
         .arg("--disable-userns")
         .arg("--unshare-user")
         .arg("--seccomp")
         .arg(sec_fd.to_string())
-        .arg("fakechroot")
-        .arg("fakeroot")
-        .args(arguments)
-        .fd_mappings(fd_mappings)
-        .unwrap()
-        .spawn() 
+        .arg("--info-fd")
+        .arg(info_fd.to_string());
+
+        if let InstanceType::Slice = ins.metadata().container_type() {
+            process.arg("--dir").arg("/root")  
+                .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
+                .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
+                .arg("--ro-bind").arg(&format!("{}/etc/bash.bashrc",*DIST_IMG)).arg("/mnt/fs/etc/bash.bashrc")
+                .arg("--setenv").arg("ENV").arg("/etc/profile");
+
+            if arguments[0] == "ash" {
+                process.arg("--hostname").arg("BusyBox")
+            } else {
+                process.arg("--hostname").arg("FakeChroot")
+                    .arg("fakeroot").arg("chroot").arg("/mnt/fs") 
+            }
+        } else {
+            process.arg("--hostname").arg("FakeChroot")
+                .arg("--ro-bind").arg("/etc/resolv.conf").arg("/mnt/fs/etc/resolv.conf")
+                .arg("--ro-bind").arg(&format!("{}/etc/bash.bashrc",*DIST_IMG)).arg("/mnt/fs/etc/bash.bashrc")
+                .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/fs/etc/pacman.d/gnupg")
+                .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg") 
+                .arg("--setenv").arg("EUID").arg("0") 
+                .arg("--setenv").arg("PATH").arg(DEFAULT_PATH)
+                .arg("fakeroot").arg("chroot").arg("/mnt/fs")
+        };
+
+        match process.args(arguments)
+            .fd_mappings(fd_mappings)
+            .unwrap()
+            .spawn() 
 	{
-		Ok(child) => Ok(child),
+		Ok(child) => wait_on_fakeroot(exec_type, child, term_control, decode_info_json(info_pipe)?, trap),
 		Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
 	}
 }
 
 #[rustfmt::skip]
-pub fn transaction_agent(ins: &InstanceHandle, params: &TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> { 
-	let (sec_reader, sec_writer) = os_pipe::pipe().unwrap();
-	let (params_reader, params_writer) = os_pipe::pipe().unwrap();  	
-	let params_fd = agent_params(&params_reader, &params_writer, params, metadata)?;
-	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_reader, sec_writer).unwrap();
+pub fn transaction_agent(ins: &InstanceHandle, params: TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> {
+	let params_pipe = os_pipe::pipe().unwrap();
+    let params_fd = agent_params(&params_pipe.0, &params_pipe.1, &params, metadata)?;	
+    let sec_pipe = os_pipe::pipe().unwrap();
+    let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).unwrap();
 	let fd_mappings = vec![
 		FdMapping { 
 		    parent_fd: sec_fd, 
@@ -156,8 +219,9 @@ pub fn transaction_agent(ins: &InstanceHandle, params: &TransactionParameters, m
 	match Command::new(BWRAP_EXECUTABLE).env_clear()
         .arg("--bind").arg(&ins.vars().root()).arg("/mnt/fs")
         .arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
-        .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/lib64")
-        .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/bin")
+        .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/bin")
+        .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/lib")
+        .arg("--symlink").arg("lib").arg("/lib64")
         .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
         .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 
         .arg("--ro-bind").arg(*DIST_TLS).arg("/etc/ssl/certs/ca-certificates.crt")
@@ -195,7 +259,7 @@ pub fn transaction_agent(ins: &InstanceHandle, params: &TransactionParameters, m
         .fd_mappings(fd_mappings)
         .unwrap()
         .spawn() 
-	{
+    {
 		Ok(child) => Ok(child),
 		Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
     }

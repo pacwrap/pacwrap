@@ -32,13 +32,14 @@ DIST_REPO="./dist/repo"
 runtime() {
 	if [[ -d "$DIST_RUNTIME" ]]; then
 		rm -r "$DIST_RUNTIME"
+		mkdir -p "$DIST_RUNTIME"
 		echo "$BOLD$GREEN     Cleaned$RESET container runtime"
 	fi
 }
 
 repo() {
 	if [[ -d "$DIST_REPO" ]] && [[ -d "$DIST_BASE" ]]; then
-		rm $DIST_REPO/*  $DIST_BASE/*.tar.zst
+		rm "$DIST_REPO/*" "$DIST_BASE/*.tar.zst"
 		echo "$BOLD$GREEN     Cleaned$RESET repositories"
 	fi
 }
@@ -47,8 +48,12 @@ invalid() {
 	echo $BOLD$RED"error:$RESET Invalid parameter '$1'"
 }
 
-for var in "$@"; do case $var in 
-	repo) repo;;
-	runtime) runtime;;
-	*) invalid $var;;
-esac; done
+main() {
+	for var in "$@"; do case $var in 
+		repo) repo;;
+		runtime) runtime;;
+		*) invalid $var;;
+	esac; done
+}
+
+main $@

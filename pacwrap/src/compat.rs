@@ -26,7 +26,8 @@ use pacwrap_core::{
     utils::arguments::{Arguments, Operand},
 };
 
-fn print_configuration(instance: &str) -> Result<()> {
+fn print_configuration(args: &mut Arguments) -> Result<()> {
+    let instance = args.target()?;
     let ins = config::provide_new_handle(instance)?;
     let mut pkgs_string = String::new();
     let mut depends_string = String::new();
@@ -48,11 +49,11 @@ fn print_configuration(instance: &str) -> Result<()> {
 
 pub fn compat(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
-        Operand::Short('l') | Operand::Long("load") => print_configuration(args.target()?),
+        Operand::Short('l') | Operand::Long("load") => print_configuration(args),
         _ => args.invalid_operand(),
     }
 }
 
 pub fn execute_utils(args: &mut Arguments) -> Result<()> {
-    handle_process("pacwrap-utils", Command::new("pacwrap-utils").args(args.values()).spawn())
+    handle_process("pacwrap-utils", Command::new("pacwrap-utils").args(args.inner()).spawn())
 }

@@ -34,7 +34,6 @@ use crate::{
     error,
     error::*,
     exec::pacman_key,
-    impl_error,
     sync::event::download::{self, DownloadEvent},
     utils::print_warning,
     ErrorKind,
@@ -75,8 +74,6 @@ pub enum SyncError {
     RepoConfError(String, String),
 }
 
-impl_error!(SyncError);
-
 impl Display for SyncError {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
@@ -103,17 +100,19 @@ impl Display for SyncError {
             _ => Ok(()),
         }?;
 
-        //Temporary until command and control pipeline is implemented for pacwrap-agent
-        match self {
-            Self::TransactionFailureAgent => Ok(()),
-            _ => write!(fmter, "\n{} Transaction failed.", *ARROW_RED),
-        }
+        write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
+    }
+}
+
+impl ErrorTrait for SyncError {
+    fn code(&self) -> i32 {
+        1
     }
 }
 
 impl From<Error> for SyncError {
     fn from(error: Error) -> SyncError {
-        Self::InternalError(error.downcast::<SyncError>().unwrap().to_string())
+        Self::InternalError(error.kind().to_string())
     }
 }
 

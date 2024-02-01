@@ -23,10 +23,7 @@ use std::{
     process::exit,
 };
 
-use crate::{
-    sync::SyncError,
-    utils::{print_error, print_warning},
-};
+use crate::utils::{print_error, print_warning};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -74,15 +71,7 @@ impl Error {
     }
 
     pub fn handle(&self) {
-        //Temporary until command and control pipeline is implemented for pacwrap-agent
-        match self.downcast::<SyncError>() {
-            Ok(error) => match error {
-                SyncError::TransactionFailureAgent => (),
-                _ => print_error(&self.kind),
-            },
-            Err(_) => print_error(&self.kind),
-        }
-
+        print_error(&self.kind);
         exit(self.kind.code());
     }
 
@@ -93,6 +82,10 @@ impl Error {
 
     pub fn warn(&self) {
         print_warning(&self.kind);
+    }
+
+    pub fn kind(&self) -> &Box<dyn ErrorTrait> {
+        &self.kind
     }
 
     pub fn downcast<T: 'static>(&self) -> std::result::Result<&T, &Self> {

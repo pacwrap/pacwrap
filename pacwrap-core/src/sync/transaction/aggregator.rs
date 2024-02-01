@@ -17,14 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::collections::HashMap;
+use std::{collections::HashMap, process::exit};
 
 use crate::{
     config::{cache::InstanceCache, InstanceHandle, InstanceType, CONFIG},
     constants::{ARROW_GREEN, UNIX_TIMESTAMP},
     err,
     error::*,
-    exec::utils::execute_fakeroot_container,
+    exec::{fakeroot_container, ExecutionType::NonInteractive},
     log::Logger,
     sync::{
         self,
@@ -169,21 +169,19 @@ impl<'a> TransactionAggregator<'a> {
 
                     result
                 }
-                Err(result) => {
-                    let is_okay = match result.downcast::<SyncError>() {
-                        Ok(error) => match error {
-                            SyncError::NothingToDo(bool) => *bool,
-                            _ => true,
-                        },
-                        Err(_) => true,
-                    };
-
+                Err(err) => {
                     handle.release();
-
-                    match is_okay {
-                        false => return Ok(()),
-                        true => return Err(result),
-                    }
+                    return match err.downcast::<SyncError>() {
+                        Ok(error) => match error {
+                            SyncError::TransactionFailureAgent => exit(err.kind().code()),
+                            SyncError::NothingToDo(bool) => match bool {
+                                false => Ok(()),
+                                true => Err(err),
+                            },
+                            _ => Err(err),
+                        },
+                        Err(_) => err!(SyncError::from(err)),
+                    };
                 }
             };
 
@@ -192,8 +190,8 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn keyring_update(&mut self, inshandle: &InstanceHandle) -> Result<()> {
-        execute_fakeroot_container(inshandle, vec!["/usr/bin/pacman-key", "--populate", "archlinux"])?;
-        execute_fakeroot_container(inshandle, vec!["/usr/bin/pacman-key", "--updatedb"])?;
+        fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacman-key", "--populate", "archlinux"])?;
+        fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacman-key", "--updatedb"])?;
         self.keyring = true;
         Ok(())
     }

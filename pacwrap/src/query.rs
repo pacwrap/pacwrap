@@ -40,9 +40,10 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = arguments.next() {
         match arg {
+            Operand::Long("target") | Operand::Short('t') => continue,
             Operand::Short('e') | Operand::Long("explicit") => explicit = true,
             Operand::Short('q') | Operand::Long("quiet") => quiet = true,
-            Operand::LongPos("target", t) | Operand::ShortPos(_, t) => target = t,
+            Operand::LongPos(_, t) | Operand::ShortPos(_, t) | Operand::Value(t) => target = t,
             _ => arguments.invalid_operand()?,
         }
     }
