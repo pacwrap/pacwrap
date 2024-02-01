@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashMap, fs::File, io::Write};
+use std::collections::HashMap;
 
 use indexmap::IndexMap;
 use pacwrap_core::{
@@ -46,6 +46,11 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     let action = {
         let mut u = 0;
         let mut y = 0;
+
+        if let Op::Value("init") = args[0] {
+            u = 1;
+            y = 1;
+        }
 
         while let Some(arg) = args.next() {
             match arg {
@@ -135,6 +140,10 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
 }
 
 fn create(args: &mut Arguments) -> bool {
+    if let Op::Value("init") = args[0] {
+        return true;
+    }
+
     for arg in args {
         if let Op::Short('c') | Op::Long("create") = arg {
             return true;
@@ -173,16 +182,6 @@ fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>
                 err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
             }
         }
-
-        let bashrc = format!("{}/.bashrc", handle.vars().home());
-
-        match File::create(&bashrc) {
-            Ok(mut f) =>
-                if let Err(error) = write!(f, "PS1=\"$USER> \"") {
-                    err!(ErrorKind::IOError(bashrc, error.kind()))?
-                },
-            Err(error) => err!(ErrorKind::IOError(bashrc.clone(), error.kind()))?,
-        };
     }
 
     handle.save()?;
@@ -197,7 +196,11 @@ fn engage_aggregator<'a>(
     args: &'a mut Arguments,
     log: &'a mut Logger,
 ) -> Result<()> {
-    let mut action_flags = TransactionFlags::NONE;
+    let mut action_flags = if let Op::Value("init") = args[0] {
+        TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE
+    } else {
+        TransactionFlags::NONE
+    };
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str, Vec<&'a str>> = HashMap::new();
     let mut current_target = "";

@@ -70,8 +70,18 @@ pub fn process(args: &mut Arguments) -> Result<(), Error> {
         Operand::Long("summary") | Operand::Short('s') => summary(args),
         Operand::Long("id-list") | Operand::Short('i') => process_id(args),
         Operand::Long("kill") | Operand::Short('k') => process_kill(args),
-        Operand::Nothing => err!(InvalidArgument::OperationUnspecified),
-        _ => args.invalid_operand(),
+        Operand::Nothing =>
+            if let Operand::Value("ps") = args[0] {
+                summary(args)
+            } else {
+                err!(InvalidArgument::OperationUnspecified)
+            },
+        _ =>
+            if let Operand::Value("ps") = args[0] {
+                summary(args)
+            } else {
+                args.invalid_operand()
+            },
     }
 }
 
@@ -83,6 +93,7 @@ fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
 
     while let Some(arg) = args.next() {
         match arg {
+            Operand::Value("ps") => continue,
             Operand::Short('d') | Operand::Short('t') | Operand::Long("depth") | Operand::Long("target") => continue,
             Operand::Short('x') | Operand::Long("exec") => exec += 1,
             Operand::Short('c') | Operand::Long("command") => cmd += 1,

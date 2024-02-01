@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use pacwrap_core::utils::arguments::{Arguments, Operand};
+use pacwrap_core::utils::arguments::{Arguments, Operand as Op};
 
 mod compat;
 mod exec;
@@ -30,15 +30,15 @@ mod sync;
 fn main() {
     let arguments = &mut Arguments::new().populate();
     let result = match arguments.next().unwrap_or_default() {
-        Operand::Short('E') | Operand::Long("exec") => exec::execute(arguments),
-        Operand::Short('S') | Operand::Long("sync") => sync::synchronize(arguments),
-        Operand::Short('R') | Operand::Long("remove") => remove::remove(arguments),
-        Operand::Short('Q') | Operand::Long("query") => query::query(arguments),
-        Operand::Short('P') | Operand::Long("proc") => proc::process(arguments),
-        Operand::Short('h') | Operand::Long("help") => manual::help(arguments),
-        Operand::Short('U') | Operand::Long("utils") => compat::execute_utils(arguments),
-        Operand::Short('V') | Operand::Long("version") => manual::print_version(arguments),
-        Operand::Long("compat") => compat::compat(arguments),
+        Op::Short('E') | Op::Long("exec") | Op::Value("shell") | Op::Value("run") => exec::execute(arguments),
+        Op::Short('S') | Op::Long("sync") | Op::Value("sync") | Op::Value("init") => sync::synchronize(arguments),
+        Op::Short('R') | Op::Long("remove") | Op::Value("remove") => remove::remove(arguments),
+        Op::Short('Q') | Op::Long("query") | Op::Value("query") => query::query(arguments),
+        Op::Short('P') | Op::Long("process") | Op::Value("ps") => proc::process(arguments),
+        Op::Short('h') | Op::Long("help") | Op::Value("help") => manual::help(arguments),
+        Op::Short('V') | Op::Long("version") | Op::Value("version")  => manual::print_version(arguments),
+        Op::Short('U') | Op::Long("utils") => compat::execute_utils(arguments),
+        Op::Long("compat") => compat::compat(arguments),
         _ => arguments.invalid_operand(),
     };
 

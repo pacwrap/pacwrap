@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{env::var, process::id};
+use std::{env::var, process::id, time::Duration};
 
 use lazy_static::lazy_static;
 use nix::unistd::{getegid, geteuid};
@@ -29,9 +29,10 @@ use crate::{
     ErrorKind,
 };
 
+pub static PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
 pub const BWRAP_EXECUTABLE: &str = "bwrap";
 pub const DBUS_PROXY_EXECUTABLE: &str = "xdg-dbus-proxy";
-pub const DEFAULT_PATH: &str = "/usr/local/bin:/usr/bin/:/bin";
+pub const DEFAULT_PATH: &str = "/usr/local/bin:/bin:/usr/bin/";
 pub const PACMAN_KEY_SCRIPT: &str = "pacman-key";
 pub const RUNTIME_DIRECTORY: &str = "/usr/share/pacwrap/runtime";
 pub const RUNTIME_TLS_STORE: &str = "/etc/ca-certificates/extracted/tls-ca-bundle.pem";

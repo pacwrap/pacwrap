@@ -17,37 +17,127 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{io::Read, os::fd::AsRawFd, process::Child};
+use std::{
+    io::Read,
+    os::fd::AsRawFd,
+    path::Path,
+    process::{exit, Child},
+    thread,
+    time::Duration,
+};
 
 use os_pipe::{PipeReader, PipeWriter};
 use serde::Serialize;
 use serde_yaml::Value;
 
 use crate::{
-    config::{InstanceHandle, CONFIG},
+    config::CONFIG,
     constants::BWRAP_EXECUTABLE,
     err,
     error::*,
+    exec::{ExecutionError, ExecutionType},
     sync::{
         transaction::{TransactionMetadata, TransactionParameters},
         SyncError,
         DEFAULT_ALPM_CONF,
     },
+    utils::TermControl,
     ErrorKind,
 };
 
-pub fn execute_fakeroot_container(ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
-    match super::fakeroot_container(ins, arguments)?.wait() {
-        Ok(_) => Ok(()),
-        Err(err) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, err.kind())),
+static PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
+
+pub fn wait_on_container(
+    mut process: Child,
+    term: TermControl,
+    bwrap_pid: i32,
+    block: bool,
+    jobs: Option<Vec<Child>>,
+    trap_cb: fn(i32),
+    exit_cb: fn() -> Result<()>,
+) -> Result<()> {
+    trap_cb(bwrap_pid);
+
+    match process.wait() {
+        Ok(status) => {
+            if block {
+                let proc: &str = &format!("/proc/{}/", bwrap_pid);
+                let proc = Path::new(proc);
+
+                while proc.exists() {
+                    thread::sleep(PROCESS_SLEEP_DURATION);
+                }
+            }
+
+            if let Some(mut jobs) = jobs {
+                for job in jobs.iter_mut() {
+                    job.kill().unwrap();
+                }
+            }
+
+            if let Err(err) = exit_cb() {
+                err.warn();
+            }
+
+            if let Err(err) = term.reset_terminal() {
+                err.warn();
+            }
+
+            match status.code() {
+                Some(code) => exit(code),
+                None => {
+                    eprint!("\nbwrap process {status}");
+                    println!();
+                    exit(ExecutionError::Bwrap(status).code())
+                }
+            }
+        }
+        Err(error) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind())),
     }
 }
 
-pub fn bwrap_json(mut reader: PipeReader, writer: PipeWriter) -> Result<i32> {
+pub fn wait_on_fakeroot(
+    exec_type: ExecutionType,
+    mut process: Child,
+    term: TermControl,
+    bwrap_pid: i32,
+    trap_cb: Option<fn(i32)>,
+) -> Result<()> {
+    if let Some(trap) = trap_cb {
+        trap(bwrap_pid)
+    }
+
+    match process.wait() {
+        Ok(status) => {
+            if let Err(err) = term.reset_terminal() {
+                err.warn();
+            }
+
+            match status.code() {
+                Some(code) => match (exec_type, code) {
+                    (_, 0) => Ok(()),
+                    (ExecutionType::Interactive, _) => exit(code),
+                    (ExecutionType::NonInteractive, _) => err!(ExecutionError::Container(code)),
+                },
+                None => match exec_type {
+                    ExecutionType::Interactive => {
+                        eprint!("\nbwrap process {status}");
+                        println!();
+                        exit(ExecutionError::Bwrap(status).code())
+                    }
+                    ExecutionType::NonInteractive => err!(ExecutionError::Bwrap(status)),
+                },
+            }
+        }
+        Err(error) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind())),
+    }
+}
+
+pub fn decode_info_json(mut info_pipe: (PipeReader, PipeWriter)) -> Result<i32> {
     let mut output = String::new();
 
-    drop(writer);
-    reader.read_to_string(&mut output).unwrap();
+    drop(info_pipe.1);
+    info_pipe.0.read_to_string(&mut output).unwrap();
 
     match serde_yaml::from_str::<Value>(&output) {
         Ok(value) => match value["child-pid"].as_u64() {
@@ -81,7 +171,7 @@ fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> 
 pub fn handle_process(name: &'static str, result: std::result::Result<Child, std::io::Error>) -> Result<()> {
     match result {
         Ok(child) => wait_on_process(name, child),
-        Err(error) => err!(ErrorKind::IOError(name.into(), error.kind())),
+        Err(error) => err!(ErrorKind::ProcessInitFailure(name.into(), error.kind())),
     }
 }
 
