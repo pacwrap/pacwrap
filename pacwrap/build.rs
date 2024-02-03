@@ -17,7 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{env::var, process::Command};
+use pacwrap_core::sync::schema;
+use std::{env::var, path::Path, process::Command};
 
 fn head() -> String {
     match Command::new("git").args(["rev-parse", "--short", "HEAD"]).output() {
@@ -52,13 +53,21 @@ fn is_debug() -> bool {
 
 fn main() {
     if !cfg!(target_os = "linux") || !cfg!(target_family = "unix") {
-        panic!("Unsupported build target. Please refer to the documentation for further information.")
+        panic!("Unsupported build target. Please refer to the build documentation for further information.")
+    } else if !Path::new("../dist/").exists() || !Path::new("../dist/tools/").exists() {
+        panic!("Distribution directory is missing. Please refer to the build documentation for further information.")
+    } else if !Path::new("../dist/filesystem.tar.zst").exists() {
+        panic!("Container fileystem schema is missing. Please refer to the build documentation for further information.")
     }
 
     let debug: bool = is_debug();
 
+    println!("cargo:rerun-if-env-changed=PACWRAP_DIST_META");
+    println!("cargo:rerun-if-env-changed=PACWRAP_DIST_FS");
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_REPO");
     println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", head());
     println!("cargo:rustc-env=PACWRAP_BUILDTIME={}", time(debug));
     println!("cargo:rustc-env=PACWRAP_BUILD={}", release(debug));
+
+    schema::serialize_path("../dist/filesystem.tar.zst", "../dist/filesystem.dat");
 }

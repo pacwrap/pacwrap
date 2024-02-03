@@ -35,7 +35,6 @@ use crate::{
     error::*,
     exec::pacman_key,
     sync::event::download::{self, DownloadEvent},
-    utils::print_warning,
     ErrorKind,
 };
 
@@ -43,6 +42,7 @@ pub mod event;
 pub mod filesystem;
 mod resolver;
 mod resolver_local;
+pub mod schema;
 pub mod transaction;
 pub mod utils;
 
@@ -134,15 +134,6 @@ impl AlpmConfigData {
         for repo in PACMAN_CONF.repos.iter() {
             remotes.push((repo.name.clone(), signature(&repo.sig_level, *DEFAULT_SIGLEVEL).bits(), repo.servers.clone()));
         }
-
-        remotes.push((
-            "pacwrap".into(),
-            (SigLevel::PACKAGE_MARGINAL_OK | SigLevel::DATABASE_MARGINAL_OK).bits(),
-            vec![
-                format!("file://{}", env!("PACWRAP_DIST_REPO")),
-                format!("file:///mnt/share/dist-repo/"),
-            ],
-        ));
 
         Self { repos: remotes }
     }
@@ -242,14 +233,14 @@ fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
                 let dest = &format!("{}/var/lib/pacman/sync/pacwrap.db", vars.root());
 
                 if let Err(error) = filesystem::create_hard_link(src, dest) {
-                    print_warning(error);
+                    error.warn();
                 }
 
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
                     if let Err(error) = filesystem::create_hard_link(src, dest) {
-                        print_warning(error);
+                        error.warn();
                     }
                 }
             }
@@ -295,6 +286,10 @@ fn load_repositories() -> pacmanconf::Config {
     match pacmanconf::Config::from_file(&path) {
         Ok(config) => config,
         Err(error) => {
+            //The following code is ugly, precisely because, the pacman_conf library does not
+            //provide ergonomic error strings. At some point perhaps, pacman_conf should be
+            //eliminated as an upstream dependency.
+
             let error = error.to_string();
             let error = error.split("error: ").collect::<Vec<_>>()[1].split("\n").collect::<Vec<&str>>()[0];
             let error = error!(SyncError::RepoConfError(path, error.to_string()));

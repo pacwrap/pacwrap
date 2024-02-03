@@ -62,6 +62,9 @@ lazy_static! {
     pub static ref HOME: &'static str = env("HOME");
     pub static ref USER: &'static str = env("USER");
     pub static ref TERM: &'static str = env_opt("TERM");
+    pub static ref VERSION_MAJOR: u32 = env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap();
+    pub static ref VERSION_MINOR: u32 = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap();
+    pub static ref VERSION_PATCH: u32 = env!("CARGO_PKG_VERSION_PATCH").parse().unwrap();
     pub static ref COLORTERM: &'static str = env_opt("COLORTERM");
     pub static ref LANG: &'static str = env_default("LAMG", "en_US.UTF-8");
     pub static ref WAYLAND_DISPLAY: &'static str = env_opt("WAYLAND_DISPLAY");
@@ -83,6 +86,7 @@ lazy_static! {
     pub static ref RESET: &'static str = reset();
     pub static ref DIM: &'static str = dim();
     pub static ref YELLOW: &'static str = yellow();
+    pub static ref CHECKMARK: &'static str = checkmark();
     pub static ref BOLD_WHITE: &'static str = bold_white();
     pub static ref BOLD_YELLOW: &'static str = bold_yellow();
     pub static ref BOLD_RED: &'static str = bold_red();
@@ -196,6 +200,14 @@ fn bold_green() -> &'static str {
         "[1;32m"
     } else {
         ""
+    }
+}
+
+fn checkmark() -> &'static str {
+    if *IS_COLOR_TERMINLAL {
+        " [1;32m✓[0m"
+    } else {
+        " ✓"
     }
 }
 

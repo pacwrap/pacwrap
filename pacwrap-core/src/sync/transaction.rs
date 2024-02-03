@@ -30,7 +30,8 @@ use crate::{
     sync::{
         resolver::DependencyResolver,
         resolver_local::LocalDependencyResolver,
-        transaction::{commit::Commit, prepare::Prepare, stage::Stage, uptodate::UpToDate},
+        schema::SchemaState,
+        transaction::{commit::Commit, container::Schema, prepare::Prepare, stage::Stage, uptodate::UpToDate},
         utils::AlpmUtils,
         SyncError,
     },
@@ -42,6 +43,7 @@ pub use self::aggregator::TransactionAggregator;
 
 pub mod aggregator;
 mod commit;
+mod container;
 mod prepare;
 mod stage;
 mod uptodate;
@@ -56,6 +58,7 @@ pub enum TransactionState {
     PrepareForeign(bool),
     Stage,
     StageForeign,
+    UpdateSchema(Option<SchemaState>),
     Commit(bool),
     CommitForeign,
 }
@@ -143,6 +146,7 @@ impl TransactionMode {
 impl TransactionState {
     fn from(self, ag: &TransactionAggregator) -> Box<dyn Transaction> {
         match self {
+            Self::UpdateSchema(_) => Schema::new(self, ag),
             Self::Prepare => Prepare::new(self, ag),
             Self::PrepareForeign(_) => Prepare::new(self, ag),
             Self::UpToDate => UpToDate::new(self, ag),

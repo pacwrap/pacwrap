@@ -39,7 +39,7 @@ An online version of the user manual is viewable **[here](../docs/manual.md)**.
 
 ## Build requirements
 
-A minimum version of Rust 1.72, with base-devel and repose packages from Arch Linux's repositories.
+A minimum version of Rust 1.72, with base-devel from Arch Linux's repositories.
 
 ## Distribution support
 

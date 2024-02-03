@@ -69,7 +69,7 @@ impl<'a> Arguments<'a> {
                 string if string.starts_with("--") =>
                     if string.contains('=') {
                         let value: Vec<&'a str> = string[2 ..].splitn(2, '=').collect();
- 
+
                         self.operands.push(Operand::Long(value[0]));
                         self.operands.push(Operand::LongPos(value[0], value[1]));
                     } else if string.len() > 2 {

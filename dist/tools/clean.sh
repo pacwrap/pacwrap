@@ -2,7 +2,7 @@
 #
 #  pacwrap - clean.sh
 # 
-#  Copyright (C) 2023 Xavier R.M. 
+#  Copyright (C) 2023-2024 Xavier R.M. 
 #  sapphirus(at)azorium(dot)net
 #
 #
@@ -27,7 +27,7 @@ fi
 
 DIST_RUNTIME="./dist/runtime"
 DIST_BASE="./dist/pacwrap-base-dist"
-DIST_REPO="./dist/repo"
+DIST_SCHEMA="./dist/schema"
 
 runtime() {
 	if [[ -d "$DIST_RUNTIME" ]]; then
@@ -37,10 +37,11 @@ runtime() {
 	fi
 }
 
-repo() {
-	if [[ -d "$DIST_REPO" ]] && [[ -d "$DIST_BASE" ]]; then
-		rm "$DIST_REPO/*" "$DIST_BASE/*.tar.zst"
-		echo "$BOLD$GREEN     Cleaned$RESET repositories"
+filesystem() {
+	if [[ -d "$DIST_SCHEMA" ]]; then
+		rm -r "$DIST_SCHEMA"
+		mkdir -p "$DIST_SCHEMA"
+		echo "$BOLD$GREEN     Cleaned$RESET container schema"
 	fi
 }
 
@@ -49,9 +50,11 @@ invalid() {
 }
 
 main() {
-	for var in "$@"; do case $var in 
-		repo) repo;;
+	for var in "$@"; do case $var in
+		schema) filesystem;;
 		runtime) runtime;;
+		all)  filesystem
+					runtime;;
 		*) invalid $var;;
 	esac; done
 }
