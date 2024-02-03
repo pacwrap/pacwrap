@@ -19,10 +19,17 @@
 
 use std::env::var;
 
-fn dist_repo() -> String {
-    match var("PACWRAP_DIST_REPO") {
+fn dist_filesystem_meta() -> String {
+    match var("PACWRAP_DIST_META") {
         Ok(var) => var,
-        Err(_) => "/usr/share/pacwrap/repo".into(),
+        Err(_) => "/usr/share/pacwrap/filesystem.dat".into(),
+    }
+}
+
+fn dist_filesystem() -> String {
+    match var("PACWRAP_DIST_FS") {
+        Ok(var) => var,
+        Err(_) => "/usr/share/pacwrap/filesystem.tar.zst".into(),
     }
 }
 
@@ -31,6 +38,7 @@ fn main() {
         panic!("Unsupported build target. Please refer to the documentation for further information.")
     }
 
-    println!("cargo:rerun-if-env-changed=PACWRAP_DIST_REPO");
-    println!("cargo:rustc-env=PACWRAP_DIST_REPO={}", dist_repo());
+    println!("cargo:rerun-if-env-changed=PACWRAP_DIST_FS");
+    println!("cargo:rustc-env=PACWRAP_DIST_FS={}", dist_filesystem());
+    println!("cargo:rustc-env=PACWRAP_DIST_META={}", dist_filesystem_meta());
 }

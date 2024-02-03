@@ -28,6 +28,7 @@ use pacwrap_core::{
     log::Logger,
     sync::{
         instantiate_trust,
+        schema,
         transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
@@ -184,6 +185,10 @@ fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>
         }
     }
 
+    if let InstanceType::Base = instype {
+        schema::extract(handle, &None)?;
+    }
+
     handle.save()?;
     logger.log(format!("Instantiation of {ins} complete.")).unwrap();
     println!("{} Instantiation of {ins} complete.", *ARROW_GREEN);
@@ -240,7 +245,7 @@ fn engage_aggregator<'a>(
                 targets.push(target);
 
                 if base {
-                    queue.insert(current_target.into(), vec!["base", "pacwrap-base-dist"]);
+                    queue.insert(current_target.into(), vec!["base"]);
                     base = false;
                 }
             }

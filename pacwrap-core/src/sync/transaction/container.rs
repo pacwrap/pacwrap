@@ -17,30 +17,45 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use super::{
+use crate::{
+    config::InstanceHandle,
+    constants::CHECKMARK,
+    sync::{
+        schema::extract,
+        transaction::{
+            Transaction,
+            TransactionAggregator,
+            TransactionHandle,
+            TransactionState::{self, *},
+        },
+    },
     Result,
-    Transaction,
-    TransactionAggregator,
-    TransactionHandle,
-    TransactionState::{self, Complete},
 };
-use crate::{config::InstanceHandle, constants::ARROW_GREEN};
 
-pub struct UpToDate;
+pub struct Schema {
+    state: TransactionState,
+}
 
-impl Transaction for UpToDate {
-    fn new(_: TransactionState, _: &TransactionAggregator) -> Box<Self> {
-        Box::new(Self)
+impl Transaction for Schema {
+    fn new(t_state: TransactionState, _: &TransactionAggregator) -> Box<Self> {
+        Box::new(Self { state: t_state })
     }
 
     fn engage(
         &self,
-        _: &mut TransactionAggregator,
+        ag: &mut TransactionAggregator,
         _: &mut TransactionHandle,
         inshandle: &InstanceHandle,
     ) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
-        println!("{} {instance} is up-to-date!", *ARROW_GREEN);
-        Ok(Complete(false))
+        let schema = match &self.state {
+            UpdateSchema(schema) => schema,
+            _ => unreachable!(),
+        };
+
+        extract(inshandle, schema)?;
+        println!("{} {instance}'s schema updated.", *CHECKMARK);
+        ag.logger().log(format!("container {instance}'s filesystem schema updated.")).ok();
+        Ok(TransactionState::Prepare)
     }
 }

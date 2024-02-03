@@ -2,6 +2,6 @@
 /*.sh
 /assets/*
 /target
-/dist/repo
+/dist/*.*
+/dist/schema
 /dist/runtime
-/dist/pacwrap-base-dist/*.tar.zst

@@ -22,6 +22,7 @@ use crate::{
     err,
     sync::{
         self,
+        schema::{self, *},
         transaction::{
             SyncReqResult,
             Transaction,
@@ -59,6 +60,12 @@ impl Transaction for Prepare {
                 let instype = inshandle.metadata().container_type();
                 let action = ag.action();
 
+                if let (InstanceType::Base, false) = (instype, ag.updated(inshandle)) {
+                    if let SchemaStatus::OutOfDate(set) = schema::version(inshandle)? {
+                        return Ok(UpdateSchema(set));
+                    }
+                }
+
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
@@ -80,10 +87,8 @@ impl Transaction for Prepare {
                     if !upgrade && handle.metadata().queue.len() == 0 {
                         err!(SyncError::NothingToDo(true))?
                     }
-                } else {
-                    if handle.metadata().queue.len() == 0 {
-                        err!(SyncError::NothingToDo(true))?
-                    }
+                } else if handle.metadata().queue.len() == 0 {
+                    err!(SyncError::NothingToDo(true))?
                 }
 
                 if handle.metadata().queue.len() == 0 {

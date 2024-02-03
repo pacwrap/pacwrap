@@ -19,8 +19,9 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt::{Display, Error as FmtError, Formatter},
     fs::{self, File, Metadata},
-    io::{Read, Seek},
+    io::{ErrorKind as IOErrorKind, Read, Seek},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
@@ -40,9 +41,11 @@ use crate::{
     config::{InstanceCache, InstanceHandle, InstanceType::*},
     constants::{ARROW_CYAN, BAR_GREEN, BOLD, DATA_DIR, RESET},
     err,
+    impl_error,
     utils::{print_error, print_warning, read_le_32},
     Error,
     ErrorKind,
+    ErrorTrait,
 };
 
 static VERSION: u32 = 1;
@@ -214,7 +217,7 @@ impl<'a> FileSystemStateSync<'a> {
         let mut file = match File::open(&path) {
             Ok(file) => file,
             Err(err) => {
-                if err.kind() != std::io::ErrorKind::NotFound {
+                if err.kind() != IOErrorKind::NotFound {
                     print_error(format!("'{}': {}", path, err.kind()));
                 }
 
@@ -425,11 +428,11 @@ fn link_filesystem(state: &FileSystemState, root: &str) {
     state.files.par_iter().for_each(|file| {
         if let FileType::SymLink = file.1 .0 {
             if let Err(error) = create_soft_link(&file.1 .1, &format!("{}{}", root, file.0)) {
-                print_warning(error);
+                error.warn();
             }
         } else if let FileType::HardLink = file.1 .0 {
             if let Err(error) = create_hard_link(&file.1 .1, &format!("{}{}", root, file.0)) {
-                print_warning(error);
+                error.warn();
             }
         }
     });
@@ -448,11 +451,11 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
 
             if let FileType::SymLink = file.1 .0 {
                 if let Err(error) = remove_symlink(path) {
-                    print_warning(error);
+                    error.warn();
                 }
             } else if let (true, FileType::HardLink) = (path.exists(), &file.1 .0) {
                 if let Err(error) = remove_file(path) {
-                    print_warning(error);
+                    error.warn();
                 }
             }
         }
@@ -487,11 +490,11 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
     rx.try_iter();
 }
 
-fn create_soft_link(src: &str, dest: &str) -> Result<(), String> {
+fn create_soft_link(src: &str, dest: &str) -> Result<(), Error> {
     let dest_path = Path::new(&dest);
     let src_path = match fs::read_link(src) {
         Ok(path) => path,
-        Err(err) => Err(format!("Source symlink '{}' {} ", src, err.to_string()))?,
+        Err(err) => err!(FilesystemError::ReadSymlink(src.into(), err.kind()))?,
     };
 
     if let Ok(src_path_dest) = fs::read_link(dest_path) {
@@ -517,12 +520,12 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(), String> {
     soft_link(&src_path, dest_path)
 }
 
-pub fn create_hard_link(src: &str, dest: &str) -> Result<(), String> {
+pub fn create_hard_link(src: &str, dest: &str) -> Result<(), Error> {
     let src_path = Path::new(&src);
     let dest_path = Path::new(&dest);
 
     if !src_path.exists() {
-        Err(format!("Source file '{}': entity not found.", &src))?
+        err!(FilesystemError::SourceNotFound(src.into()))?
     }
 
     if !dest_path.exists() {
@@ -597,57 +600,79 @@ fn queue_status(queue: &HashSet<&str>, compare: &str, max_chars: usize) -> Strin
     string
 }
 
-fn metadata(path: &Path) -> Result<Metadata, String> {
+#[derive(Debug, Clone)]
+pub enum FilesystemError {
+    SoftLinkFailure(String, IOErrorKind),
+    HardLinkFailure(String, IOErrorKind),
+    DirectoryCreationFailure(String, IOErrorKind),
+    RemovalFailure(String, IOErrorKind),
+    MetadataFailure(String, IOErrorKind),
+    SourceNotFound(String),
+    ReadSymlink(String, IOErrorKind),
+}
+
+impl Display for FilesystemError {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), FmtError> {
+        match self {
+            Self::SoftLinkFailure(dir, err) => write!(fmter, "Failed to create hardlink '{dir}': {err}"),
+            Self::HardLinkFailure(dir, err) => write!(fmter, "Failed to create symlink '{dir}': {err}"),
+            Self::DirectoryCreationFailure(dir, err) => write!(fmter, "Failed to create directory tree '{dir}': {err}"),
+            Self::RemovalFailure(dir, err) => write!(fmter, "Failed to remove '{dir}': {err}"),
+            Self::MetadataFailure(dir, err) => write!(fmter, "Failed to obtain metadata '{dir}': {err}"),
+            Self::SourceNotFound(src) => write!(fmter, "Source '{src}': entity not found."),
+            Self::ReadSymlink(dir, err) => write!(fmter, "Failed to read symlink '{dir}': {err}"),
+        }
+    }
+}
+
+impl_error!(FilesystemError);
+
+fn metadata(path: &Path) -> Result<Metadata, Error> {
     match fs::metadata(path) {
         Ok(meta) => Ok(meta),
-        Err(err) => Err(format!("Failed to obtain metadata for '{}': {}", path.to_str().unwrap(), err.kind())),
+        Err(err) => err!(FilesystemError::MetadataFailure(path.to_str().unwrap().into(), err.kind())),
     }
 }
 
-fn hard_link(src_path: &Path, dest_path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::hard_link(src_path, dest_path) {
-        Err(format!("Failed to link '{}': {}", dest_path.to_str().unwrap(), err.kind()))?
+fn hard_link(src_path: &Path, dest_path: &Path) -> Result<(), Error> {
+    match fs::hard_link(src_path, dest_path) {
+        Ok(_) => Ok(()),
+        Err(err) => err!(FilesystemError::HardLinkFailure(dest_path.to_str().unwrap().into(), err.kind())),
     }
-
-    Ok(())
 }
 
-fn soft_link<'a>(src_path: &'a Path, dest_path: &'a Path) -> Result<(), String> {
-    if let Err(err) = symlink(src_path, dest_path) {
-        Err(format!("Failed to create symlink '{}': {}", dest_path.to_str().unwrap(), err.kind()))?
+fn soft_link<'a>(src_path: &'a Path, dest_path: &'a Path) -> Result<(), Error> {
+    match symlink(src_path, dest_path) {
+        Ok(_) => Ok(()),
+        Err(err) => err!(FilesystemError::SoftLinkFailure(dest_path.to_str().unwrap().into(), err.kind())),
     }
-
-    Ok(())
 }
 
-fn create_directory(path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::create_dir_all(path) {
-        Err(format!("Failed to create directory tree '{}': {}", path.to_str().unwrap(), err.kind()))?
+fn create_directory(path: &Path) -> Result<(), Error> {
+    match fs::create_dir_all(path) {
+        Ok(_) => Ok(()),
+        Err(err) => err!(FilesystemError::DirectoryCreationFailure(path.to_str().unwrap().into(), err.kind())),
     }
-
-    Ok(())
 }
 
-fn remove_directory(path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::remove_dir_all(path) {
-        Err(format!("Failed to delete directory tree '{}': {}", path.to_str().unwrap(), err.kind()))?
+fn remove_directory(path: &Path) -> Result<(), Error> {
+    match fs::remove_dir_all(path) {
+        Ok(_) => Ok(()),
+        Err(err) => err!(FilesystemError::RemovalFailure(path.to_str().unwrap().into(), err.kind())),
     }
-
-    Ok(())
 }
 
-fn remove_file(path: &Path) -> Result<(), String> {
-    if let Err(err) = fs::remove_file(path) {
-        Err(format!("Failed to remove file '{}': {}", path.to_str().unwrap(), err.kind()))?
+fn remove_file(path: &Path) -> Result<(), Error> {
+    match fs::remove_file(path) {
+        Ok(_) => Ok(()),
+        Err(err) => err!(FilesystemError::RemovalFailure(path.to_str().unwrap().into(), err.kind())),
     }
-
-    Ok(())
 }
 
-fn remove_symlink(path: &Path) -> Result<(), String> {
+fn remove_symlink(path: &Path) -> Result<(), Error> {
     if let Ok(_) = fs::read_link(path) {
         if let Err(err) = fs::remove_file(path) {
-            Err(format!("Failed to delete symlink '{}': {}", path.to_str().unwrap(), err.kind()))?
+            err!(FilesystemError::RemovalFailure(path.to_str().unwrap().into(), err.kind()))?
         }
     }
 

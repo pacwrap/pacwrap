@@ -165,6 +165,8 @@ impl<'a> TransactionAggregator<'a> {
 
                         handle.release();
                         return Ok(());
+                    } else if let TransactionState::Prepare = result {
+                        self.updated.push(inshandle.vars().instance());
                     }
 
                     result
@@ -213,6 +215,10 @@ impl<'a> TransactionAggregator<'a> {
 
     pub fn action(&self) -> &TransactionType {
         &self.action
+    }
+
+    pub fn updated(&self, inshandle: &InstanceHandle<'a>) -> bool {
+        self.updated.contains(&inshandle.vars().instance())
     }
 
     pub fn deps_updated(&self, inshandle: &InstanceHandle<'a>) -> bool {

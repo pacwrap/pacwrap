@@ -228,7 +228,6 @@ pub fn transaction_agent(ins: &InstanceHandle, params: TransactionParameters, me
         .arg("--bind").arg(*LOG_LOCATION).arg("/mnt/share/pacwrap.log") 
         .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/share/gnupg")
         .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/share/cache")
-        .arg("--ro-bind").arg(env!("PACWRAP_DIST_REPO")).arg("/mnt/share/dist-repo")
         .arg("--dev").arg("/dev")
         .arg("--dev").arg("/mnt/fs/dev")
         .arg("--proc").arg("/mnt/fs/proc")

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 #
 # pacwrap-dist
 # 
@@ -51,7 +51,18 @@ locale() {
 dist() {
 	locale
 	user
+	patch_bashrc
 	echo "Distribution configuration completed."
+}
+
+patch_bashrc() {
+	local prepend_var="PS1='$(echo '$USER \\W>\\$') '";
+
+	if [[ -z $(cat /etc/bash.bashrc | grep "$prepend_var") ]]; then
+		cp /etc/bash.bashrc /etc/bash.bashrc.old
+		sed -e "s/PS1='.* '/$prepend_var/g" < /etc/bash.bashrc.old > /etc/bash.bashrc
+		rm /etc/bash.bashrc.old
+ 	fi
 }
 
 cert_store() {

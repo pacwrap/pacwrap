@@ -29,12 +29,13 @@ if ! [[ -z $COLORTERM ]] || [[ $TERM == "dummy" ]]; then
 fi
 
 # 
-# Environmental variables
+# Environment variables
 #
 LIB_DIR="/lib"
 BIN_DIR="/bin"
 ETC_DIR="/etc"
 DEST_DIR="./dist/runtime"
+DIST_SRC="./dist/src"
 FAKEROOT="/libfakeroot"
 FAKEROOT_DIR="/usr/lib/libfakeroot"
 FAKEROOT_SRC="$FAKEROOT_DIR/libfakeroot.so"
@@ -44,7 +45,7 @@ FAKECHROOT_SRC="$FAKEROOT_DIR$FAKECHROOT/libfakechroot.so"
 FAKECHROOT_DEST="$DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT"
 PROFILE_PS1="PS1='$(echo '$USER \\W>\\$') '";
 
-# !! File an issue/PR if there's an incompatibility within your environment !!
+# !! File an issue/PR if there's an incompatibility !!
 #
 # Array of bin utilities to include within the runtime environment
 #
@@ -80,17 +81,23 @@ copy_bins() {
 # Validate and prepare staging environment
 #
 prepare_and_validate() {
-	./dist/tools/clean.sh runtime
-	
-	if [[ ! -d $DEST_DIR ]]; then
-		mkdir -p $DEST_DIR
-	fi
-
+	clean
 	mkdir -p $DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT $DEST_DIR$BIN_DIR $DEST_DIR$ETC_DIR
 
 	if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
 		echo $BOLD$RED"error:$RESET '$DEST_DIR': directory not found.";	
 		exit 1
+	fi
+}
+
+#
+# Clean build artifacts
+#
+clean() {
+	if [[ -d "$DEST_DIR" ]]; then
+		rm -r "$DEST_DIR"
+		mkdir -p "$DEST_DIR"
+		echo "$BOLD$GREEN     Cleaned$RESET container runtime"
 	fi
 }
 
@@ -120,9 +127,8 @@ populate_bin() {
 # Populate /etc directory for container runtime
 #
 populate_etc() {
-	echo -e "#\n# /etc/bash.bashrc\n#\n# pacwrap runtime\n#\n\n$PROFILE_PS1" > $DEST_DIR$ETC_DIR/bash.bashrc
-	echo -e "\nbind -x $'\"\\C-l\":clear;'\ncd \$HOME\n" >> $DEST_DIR$ETC_DIR/bash.bashrc	
-	sed -n 12,20p /etc/bash.bashrc >> $DEST_DIR$ETC_DIR/bash.bashrc
+	echo -e "#\n# /etc/bash.bashrc\n#\n# pacwrap runtime\n#\n\n${PROFILE_PS1}\nbind -x $'\"\\C-l\":clear;'\ncd \$HOME\n" > $DEST_DIR$ETC_DIR/bash.bashrc
+	sed -n 12,20p $DIST_SRC/bash.bashrc >> $DEST_DIR$ETC_DIR/bash.bashrc
 	echo -e "#\n# /etc/profile - busybox env\n#\n# pacwrap runtime\n#\n\n$PROFILE_PS1\n" > $DEST_DIR$ETC_DIR/profile
 	echo -e 'printf "\033]0;%s@%s\007" "${USER}" "${HOSTNAME%%.*}"\ncd $HOME' >> $DEST_DIR$ETC_DIR/profile
 }
