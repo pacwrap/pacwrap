@@ -19,9 +19,9 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::{config::InsVars, exec::args::ExecutionArgs};
-
 use dyn_clone::{clone_trait_object, DynClone};
+
+use crate::{config::ContainerVariables, exec::args::ExecutionArgs};
 
 mod dir;
 pub mod home;
@@ -53,8 +53,8 @@ impl Display for BindError {
 
 #[typetag::serde(tag = "mount")]
 pub trait Filesystem: DynClone {
-    fn check(&self, vars: &InsVars) -> Result<(), BindError>;
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars);
+    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError>;
+    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables);
     fn module(&self) -> &'static str;
 }
 

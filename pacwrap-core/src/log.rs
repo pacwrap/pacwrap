@@ -47,6 +47,45 @@ impl Display for LoggerError {
     }
 }
 
+pub enum Level {
+    Info,
+    Warn,
+    Error,
+    Debug,
+    Fatal,
+}
+
+impl Level {
+    fn to_str(&self) -> &str {
+        match self {
+            Self::Info => "INFO",
+            Self::Warn => "WARN",
+            Self::Error => "ERROR",
+            Self::Fatal => "FATAL",
+            Self::Debug => "DEBUG",
+        }
+    }
+}
+
+impl From<i8> for Level {
+    fn from(i8: i8) -> Self {
+        match i8 {
+            0 => Self::Info,
+            1 => Self::Warn,
+            2 => Self::Error,
+            3 => Self::Fatal,
+            4 => Self::Debug,
+            _ => panic!("Invalid i8 input"),
+        }
+    }
+}
+
+impl Display for Level {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(fmter, "{}", self.to_str())
+    }
+}
+
 pub struct Logger {
     file: Option<File>,
     module: &'static str,
@@ -57,7 +96,7 @@ impl Logger {
     pub fn new(module_name: &'static str) -> Self {
         /*
          * In order to deal with the potentiality of a race condition occurring
-         * between libalpm and the time crate, we cache the offset during the
+         * between libalpm and the time crate, cache the offset during the
          * initalisation of this struct.
          */
         let ofs = OffsetDateTime::now_local()
@@ -85,11 +124,11 @@ impl Logger {
         Ok(self)
     }
 
-    pub fn log(&mut self, msg: impl Into<String> + std::fmt::Display) -> Result<()> {
+    pub fn log(&mut self, level: Level, msg: &str) -> Result<()> {
         /*
-         * We then attempt to update it here.
+         * Then attempt to update it here.
          *
-         * If that fails, we use the previously cached value. This compromise ensures
+         * If that fails, use the previously cached value. This compromise ensures
          * a stale offset value will eventually be updated to reflect the system's
          * time offset if a change were to occur whilst this application is running.
          */
@@ -99,7 +138,8 @@ impl Logger {
 
         let time: OffsetDateTime = OffsetDateTime::now_utc().to_offset(self.offset);
         let write = match self.file.as_mut() {
-            Some(file) => file.write(format!("[{}] [{}] {}\n", time.format(DATE_FORMAT).unwrap(), self.module, msg).as_bytes()),
+            Some(file) =>
+                file.write(format!("[{}] [{}] [{}] {}\n", time.format(DATE_FORMAT).unwrap(), self.module, level, msg).as_bytes()),
             None => err!(LoggerError::Uninitialized)?,
         };
 

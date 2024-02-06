@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{
         filesystem::{BindError, Filesystem},
-        InsVars,
+        ContainerVariables,
     },
     exec::args::ExecutionArgs,
 };
@@ -35,7 +35,7 @@ pub struct Dir {
 
 #[typetag::serde(name = "dir")]
 impl Filesystem for Dir {
-    fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
+    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
         if self.path.len() == 0 {
             Err(BindError::Fail(format!("Path not specified.")))?
         }
@@ -43,7 +43,7 @@ impl Filesystem for Dir {
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, _vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, _vars: &ContainerVariables) {
         for dir in self.path.iter() {
             args.dir(dir);
         }

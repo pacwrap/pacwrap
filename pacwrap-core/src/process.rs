@@ -22,7 +22,7 @@ use std::{
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
 };
 
-use crate::{config::InstanceCache, constants::CONTAINER_DIR, err, utils::print_warning, Error, ErrorKind};
+use crate::{config::ContainerCache, constants::CONTAINER_DIR, err, utils::print_warning, Error, ErrorKind};
 use indexmap::IndexMap;
 
 pub struct ProcessList {
@@ -165,7 +165,7 @@ impl ProcStat {
     }
 }
 
-pub fn list<'a>(cache: &'a InstanceCache<'a>) -> Result<ProcessList, Error> {
+pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
     let mut map: IndexMap<i32, Process> = IndexMap::new();
     let mut groups: IndexMap<String, Vec<i32>> = IndexMap::new();
 
@@ -196,7 +196,7 @@ pub fn list<'a>(cache: &'a InstanceCache<'a>) -> Result<ProcessList, Error> {
             Some(vec) => vec.push(pid),
             None => {
                 if let None = cache.get_instance_option(&ins) {
-                    print_warning(format!("Instance {ins} doesn't exist."));
+                    print_warning(format!("Container {ins} doesn't exist."));
                 }
 
                 groups.insert(ins.clone(), vec![pid]);

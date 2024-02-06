@@ -28,7 +28,7 @@ use command_fds::{CommandFdExt, FdMapping};
 use lazy_static::lazy_static;
 
 use crate::{
-    config::{InstanceHandle, InstanceType},
+    config::{ContainerHandle, ContainerType},
     constants::{
         BOLD,
         BWRAP_EXECUTABLE,
@@ -115,7 +115,7 @@ pub enum ExecutionType {
 }
 
 #[rustfmt::skip]
-pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: &InstanceHandle, arguments: Vec<&str>) -> Result<()> {
+pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: &ContainerHandle, arguments: Vec<&str>) -> Result<()> {
     let term_control = TermControl::new(0);
     let info_pipe = os_pipe::pipe().unwrap();
     let sec_pipe = os_pipe::pipe().unwrap();
@@ -165,7 +165,7 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
         .arg("--info-fd")
         .arg(info_fd.to_string());
 
-        if let InstanceType::Slice = ins.metadata().container_type() {
+        if let ContainerType::Slice = ins.metadata().container_type() {
             process.arg("--dir").arg("/root")  
                 .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
                 .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
@@ -200,7 +200,7 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
 }
 
 #[rustfmt::skip]
-pub fn transaction_agent(ins: &InstanceHandle, params: TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> {
+pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> {
 	let params_pipe = os_pipe::pipe().unwrap();
     let params_fd = agent_params(&params_pipe.0, &params_pipe.1, &params, metadata)?;	
     let sec_pipe = os_pipe::pipe().unwrap();
@@ -220,8 +220,8 @@ pub fn transaction_agent(ins: &InstanceHandle, params: TransactionParameters, me
         .arg("--bind").arg(&ins.vars().root()).arg("/mnt/fs")
         .arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
         .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/bin")
-        .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/lib")
-        .arg("--symlink").arg("lib").arg("/lib64")
+        .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/lib64")
+        .arg("--symlink").arg("lib").arg("/lib")
         .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
         .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 
         .arg("--ro-bind").arg(*DIST_TLS).arg("/etc/ssl/certs/ca-certificates.crt")

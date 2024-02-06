@@ -18,8 +18,9 @@
  */
 
 use crate::{
-    config::InstanceHandle,
+    config::ContainerHandle,
     constants::CHECKMARK,
+    log::Level::Info,
     sync::{
         schema::extract,
         transaction::{
@@ -45,7 +46,7 @@ impl Transaction for Schema {
         &self,
         ag: &mut TransactionAggregator,
         _: &mut TransactionHandle,
-        inshandle: &InstanceHandle,
+        inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
         let schema = match &self.state {
@@ -55,7 +56,7 @@ impl Transaction for Schema {
 
         extract(inshandle, schema)?;
         println!("{} {instance}'s schema updated.", *CHECKMARK);
-        ag.logger().log(format!("container {instance}'s filesystem schema updated.")).ok();
+        ag.logger().log(Info, &format!("container {instance}'s filesystem schema updated.")).ok();
         Ok(TransactionState::Prepare)
     }
 }

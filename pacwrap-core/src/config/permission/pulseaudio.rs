@@ -52,7 +52,7 @@ impl Permission for Pulseaudio {
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        args.robind(&self.socket, default_socket());
+        args.robind(&self.socket, &default_socket());
     }
 
     fn module(&self) -> &'static str {

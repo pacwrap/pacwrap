@@ -35,21 +35,21 @@ use crate::{
 };
 
 pub use self::{
-    cache::InstanceCache,
+    cache::ContainerCache,
+    container::{Container, ContainerHandle, ContainerType},
     dbus::Dbus,
     filesystem::{BindError, Filesystem},
     global::{Global, CONFIG},
-    instance::{Instance, InstanceHandle, InstanceType},
     permission::{PermError, Permission},
-    vars::InsVars,
+    vars::ContainerVariables,
 };
 
 pub mod cache;
+pub mod container;
 pub mod dbus;
 pub mod filesystem;
 pub mod global;
 pub mod init;
-pub mod instance;
 pub mod permission;
 pub mod register;
 pub mod vars;
@@ -86,8 +86,8 @@ impl From<ConfigError> for String {
 }
 
 #[inline]
-pub fn provide_handle(instance: &str) -> Result<InstanceHandle> {
-    let vars = InsVars::new(instance);
+pub fn provide_handle(instance: &str) -> Result<ContainerHandle> {
+    let vars = ContainerVariables::new(instance);
 
     if !Path::new(vars.root()).exists() {
         err!(ErrorKind::InstanceNotFound(instance.into()))?
@@ -97,8 +97,8 @@ pub fn provide_handle(instance: &str) -> Result<InstanceHandle> {
 }
 
 #[inline]
-pub fn provide_new_handle(instance: &str) -> Result<InstanceHandle> {
-    handle(instance, InsVars::new(instance))
+pub fn provide_new_handle(instance: &str) -> Result<ContainerHandle> {
+    handle(instance, ContainerVariables::new(instance))
 }
 
 fn save<T: Serialize>(obj: &T, path: &str) -> Result<()> {
@@ -117,7 +117,7 @@ fn save<T: Serialize>(obj: &T, path: &str) -> Result<()> {
     }
 }
 
-fn handle<'a>(instance: &str, vars: InsVars<'a>) -> Result<InstanceHandle<'a>> {
+fn handle<'a>(instance: &str, vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
     match File::open(vars.config_path()) {
         Ok(file) => {
             let config = match serde_yaml::from_reader(&file) {
@@ -125,7 +125,7 @@ fn handle<'a>(instance: &str, vars: InsVars<'a>) -> Result<InstanceHandle<'a>> {
                 Err(error) => err!(ConfigError::Load(vars.instance().into(), error.to_string()))?,
             };
 
-            Ok(InstanceHandle::new(config, vars))
+            Ok(ContainerHandle::new(config, vars))
         }
         Err(error) => match error.kind() {
             NotFound => err!(ConfigError::ConfigNotFound(instance.into()))?,

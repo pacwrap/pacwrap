@@ -18,7 +18,6 @@
  */
 
 use std::{
-    borrow::Cow,
     env::var,
     fmt::{Debug, Formatter},
 };
@@ -26,19 +25,19 @@ use std::{
 use crate::constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR};
 
 #[derive(Clone)]
-pub struct InsVars<'a> {
-    home: Cow<'a, str>,
-    root: Cow<'a, str>,
-    user: Cow<'a, str>,
-    config: Cow<'a, str>,
-    instance: Cow<'a, str>,
-    home_mount: Cow<'a, str>,
-    pacman_cache: Cow<'a, str>,
-    pacman_gnupg: Cow<'a, str>,
+pub struct ContainerVariables {
+    home: String,
+    root: String,
+    user: String,
+    config: String,
+    instance: String,
+    home_mount: String,
+    pacman_cache: String,
+    pacman_gnupg: String,
 }
 
-impl<'a> InsVars<'a> {
-    pub fn new(ins: &'a str) -> Self {
+impl ContainerVariables {
+    pub fn new(ins: &str) -> Self {
         Self {
             home: match var("PACWRAP_HOME") {
                 Err(_) => format!("{}/home/{ins}", *DATA_DIR),
@@ -88,7 +87,7 @@ impl<'a> InsVars<'a> {
     }
 }
 
-impl<'a> Debug for InsVars<'a> {
+impl Debug for ContainerVariables {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         writeln!(fmter, "Instance:            {}", self.instance)?;
         writeln!(fmter, "Instance User:       {}", self.user)?;

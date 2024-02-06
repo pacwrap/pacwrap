@@ -31,69 +31,65 @@ use crate::{
         filesystem::{home::Home, root::Root, Filesystem},
         permission::{none::None, Permission},
         save,
-        vars::InsVars,
+        vars::ContainerVariables,
     },
     constants::UNIX_TIMESTAMP,
     Result,
 };
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Instance<'a> {
+pub struct Container<'a> {
     #[serde(flatten)]
-    metadata: InstanceMetadata<'a>,
+    metadata: ContainerMetadata<'a>,
     #[serde(flatten)]
-    runtime: InstanceRuntime,
+    runtime: ContainerRuntime,
 }
 
-impl<'a> Instance<'a> {
-    pub fn new(ctype: InstanceType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
+impl<'a> Container<'a> {
+    pub fn new(ctype: ContainerType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
         Self {
-            metadata: InstanceMetadata::new(ctype, deps, pkgs),
-            runtime: InstanceRuntime::new(),
+            metadata: ContainerMetadata::new(ctype, deps, pkgs),
+            runtime: ContainerRuntime::new(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct InstanceHandle<'a> {
-    instance: Instance<'a>,
-    vars: InsVars<'a>,
+pub struct ContainerHandle<'a> {
+    inner: Container<'a>,
+    meta: ContainerVariables,
 }
 
-impl<'a> InstanceHandle<'a> {
-    pub fn new(ins: Instance<'a>, ins_vars: InsVars<'a>) -> Self {
+impl<'a> ContainerHandle<'a> {
+    pub fn new(ins: Container<'a>, ins_vars: ContainerVariables) -> Self {
         Self {
-            instance: ins,
-            vars: ins_vars,
+            inner: ins,
+            meta: ins_vars,
         }
     }
 
-    pub fn instance(&self) -> &Instance {
-        &self.instance
+    pub fn config(&self) -> &ContainerRuntime {
+        &self.inner.runtime
     }
 
-    pub fn config(&self) -> &InstanceRuntime {
-        &self.instance.runtime
+    pub fn metadata_mut(&mut self) -> &mut ContainerMetadata<'a> {
+        &mut self.inner.metadata
     }
 
-    pub fn metadata_mut(&mut self) -> &mut InstanceMetadata<'a> {
-        &mut self.instance.metadata
+    pub fn metadata(&self) -> &ContainerMetadata {
+        &self.inner.metadata
     }
 
-    pub fn metadata(&self) -> &InstanceMetadata {
-        &self.instance.metadata
-    }
-
-    pub fn vars(&self) -> &InsVars {
-        &self.vars
+    pub fn vars(&self) -> &ContainerVariables {
+        &self.meta
     }
 
     pub fn save(&self) -> Result<()> {
-        save(&self.instance, self.vars.config_path())
+        save(&self.inner, self.meta.config_path())
     }
 }
 
-impl<'a> Debug for InstanceHandle<'a> {
+impl<'a> Debug for ContainerHandle<'a> {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(fmter, "{:?}", self.vars())?;
         write!(fmter, "{:?}", self.config())
@@ -101,7 +97,7 @@ impl<'a> Debug for InstanceHandle<'a> {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct InstanceRuntime {
+pub struct ContainerRuntime {
     #[serde(default)]
     enable_userns: bool,
     #[serde(default)]
@@ -118,21 +114,19 @@ pub struct InstanceRuntime {
     dbus: Vec<Box<dyn Dbus>>,
 }
 
-impl InstanceRuntime {
+impl ContainerRuntime {
     pub fn new() -> Self {
         let default_fs: [Box<dyn Filesystem>; 2] = [Box::new(Root {}), Box::new(Home {})];
         let default_per: [Box<dyn Permission>; 1] = [Box::new(None {})];
-        let fs: Vec<Box<dyn Filesystem>> = Vec::from(default_fs);
-        let per: Vec<Box<dyn Permission>> = Vec::from(default_per);
 
         Self {
             seccomp: true,
             allow_forking: false,
             retain_session: false,
             enable_userns: false,
-            permissions: per,
+            permissions: Vec::from(default_per),
             dbus: Vec::new(),
-            filesystems: fs,
+            filesystems: Vec::from(default_fs),
         }
     }
 
@@ -165,7 +159,7 @@ impl InstanceRuntime {
     }
 }
 
-impl Debug for InstanceRuntime {
+impl Debug for ContainerRuntime {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         writeln!(fmter, "allow_forking:       {}", self.allow_forking)?;
         writeln!(fmter, "retain_session:      {}", self.retain_session)?;
@@ -175,14 +169,14 @@ impl Debug for InstanceRuntime {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
-pub enum InstanceType {
+pub enum ContainerType {
     Symbolic,
     Base,
     Slice,
     Aggregate,
 }
 
-impl InstanceType {
+impl ContainerType {
     fn as_str<'a>(&self) -> &'a str {
         match self {
             Self::Symbolic => "LINK",
@@ -193,22 +187,22 @@ impl InstanceType {
     }
 }
 
-impl Display for InstanceType {
+impl Display for ContainerType {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         fmt.write_str(self.as_str())
     }
 }
 
-impl Default for InstanceType {
+impl Default for ContainerType {
     fn default() -> Self {
         Self::Base
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct InstanceMetadata<'a> {
+pub struct ContainerMetadata<'a> {
     #[serde(default)]
-    container_type: InstanceType,
+    container_type: ContainerType,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     dependencies: Vec<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -217,8 +211,8 @@ pub struct InstanceMetadata<'a> {
     meta_version: u64,
 }
 
-impl<'a> InstanceMetadata<'a> {
-    fn new(ctype: InstanceType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
+impl<'a> ContainerMetadata<'a> {
+    fn new(ctype: ContainerType, deps: Vec<&'a str>, pkgs: Vec<&'a str>) -> Self {
         Self {
             container_type: ctype,
             dependencies: deps.iter().map(|a| (*a).into()).collect(),
@@ -233,7 +227,7 @@ impl<'a> InstanceMetadata<'a> {
         self.meta_version = *UNIX_TIMESTAMP;
     }
 
-    pub fn container_type(&self) -> &InstanceType {
+    pub fn container_type(&self) -> &ContainerType {
         &self.container_type
     }
 

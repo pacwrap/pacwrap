@@ -38,7 +38,7 @@ use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::{
-    config::{InstanceCache, InstanceHandle, InstanceType::*},
+    config::{ContainerCache, ContainerHandle, ContainerType::*},
     constants::{ARROW_CYAN, BAR_GREEN, BOLD, DATA_DIR, RESET},
     err,
     impl_error,
@@ -110,13 +110,13 @@ pub struct FileSystemStateSync<'a> {
     linked: HashSet<Arc<str>>,
     queued: HashSet<&'a str>,
     progress: ProgressBar,
-    cache: &'a InstanceCache<'a>,
+    cache: &'a ContainerCache<'a>,
     pool: Option<ThreadPool>,
     max_chars: u16,
 }
 
 impl<'a> FileSystemStateSync<'a> {
-    pub fn new(inscache: &'a InstanceCache) -> Self {
+    pub fn new(inscache: &'a ContainerCache) -> Self {
         let size = Term::size(&Term::stdout());
         let column_half = size.1 / 2;
         let style = ProgressStyle::with_template(
@@ -285,7 +285,7 @@ impl<'a> FileSystemStateSync<'a> {
         });
     }
 
-    fn obtain_slice(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
+    fn obtain_slice(&mut self, inshandle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
         let instance: Arc<str> = inshandle.vars().instance().into();
         let root = inshandle.vars().root().into();
 
@@ -300,7 +300,7 @@ impl<'a> FileSystemStateSync<'a> {
         }))
     }
 
-    fn link_instance(&mut self, inshandle: &InstanceHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
+    fn link_instance(&mut self, inshandle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
         let mut map = Vec::new();
         let mut prev = Vec::new();
         let instance: Arc<str> = inshandle.vars().instance().into();
@@ -361,7 +361,7 @@ impl<'a> FileSystemStateSync<'a> {
         self.progress.set_length(length.try_into().unwrap_or(0));
     }
 
-    pub fn set_cache(&mut self, inscache: &'a InstanceCache) {
+    pub fn set_cache(&mut self, inscache: &'a ContainerCache) {
         self.cache = inscache;
     }
 

@@ -20,27 +20,25 @@
 use std::{collections::HashMap, fs::read_dir};
 
 use crate::{
-    config::{self, InstanceHandle},
+    config::{self, ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables},
     constants::{CONTAINER_DIR, DATA_DIR},
     err,
     error::*,
     ErrorKind,
 };
 
-use super::{instance::InstanceType, ConfigError, InsVars, Instance};
-
-pub struct InstanceCache<'a> {
-    instances: HashMap<&'a str, InstanceHandle<'a>>,
+pub struct ContainerCache<'a> {
+    instances: HashMap<&'a str, ContainerHandle<'a>>,
 }
 
-impl<'a> InstanceCache<'a> {
+impl<'a> ContainerCache<'a> {
     pub fn new() -> Self {
         Self {
             instances: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, ins: &'a str, instype: InstanceType, deps: Vec<&'a str>) -> Result<()> {
+    pub fn add(&mut self, ins: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<()> {
         if let Some(_) = self.instances.get(ins) {
             err!(ConfigError::AlreadyExists(ins.into()))?
         }
@@ -60,10 +58,10 @@ impl<'a> InstanceCache<'a> {
             Err(err) => match err.downcast::<ConfigError>() {
                 Ok(error) => match error {
                     ConfigError::ConfigNotFound(_) => {
-                        let vars = InsVars::new(ins);
-                        let cfg = Instance::new(instype, deps, vec![]);
+                        let vars = ContainerVariables::new(ins);
+                        let cfg = Container::new(instype, deps, vec![]);
 
-                        InstanceHandle::new(cfg, vars)
+                        ContainerHandle::new(cfg, vars)
                     }
                     _ => Err(err)?,
                 },
@@ -91,8 +89,8 @@ impl<'a> InstanceCache<'a> {
         ))
     }
 
-    fn register(&mut self, ins: &'a str, handle: InstanceHandle<'a>) {
-        if let InstanceType::Symbolic = handle.metadata().container_type() {
+    fn register(&mut self, ins: &'a str, handle: ContainerHandle<'a>) {
+        if let ContainerType::Symbolic = handle.metadata().container_type() {
             return;
         }
 
@@ -103,7 +101,7 @@ impl<'a> InstanceCache<'a> {
         self.instances.iter().map(|a| *a.0).collect()
     }
 
-    pub fn filter(&self, filter: Vec<InstanceType>) -> Vec<&'a str> {
+    pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'a str> {
         self.instances
             .iter()
             .filter(|a| filter.contains(a.1.metadata().container_type()))
@@ -111,27 +109,27 @@ impl<'a> InstanceCache<'a> {
             .collect()
     }
 
-    pub fn obtain_base_handle(&self) -> Option<&InstanceHandle> {
-        match self.filter(vec![InstanceType::Base]).get(0) {
+    pub fn obtain_base_handle(&self) -> Option<&ContainerHandle> {
+        match self.filter(vec![ContainerType::Base]).get(0) {
             Some(instance) => self.instances.get(instance),
             None => None,
         }
     }
 
-    pub fn get_instance(&self, ins: &str) -> Result<&InstanceHandle> {
+    pub fn get_instance(&self, ins: &str) -> Result<&ContainerHandle> {
         match self.instances.get(ins) {
             Some(ins) => Ok(ins),
             None => err!(ErrorKind::InstanceNotFound(ins.into())),
         }
     }
 
-    pub fn get_instance_option(&self, ins: &str) -> Option<&InstanceHandle> {
+    pub fn get_instance_option(&self, ins: &str) -> Option<&ContainerHandle> {
         self.instances.get(ins)
     }
 }
 
-pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>> {
-    let mut cache = InstanceCache::new();
+pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
+    let mut cache = ContainerCache::new();
 
     for name in vec {
         cache.map(&name)?;
@@ -140,7 +138,7 @@ pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<InstanceCache<'a>> {
     Ok(cache)
 }
 
-pub fn populate<'a>() -> Result<InstanceCache<'a>> {
+pub fn populate<'a>() -> Result<ContainerCache<'a>> {
     populate_from(&roots()?)
 }
 

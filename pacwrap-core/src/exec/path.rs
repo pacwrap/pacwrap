@@ -20,7 +20,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    config::{InstanceHandle, InstanceType::Slice},
+    config::{ContainerHandle, ContainerType::Slice},
     err,
     exec::{ExecutionError, DIST_IMG},
     Error,
@@ -28,7 +28,7 @@ use crate::{
     Result,
 };
 
-pub fn check_path(ins: &InstanceHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<()> {
+pub fn check_path(ins: &ContainerHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<()> {
     if let (Slice, true) = (ins.metadata().container_type(), args.len() > 0) {
         if dest_exists(*DIST_IMG, "/bin", args[0])? {
             return Ok(());

@@ -20,7 +20,7 @@
 use std::{collections::HashMap, process::exit};
 
 use crate::{
-    config::{cache::InstanceCache, InstanceHandle, InstanceType, CONFIG},
+    config::{cache::ContainerCache, ContainerHandle, ContainerType, CONFIG},
     constants::{ARROW_GREEN, UNIX_TIMESTAMP},
     err,
     error::*,
@@ -41,7 +41,7 @@ pub struct TransactionAggregator<'a> {
     pkg_queue: HashMap<&'a str, Vec<&'a str>>,
     action: TransactionType,
     filesystem_state: Option<FileSystemStateSync<'a>>,
-    cache: &'a InstanceCache<'a>,
+    cache: &'a ContainerCache<'a>,
     keyring: bool,
     logger: &'a mut Logger,
     flags: TransactionFlags,
@@ -50,7 +50,7 @@ pub struct TransactionAggregator<'a> {
 
 impl<'a> TransactionAggregator<'a> {
     pub fn new(
-        inscache: &'a InstanceCache,
+        inscache: &'a ContainerCache,
         queue: HashMap<&'a str, Vec<&'a str>>,
         log: &'a mut Logger,
         action_flags: TransactionFlags,
@@ -87,12 +87,12 @@ impl<'a> TransactionAggregator<'a> {
             Some(s) => self.cache.get_instance_option(s),
             None => None,
         };
-        let downstream = self.cache.filter(vec![InstanceType::Aggregate]);
-        let upstream = self.cache.filter(vec![InstanceType::Base, InstanceType::Slice]);
+        let downstream = self.cache.filter(vec![ContainerType::Aggregate]);
+        let upstream = self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]);
         let containers = (upstream, downstream);
 
         if let Some(ins) = target {
-            if let InstanceType::Base | InstanceType::Slice = ins.metadata().container_type() {
+            if let ContainerType::Base | ContainerType::Slice = ins.metadata().container_type() {
                 self.transact(ins)?;
             }
         } else if upgrade {
@@ -113,7 +113,7 @@ impl<'a> TransactionAggregator<'a> {
         }
 
         if let Some(ins) = target {
-            if let InstanceType::Aggregate = ins.metadata().container_type() {
+            if let ContainerType::Aggregate = ins.metadata().container_type() {
                 self.transact(ins)?;
             }
         } else if upgrade {
@@ -143,7 +143,7 @@ impl<'a> TransactionAggregator<'a> {
         Ok(())
     }
 
-    pub fn transact(&mut self, inshandle: &'a InstanceHandle) -> Result<()> {
+    pub fn transact(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
         let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
             Some(some) => some.clone(),
             None => Vec::new(),
@@ -191,15 +191,15 @@ impl<'a> TransactionAggregator<'a> {
         }
     }
 
-    pub fn keyring_update(&mut self, inshandle: &InstanceHandle) -> Result<()> {
+    pub fn keyring_update(&mut self, inshandle: &ContainerHandle) -> Result<()> {
         fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacman-key", "--populate", "archlinux"])?;
         fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacman-key", "--updatedb"])?;
         self.keyring = true;
         Ok(())
     }
 
-    pub fn sync_filesystem(&mut self, inshandle: &'a InstanceHandle) -> Result<()> {
-        if let InstanceType::Aggregate = inshandle.metadata().container_type() {
+    pub fn sync_filesystem(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
+        if let ContainerType::Aggregate = inshandle.metadata().container_type() {
             return Ok(());
         }
 
@@ -209,7 +209,7 @@ impl<'a> TransactionAggregator<'a> {
         fs_sync.engage(&vec![inshandle.vars().instance()])
     }
 
-    pub fn cache(&self) -> &InstanceCache {
+    pub fn cache(&self) -> &ContainerCache {
         &self.cache
     }
 
@@ -217,11 +217,11 @@ impl<'a> TransactionAggregator<'a> {
         &self.action
     }
 
-    pub fn updated(&self, inshandle: &InstanceHandle<'a>) -> bool {
+    pub fn updated(&self, inshandle: &ContainerHandle<'a>) -> bool {
         self.updated.contains(&inshandle.vars().instance())
     }
 
-    pub fn deps_updated(&self, inshandle: &InstanceHandle<'a>) -> bool {
+    pub fn deps_updated(&self, inshandle: &ContainerHandle<'a>) -> bool {
         for ins in inshandle.metadata().dependencies() {
             if self.updated.contains(&ins) {
                 return true;

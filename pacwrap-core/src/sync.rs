@@ -28,7 +28,7 @@ use pacmanconf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{cache::InstanceCache, global::ProgressKind, Global, InsVars, InstanceHandle, CONFIG},
+    config::{cache::ContainerCache, global::ProgressKind, ContainerHandle, ContainerVariables, Global, CONFIG},
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET},
     err,
     error,
@@ -156,11 +156,11 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm
     handle
 }
 
-pub fn instantiate_alpm(inshandle: &InstanceHandle) -> Alpm {
+pub fn instantiate_alpm(inshandle: &ContainerHandle) -> Alpm {
     alpm_handle(inshandle.vars(), format!("{}/var/lib/pacman/", inshandle.vars().root()), &*DEFAULT_ALPM_CONF)
 }
 
-fn alpm_handle(insvars: &InsVars, db_path: String, remotes: &AlpmConfigData) -> Alpm {
+fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConfigData) -> Alpm {
     let root = insvars.root();
     let mut handle = Alpm::new(root, &db_path).unwrap();
 
@@ -211,7 +211,7 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     handle
 }
 
-fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
+fn synchronize_database(cache: &ContainerCache, force: bool) -> Result<()> {
     match cache.obtain_base_handle() {
         Some(ins) => {
             let db_path = format!("{}/pacman/", *DATA_DIR);
@@ -227,10 +227,9 @@ fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
             Alpm::release(handle).unwrap();
 
             for i in cache.registered().iter() {
-                let ins: &InstanceHandle = cache.get_instance(i).unwrap();
-                let vars: &InsVars = ins.vars();
+                let ins: &ContainerHandle = cache.get_instance(i).unwrap();
                 let src = &format!("{}/pacman/sync/pacwrap.db", *DATA_DIR);
-                let dest = &format!("{}/var/lib/pacman/sync/pacwrap.db", vars.root());
+                let dest = &format!("{}/var/lib/pacman/sync/pacwrap.db", ins.vars().root());
 
                 if let Err(error) = filesystem::create_hard_link(src, dest) {
                     error.warn();
@@ -238,7 +237,7 @@ fn synchronize_database(cache: &InstanceCache, force: bool) -> Result<()> {
 
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
-                    let dest = &format!("{}/var/lib/pacman/sync/{}.db", vars.root(), repo.name);
+                    let dest = &format!("{}/var/lib/pacman/sync/{}.db", ins.vars().root(), repo.name);
                     if let Err(error) = filesystem::create_hard_link(src, dest) {
                         error.warn();
                     }

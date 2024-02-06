@@ -21,11 +21,11 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 use pacwrap_core::{
-    config::{cache, init::init, InstanceCache, InstanceHandle, InstanceType},
+    config::{cache, init::init, ContainerCache, ContainerHandle, ContainerType},
     constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
     err,
     error::*,
-    log::Logger,
+    log::{Level::Info, Logger},
     sync::{
         instantiate_trust,
         schema,
@@ -80,19 +80,19 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     engage_aggregator(&cache, action, args, &mut logger)
 }
 
-fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (InstanceType, Vec<&'a str>)>> {
-    let mut deps: IndexMap<&'a str, (InstanceType, Vec<&'a str>)> = IndexMap::new();
+fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (ContainerType, Vec<&'a str>)>> {
+    let mut deps: IndexMap<&'a str, (ContainerType, Vec<&'a str>)> = IndexMap::new();
     let mut current_target = "";
     let mut instype = None;
 
     while let Some(arg) = args.next() {
         match arg {
-            Op::Short('b') | Op::Long("base") => instype = Some(InstanceType::Base),
-            Op::Short('s') | Op::Long("slice") => instype = Some(InstanceType::Slice),
-            Op::Short('a') | Op::Long("agg") => instype = Some(InstanceType::Aggregate),
+            Op::Short('b') | Op::Long("base") => instype = Some(ContainerType::Base),
+            Op::Short('s') | Op::Long("slice") => instype = Some(ContainerType::Slice),
+            Op::Short('a') | Op::Long("aggregate") => instype = Some(ContainerType::Aggregate),
             Op::ShortPos('d', dep) | Op::LongPos("dep", dep) => match instype {
                 Some(instance) => {
-                    if let InstanceType::Base = instance {
+                    if let ContainerType::Base = instance {
                         err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
                     }
 
@@ -124,7 +124,7 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (In
     }
 
     for dep in deps.iter() {
-        if let InstanceType::Base = dep.1 .0 {
+        if let ContainerType::Base = dep.1 .0 {
             continue;
         }
 
@@ -156,8 +156,8 @@ fn create(args: &mut Arguments) -> bool {
 
 fn instantiate<'a>(
     logger: &mut Logger,
-    cache: &mut InstanceCache<'a>,
-    targets: IndexMap<&'a str, (InstanceType, Vec<&'a str>)>,
+    cache: &mut ContainerCache<'a>,
+    targets: IndexMap<&'a str, (ContainerType, Vec<&'a str>)>,
 ) -> Result<()> {
     println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
@@ -169,7 +169,7 @@ fn instantiate<'a>(
     Ok(())
 }
 
-fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>) -> Result<()> {
+fn instantiate_container<'a>(logger: &mut Logger, handle: &'a ContainerHandle<'a>) -> Result<()> {
     let ins = handle.vars().instance();
     let instype = handle.metadata().container_type();
 
@@ -177,7 +177,7 @@ fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>
         err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
     }
 
-    if let InstanceType::Aggregate | InstanceType::Base = instype {
+    if let ContainerType::Aggregate | ContainerType::Base = instype {
         if let Err(err) = std::fs::create_dir(handle.vars().home()) {
             if err.kind() != std::io::ErrorKind::AlreadyExists {
                 err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
@@ -185,18 +185,18 @@ fn instantiate_container<'a>(logger: &mut Logger, handle: &'a InstanceHandle<'a>
         }
     }
 
-    if let InstanceType::Base = instype {
+    if let ContainerType::Base = instype {
         schema::extract(handle, &None)?;
     }
 
     handle.save()?;
-    logger.log(format!("Instantiation of {ins} complete.")).unwrap();
+    logger.log(Info, &format!("Instantiation of {ins} complete.")).unwrap();
     println!("{} Instantiation of {ins} complete.", *ARROW_GREEN);
     Ok(())
 }
 
 fn engage_aggregator<'a>(
-    cache: &InstanceCache<'a>,
+    cache: &ContainerCache<'a>,
     action_type: TransactionType,
     args: &'a mut Arguments,
     log: &'a mut Logger,

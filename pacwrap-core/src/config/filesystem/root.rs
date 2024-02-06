@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{
         filesystem::{BindError, Filesystem},
-        InsVars,
+        ContainerVariables,
     },
     exec::args::ExecutionArgs,
 };
@@ -34,16 +34,16 @@ pub struct Root;
 
 #[typetag::serde(name = "root")]
 impl Filesystem for Root {
-    fn check(&self, vars: &InsVars) -> Result<(), BindError> {
+    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError> {
         if !Path::new(vars.root()).exists() {
             Err(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
         }
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
-        args.robind(format!("{}/usr", vars.root()), "/usr");
-        args.robind(format!("{}/etc", vars.root()), "/etc");
+    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
+        args.robind(&format!("{}/usr", vars.root()), "/usr");
+        args.robind(&format!("{}/etc", vars.root()), "/etc");
         args.symlink("/usr/lib", "/lib");
         args.symlink("/usr/lib", "/lib64");
         args.symlink("/usr/bin", "/bin");
