@@ -42,52 +42,49 @@ impl ExecutionArgs {
         }
     }
 
-    pub fn dir(&mut self, dest: impl Into<String>) {
+    pub fn dir(&mut self, dest: &str) {
         self.bind.push("--dir".into());
         self.bind.push(dest.into());
     }
 
-    pub fn bind(&mut self, src: impl Into<String>, dest: impl Into<String>) {
+    pub fn bind(&mut self, src: &str, dest: &str) {
         self.bind.push("--bind".into());
         self.bind.push(src.into());
         self.bind.push(dest.into());
     }
 
-    pub fn robind(&mut self, src: impl Into<String>, dest: impl Into<String>) {
+    pub fn robind(&mut self, src: &str, dest: &str) {
         self.bind.push("--ro-bind".into());
         self.bind.push(src.into());
         self.bind.push(dest.into());
     }
 
-    pub fn symlink(&mut self, src: impl Into<String>, dest: impl Into<String>) {
+    pub fn symlink(&mut self, src: &str, dest: &str) {
         self.bind.push("--symlink".into());
         self.bind.push(src.into());
         self.bind.push(dest.into());
     }
 
-    pub fn env(&mut self, src: impl Into<String>, dest: impl Into<String>) {
-        let var: String = src.into();
-        let var2: String = dest.into();
-
+    pub fn env(&mut self, src: &str, dest: &str) {
         self.env.push("--setenv".into());
-        self.env.push(var.clone());
-        self.env.push(var2.clone());
+        self.env.push(src.into());
+        self.env.push(dest.into());
 
         //TODO: Temporary workaround until structure is rebuilt
-        self.vars.insert(var, var2);
+        self.vars.insert(src.into(), dest.into());
     }
 
-    pub fn dev(&mut self, src: impl Into<String> + Copy) {
+    pub fn dev(&mut self, src: &str) {
         self.dev.push("--dev-bind-try".into());
         self.dev.push(src.into());
         self.dev.push(src.into());
     }
 
-    pub fn dbus(&mut self, per: impl Into<String>, socket: impl Into<String>) {
-        self.dbus.push(format!("--{}={}", per.into(), socket.into()));
+    pub fn dbus(&mut self, per: &str, socket: &str) {
+        self.dbus.push(format!("--{}={}", per, socket));
     }
 
-    pub fn push_env(&mut self, src: impl Into<String>) {
+    pub fn push_env(&mut self, src: &str) {
         self.env.push(src.into());
     }
 

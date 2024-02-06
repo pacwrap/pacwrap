@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{
         filesystem::{BindError, Filesystem},
-        InsVars,
+        ContainerVariables,
     },
     exec::args::ExecutionArgs,
 };
@@ -34,14 +34,14 @@ pub struct Home;
 
 #[typetag::serde(name = "home")]
 impl Filesystem for Home {
-    fn check(&self, vars: &InsVars) -> Result<(), BindError> {
+    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError> {
         if !Path::new(vars.home()).exists() {
             Err(BindError::Fail(format!("Specified home directory not found.")))?
         }
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
         args.bind(vars.home(), vars.home_mount());
         args.env("HOME", vars.home_mount());
         args.env("USER", vars.user());

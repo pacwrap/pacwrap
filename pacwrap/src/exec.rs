@@ -38,9 +38,9 @@ use pacwrap_core::{
     config::{
         self,
         register::{register_dbus, register_filesystems, register_permissions},
+        ContainerHandle,
+        ContainerType::Slice,
         Dbus,
-        InstanceHandle,
-        InstanceType::Slice,
     },
     constants::{self, BWRAP_EXECUTABLE, DBUS_PROXY_EXECUTABLE, DBUS_SOCKET, DEFAULT_PATH, XDG_RUNTIME_DIR},
     err,
@@ -67,8 +67,8 @@ use pacwrap_core::{
 const SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
 enum ExecParams<'a> {
-    FakeRoot(i8, bool, Vec<&'a str>, InstanceHandle<'a>),
-    Container(i8, bool, Vec<&'a str>, InstanceHandle<'a>),
+    FakeRoot(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
+    Container(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
 }
 
 impl<'a> ExecParams<'a> {
@@ -129,7 +129,7 @@ pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
     }
 }
 
-fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool, verbosity: i8) -> Result<()> {
+fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, verbosity: i8) -> Result<()> {
     let mut exec_args = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
@@ -245,7 +245,7 @@ fn execute_container<'a>(ins: &InstanceHandle, arguments: Vec<&str>, shell: bool
     }
 }
 
-fn execute_fakeroot(ins: &InstanceHandle, arguments: Option<Vec<&str>>, verbosity: i8) -> Result<()> {
+fn execute_fakeroot(ins: &ContainerHandle, arguments: Option<Vec<&str>>, verbosity: i8) -> Result<()> {
     let arguments = match arguments {
         None => vec!["bash"],
         Some(args) => args,
@@ -297,7 +297,7 @@ fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) ->
 
             args.robind(&*DBUS_SOCKET, &dbus_socket_path);
             args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
-            args.env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={dbus_socket_path}"));
+            args.env("DBUS_SESSION_BUS_ADDRESS", &format!("unix:path={dbus_socket_path}"));
 
             /*
              * This blocking code is required to prevent a downstream race condition with

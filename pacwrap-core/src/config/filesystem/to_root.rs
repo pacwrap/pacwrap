@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{
         filesystem::{default_permission, is_default_permission, BindError, Filesystem},
-        InsVars,
+        ContainerVariables,
     },
     exec::args::ExecutionArgs,
 };
@@ -46,7 +46,7 @@ struct Mount {
 
 #[typetag::serde(name = "to_root")]
 impl Filesystem for ToRoot {
-    fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
+    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
         if self.mounts.len() == 0 {
             Err(BindError::Warn(format!("Mount volumes undeclared.")))?
         }
@@ -64,7 +64,7 @@ impl Filesystem for ToRoot {
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, _vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, _vars: &ContainerVariables) {
         for m in self.mounts.iter() {
             bind_filesystem(args, &m.permission, &m.path, &m.dest);
         }

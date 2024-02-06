@@ -36,7 +36,7 @@ use zstd::Decoder;
 use self::SchemaStatus::*;
 
 use crate::{
-    config::InstanceHandle,
+    config::ContainerHandle,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     err,
     impl_error,
@@ -143,7 +143,7 @@ impl From<EntryType> for NodeType {
     }
 }
 
-pub fn extract(inshandle: &InstanceHandle, old_schema: &Option<SchemaState>) -> Result<()> {
+pub fn extract(inshandle: &ContainerHandle, old_schema: &Option<SchemaState>) -> Result<()> {
     let meta_path = format!("{}/{}", inshandle.vars().root(), SCHEMA_META);
 
     if let Some(schema) = old_schema {
@@ -190,7 +190,7 @@ pub fn extract(inshandle: &InstanceHandle, old_schema: &Option<SchemaState>) -> 
     Ok(())
 }
 
-pub fn version(inshandle: &InstanceHandle) -> Result<SchemaStatus> {
+pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
     let mut header_buffer = vec![0; 16];
     let schema: &str = &format!("{}/{}", inshandle.vars().root(), SCHEMA_META);
     let mut file = match File::open(&schema) {

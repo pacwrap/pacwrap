@@ -56,12 +56,12 @@ impl Permission for Environment {
     fn register(&self, args: &mut ExecutionArgs) {
         if self.var != "" {
             let set = env_var(&self.var, &self.set);
-            args.env(&self.var, set);
+            args.env(&self.var, &set);
         }
 
         for v in self.variables.iter() {
             let set = env_var(&v.var, &v.set);
-            args.env(&v.var, set);
+            args.env(&v.var, &set);
         }
     }
 

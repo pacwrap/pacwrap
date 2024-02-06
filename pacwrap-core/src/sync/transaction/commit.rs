@@ -20,10 +20,11 @@
 use std::{process::Child, result::Result as StdResult};
 
 use crate::{
-    config::{InstanceHandle, CONFIG},
+    config::{ContainerHandle, CONFIG},
     constants::{BOLD, RESET},
     err,
     exec::transaction_agent,
+    log::Level::Info,
     sync::{
         self,
         event::summary::Summary,
@@ -64,7 +65,7 @@ impl Transaction for Commit {
         &self,
         ag: &mut TransactionAggregator,
         handle: &mut TransactionHandle,
-        inshandle: &InstanceHandle,
+        inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
         let ready = handle.trans_ready(&ag.action());
@@ -101,7 +102,9 @@ impl Transaction for Commit {
 
         handle.set_alpm(Some(sync::instantiate_alpm(inshandle)));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
-        ag.logger().log(format!("container {instance}'s {state} transaction complete")).ok();
+        ag.logger()
+            .log(Info, &format!("container {instance}'s {state} transaction complete"))
+            .ok();
         next_state(handle, ag.action(), &self.state, true)
     }
 }

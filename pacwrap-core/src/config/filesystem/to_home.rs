@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{
         filesystem::{default_permission, is_default_permission, BindError, Filesystem},
-        InsVars,
+        ContainerVariables,
     },
     constants::HOME,
     exec::args::ExecutionArgs,
@@ -47,7 +47,7 @@ struct Mount {
 
 #[typetag::serde(name = "to_home")]
 impl Filesystem for ToHome {
-    fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
+    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
         if self.mounts.len() == 0 {
             Err(BindError::Warn(format!("Mount volumes undeclared.")))?
         }
@@ -65,7 +65,7 @@ impl Filesystem for ToHome {
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
         for m in self.mounts.iter() {
             bind_filesystem(args, vars, &m.permission, &m.path, &m.dest);
         }
@@ -76,13 +76,13 @@ impl Filesystem for ToHome {
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, vars: &InsVars, permission: &str, src: &str, dest: &str) {
+fn bind_filesystem(args: &mut ExecutionArgs, vars: &ContainerVariables, permission: &str, src: &str, dest: &str) {
     let dest = match dest.is_empty() {
         false => dest,
         true => src,
     };
-    let dest = format!("{}/{}", vars.home_mount(), dest);
-    let src = format!("{}/{}", *HOME, src);
+    let dest = &format!("{}/{}", vars.home_mount(), dest);
+    let src = &format!("{}/{}", *HOME, src);
 
     match permission == "rw" {
         false => args.robind(src, dest),

@@ -24,7 +24,7 @@ use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{Global, InstanceHandle},
+    config::{ContainerHandle, Global},
     constants::{ARROW_CYAN, BAR_CYAN, BOLD, BOLD_GREEN, BOLD_YELLOW, RESET},
     err,
     sync::{
@@ -88,7 +88,7 @@ pub trait Transaction {
         &self,
         ag: &mut TransactionAggregator,
         handle: &mut TransactionHandle,
-        inshandle: &InstanceHandle,
+        inshandle: &ContainerHandle,
     ) -> Result<TransactionState>;
 }
 
@@ -197,7 +197,7 @@ impl TransactionType {
         println!("{} {}", *ARROW_CYAN, message);
     }
 
-    fn begin_message(&self, inshandle: &InstanceHandle) {
+    fn begin_message(&self, inshandle: &ContainerHandle) {
         let instance = inshandle.vars().instance();
         let message = match self {
             Self::Upgrade(upgrade, ..) => match upgrade {
@@ -393,7 +393,7 @@ impl<'a> TransactionHandle<'a> {
         Ok(())
     }
 
-    fn apply_configuration(&mut self, instance: &InstanceHandle, create: bool) -> Result<()> {
+    fn apply_configuration(&mut self, instance: &ContainerHandle, create: bool) -> Result<()> {
         let depends = instance.metadata().dependencies();
         let explicit_packages: Vec<&str> = instance.metadata().explicit_packages();
         let pkgs = self

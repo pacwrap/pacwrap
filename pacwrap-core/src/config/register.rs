@@ -17,15 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::vec::Vec;
-
 use crate::{
     config::{
         filesystem::{BindError, Filesystem},
         permission::*,
         Dbus,
-        InsVars,
+        ContainerVariables,
         Permission,
+        ConfigError,
     },
     err,
     error::*,
@@ -33,9 +32,7 @@ use crate::{
     utils::print_warning,
 };
 
-use super::ConfigError;
-
-pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &InsVars, args: &mut ExecutionArgs) -> Result<()> {
+pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
     for p in per.iter() {
         match p.check(vars) {
             Ok(_) => p.register(args, vars),

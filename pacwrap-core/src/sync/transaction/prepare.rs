@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::{
-    config::{InstanceHandle, InstanceType},
+    config::{ContainerHandle, ContainerType},
     constants::UNIX_TIMESTAMP,
     err,
     sync::{
@@ -52,7 +52,7 @@ impl Transaction for Prepare {
         &self,
         ag: &mut TransactionAggregator,
         handle: &mut TransactionHandle,
-        inshandle: &InstanceHandle,
+        inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         match self.state {
             Prepare => {
@@ -60,7 +60,7 @@ impl Transaction for Prepare {
                 let instype = inshandle.metadata().container_type();
                 let action = ag.action();
 
-                if let (InstanceType::Base, false) = (instype, ag.updated(inshandle)) {
+                if let (ContainerType::Base, false) = (instype, ag.updated(inshandle)) {
                     if let SchemaStatus::OutOfDate(set) = schema::version(inshandle)? {
                         return Ok(UpdateSchema(set));
                     }
@@ -99,14 +99,14 @@ impl Transaction for Prepare {
 
                 if let Remove(..) = action {
                     Ok(Stage)
-                } else if let InstanceType::Base = instype {
+                } else if let ContainerType::Base = instype {
                     Ok(Stage)
                 } else {
                     Ok(PrepareForeign(false))
                 }
             }
             PrepareForeign(updated) => {
-                if let InstanceType::Base = inshandle.metadata().container_type() {
+                if let ContainerType::Base = inshandle.metadata().container_type() {
                     return Ok(Complete(false));
                 }
 

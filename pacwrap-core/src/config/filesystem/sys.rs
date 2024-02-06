@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{
         filesystem::{BindError, Filesystem},
-        InsVars,
+        ContainerVariables,
     },
     exec::args::ExecutionArgs,
 };
@@ -36,7 +36,7 @@ struct System {
 
 #[typetag::serde(name = "sysfs")]
 impl Filesystem for System {
-    fn check(&self, _vars: &InsVars) -> Result<(), BindError> {
+    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
         for dir in self.path.iter() {
             if !Path::new(&format!("/sys/{}", dir)).exists() {
                 Err(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
@@ -46,9 +46,9 @@ impl Filesystem for System {
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, _: &InsVars) {
+    fn register(&self, args: &mut ExecutionArgs, _: &ContainerVariables) {
         for dir in self.path.iter() {
-            args.robind(format!("/sys/{}", dir), format!("/sys/{}", dir));
+            args.robind(&format!("/sys/{}", dir), &format!("/sys/{}", dir));
         }
     }
 

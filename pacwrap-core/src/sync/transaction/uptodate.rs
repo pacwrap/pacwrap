@@ -24,7 +24,7 @@ use super::{
     TransactionHandle,
     TransactionState::{self, Complete},
 };
-use crate::{config::InstanceHandle, constants::ARROW_GREEN};
+use crate::{config::ContainerHandle, constants::ARROW_GREEN};
 
 pub struct UpToDate;
 
@@ -37,7 +37,7 @@ impl Transaction for UpToDate {
         &self,
         _: &mut TransactionAggregator,
         _: &mut TransactionHandle,
-        inshandle: &InstanceHandle,
+        inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
         println!("{} {instance} is up-to-date!", *ARROW_GREEN);
