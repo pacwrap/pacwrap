@@ -18,6 +18,7 @@
  */
 
 use std::{
+    fmt::{Display, Formatter},
     fs::{remove_file, File},
     os::unix::io::AsRawFd,
     path::Path,
@@ -44,9 +45,10 @@ use pacwrap_core::{
     },
     constants::{self, BWRAP_EXECUTABLE, DBUS_PROXY_EXECUTABLE, DBUS_SOCKET, DEFAULT_PATH, XDG_RUNTIME_DIR},
     err,
+    error,
     error::*,
     exec::{
-        args::ExecutionArgs,
+        args::{Argument, ExecutionArgs},
         fakeroot_container,
         path::check_path,
         seccomp::{configure_bpf_program, provide_bpf_program},
@@ -54,17 +56,40 @@ use pacwrap_core::{
         ExecutionError,
         ExecutionType::Interactive,
     },
+    impl_error,
     utils::{
         arguments::{Arguments, InvalidArgument, Operand as Op},
         check_root,
         env_var,
-        print_warning,
         TermControl,
     },
     ErrorKind,
 };
 
 const SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
+
+#[derive(Debug)]
+enum ExecError {
+    NestedNamespaceEnablement,
+    ConsoleSessionRetention,
+    SeccompDisablement,
+}
+
+impl_error!(ExecError);
+
+impl Display for ExecError {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::SeccompDisablement => write!(fmter, "Disabling seccomp filtering can allow for sandbox escape."),
+            Self::NestedNamespaceEnablement =>
+                write!(fmter, "Namespace nesting has been known in the past to enable container escape vulnerabilities."),
+            Self::ConsoleSessionRetention => write!(
+                fmter,
+                "Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details."
+            ),
+        }
+    }
+}
 
 enum ExecParams<'a> {
     FakeRoot(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
@@ -77,7 +102,7 @@ impl<'a> ExecParams<'a> {
         let mut shell = if let Op::Value("shell") = args[0] { true } else { false };
         let mut root = false;
         let mut container = None;
-        let mut pos = 0;
+        let mut pos = 1;
 
         for str in args.inner() {
             if str.starts_with("-") || *str == "run" || *str == "shell" {
@@ -127,45 +152,42 @@ pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
 }
 
 fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, verbosity: i8) -> Result<()> {
-    let mut exec_args = ExecutionArgs::new();
+    let mut exec = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
     let vars = ins.vars();
 
     if !cfg.allow_forking() {
-        exec_args.push_env("--die-with-parent");
+        exec.push_env(Argument::DieWithParent);
     }
 
-    if !cfg.enable_userns() {
-        exec_args.push_env("--unshare-user");
-        exec_args.push_env("--disable-userns");
-    } else {
-        print_warning("Namespace nesting has been known in the past to enable container escape vulnerabilities.");
+    match !cfg.enable_userns() {
+        true => exec.push_env(Argument::DisableNamespaces),
+        false => error!(ExecError::NestedNamespaceEnablement).warn(),
     }
 
     match !cfg.retain_session() {
-        true => exec_args.push_env("--new-session"),
-        false =>
-            print_warning("Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details."),
+        true => exec.push_env(Argument::NewSession),
+        false => error!(ExecError::ConsoleSessionRetention).warn(),
     }
 
     match shell && *constants::IS_COLOR_TERMINLAL {
-        true => exec_args.env("TERM", "xterm"),
-        false => exec_args.env("TERM", "dumb"),
+        true => exec.env("TERM", "xterm"),
+        false => exec.env("TERM", "dumb"),
     }
 
     if cfg.dbus().len() > 0 {
-        jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec_args)?);
+        jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec)?);
     }
 
-    exec_args.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
-    register_filesystems(cfg.filesystem(), &vars, &mut exec_args)?;
-    register_permissions(cfg.permissions(), &mut exec_args)?;
+    exec.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
+    register_filesystems(cfg.filesystem(), &vars, &mut exec)?;
+    register_permissions(cfg.permissions(), &mut exec)?;
 
-    let path = match exec_args.get_var("PATH") {
+    let path = match exec.obtain_env("PATH") {
         Some(var) => &var,
         None => {
-            exec_args.env("PATH", DEFAULT_PATH);
+            exec.env("PATH", DEFAULT_PATH);
             DEFAULT_PATH
         }
     };
@@ -176,56 +198,51 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
     let sec_fd = match cfg.seccomp() {
         true => provide_bpf_program(configure_bpf_program(cfg), &sec_pipe.0, sec_pipe.1).unwrap(),
         false => {
-            print_warning("Disabling seccomp filtering can allow for sandbox escape.");
+            error!(ExecError::SeccompDisablement).warn();
             0
         }
     };
     let term_control = TermControl::new(0);
     let mut proc = Command::new(BWRAP_EXECUTABLE);
-
-    proc.env_clear()
-        .arg("--dir")
-        .arg("/tmp")
-        .args(exec_args.get_bind())
-        .arg("--dev")
-        .arg("/dev")
-        .arg("--proc")
-        .arg("/proc")
-        .args(exec_args.get_dev())
-        .arg("--unshare-all")
-        .args(exec_args.get_env())
-        .arg("--info-fd")
-        .arg(info_fd.to_string());
-
-    let fd_mappings = if sec_fd == 0 {
-        vec![FdMapping {
-            parent_fd: info_fd,
-            child_fd: info_fd,
-        }]
-    } else {
-        proc.arg("--seccomp").arg(sec_fd.to_string());
-        vec![
-            FdMapping {
+    let proc = if sec_fd == 0 {
+        proc.env_clear()
+            .args(exec.arguments())
+            .arg("--info-fd")
+            .arg(info_fd.to_string())
+            .fd_mappings(vec![FdMapping {
                 parent_fd: info_fd,
                 child_fd: info_fd,
-            },
-            FdMapping {
-                parent_fd: sec_fd,
-                child_fd: sec_fd,
-            },
-        ]
+            }])
+            .unwrap()
+    } else {
+        proc.env_clear()
+            .args(exec.arguments())
+            .arg("--info-fd")
+            .arg(info_fd.to_string())
+            .arg("--seccomp")
+            .arg(sec_fd.to_string())
+            .fd_mappings(vec![
+                FdMapping {
+                    parent_fd: info_fd,
+                    child_fd: info_fd,
+                },
+                FdMapping {
+                    parent_fd: sec_fd,
+                    child_fd: sec_fd,
+                },
+            ])
+            .unwrap()
     };
 
     if verbosity == 1 {
         eprintln!("Arguments:\t     {arguments:?}\n{ins:?}");
     } else if verbosity > 1 {
-        eprintln!("Arguments:\t     {arguments:?}\n{ins:?}\n{exec_args:?}");
+        eprintln!("Arguments:\t     {arguments:?}\n{ins:?}\n{exec:?}");
     }
 
     check_path(ins, &arguments, path_vec)?;
-    proc.args(arguments).fd_mappings(fd_mappings).unwrap();
 
-    match proc.spawn() {
+    match proc.args(arguments).spawn() {
         Ok(child) => wait_on_container(
             child,
             term_control,

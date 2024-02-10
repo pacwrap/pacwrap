@@ -21,10 +21,10 @@ use crate::{
     config::{
         filesystem::{BindError, Filesystem},
         permission::*,
-        Dbus,
-        ContainerVariables,
-        Permission,
         ConfigError,
+        ContainerVariables,
+        Dbus,
+        Permission,
     },
     err,
     error::*,
