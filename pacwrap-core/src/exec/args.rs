@@ -17,96 +17,120 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Formatter},
-};
+use std::fmt::{Debug, Formatter};
 
-pub struct ExecutionArgs {
-    bind: Vec<String>,
-    dev: Vec<String>,
-    env: Vec<String>,
-    dbus: Vec<String>,
-    vars: HashMap<String, String>,
+#[derive(Debug)]
+pub enum Argument {
+    Directory(String),
+    Bind(String, String),
+    RoBind(String, String),
+    EnvVar(String, String),
+    SymbolicLink(String, String),
+    Device(String),
+    DevFs,
+    DieWithParent,
+    DisableNamespaces,
+    HostNetworking,
+    ProcFs,
+    NewSession,
+    TmpFs,
+    UnshareAll,
 }
 
-//TODO: This entire structure needs to be rethought
+pub struct ExecutionArgs {
+    dbus: Vec<String>,
+    bind: Vec<Argument>,
+    env: Vec<Argument>,
+    sys: Vec<Argument>,
+}
+
+impl Argument {
+    fn to_vec(&self) -> Vec<&str> {
+        match self {
+            Self::Directory(val) => vec!["--dir", val],
+            Self::Bind(src, dest) => vec!["--bind", src, dest],
+            Self::RoBind(src, dest) => vec!["--ro-bind", src, dest],
+            Self::SymbolicLink(src, dest) => vec!["--symlink", src, dest],
+            Self::EnvVar(val, set) => vec!["--setenv", val, set],
+            Self::Device(val) => vec!["--dev-bind-try", val, val],
+            Self::DevFs => vec!["--dev", "/dev"],
+            Self::DieWithParent => vec!["--die-with-parent"],
+            Self::DisableNamespaces => vec!["--unshare-user", "--disable-userns"],
+            Self::HostNetworking => vec!["--share-net"],
+            Self::ProcFs => vec!["--proc", "/proc"],
+            Self::NewSession => vec!["--new-session"],
+            Self::TmpFs => vec!["--tmpfs", "/tmp"],
+            Self::UnshareAll => vec!["--unshare-all"],
+        }
+    }
+}
+
 impl ExecutionArgs {
     pub fn new() -> Self {
         Self {
-            bind: Vec::new(),
-            dev: Vec::new(),
-            env: Vec::new(),
             dbus: Vec::new(),
-            vars: HashMap::new(),
+            bind: vec![Argument::TmpFs],
+            sys: vec![Argument::DevFs, Argument::ProcFs],
+            env: vec![Argument::UnshareAll],
         }
     }
 
     pub fn dir(&mut self, dest: &str) {
-        self.bind.push("--dir".into());
-        self.bind.push(dest.into());
+        self.bind.push(Argument::Directory(dest.into()));
     }
 
     pub fn bind(&mut self, src: &str, dest: &str) {
-        self.bind.push("--bind".into());
-        self.bind.push(src.into());
-        self.bind.push(dest.into());
+        self.bind.push(Argument::Bind(src.into(), dest.into()));
     }
 
     pub fn robind(&mut self, src: &str, dest: &str) {
-        self.bind.push("--ro-bind".into());
-        self.bind.push(src.into());
-        self.bind.push(dest.into());
+        self.bind.push(Argument::RoBind(src.into(), dest.into()));
     }
 
     pub fn symlink(&mut self, src: &str, dest: &str) {
-        self.bind.push("--symlink".into());
-        self.bind.push(src.into());
-        self.bind.push(dest.into());
+        self.bind.push(Argument::SymbolicLink(src.into(), dest.into()));
     }
 
     pub fn env(&mut self, src: &str, dest: &str) {
-        self.env.push("--setenv".into());
-        self.env.push(src.into());
-        self.env.push(dest.into());
-
-        //TODO: Temporary workaround until structure is rebuilt
-        self.vars.insert(src.into(), dest.into());
+        self.env.push(Argument::EnvVar(src.into(), dest.into()));
     }
 
     pub fn dev(&mut self, src: &str) {
-        self.dev.push("--dev-bind-try".into());
-        self.dev.push(src.into());
-        self.dev.push(src.into());
+        self.sys.push(Argument::Device(src.into()));
     }
 
     pub fn dbus(&mut self, per: &str, socket: &str) {
         self.dbus.push(format!("--{}={}", per, socket));
     }
 
-    pub fn push_env(&mut self, src: &str) {
-        self.env.push(src.into());
+    pub fn push_env(&mut self, arg: Argument) {
+        self.env.push(arg);
     }
 
-    pub fn get_bind(&self) -> &Vec<String> {
-        &self.bind
+    pub fn get_dbus(&self) -> Vec<&str> {
+        self.dbus.iter().map(|a| a.as_str()).collect()
     }
 
-    pub fn get_dev(&self) -> &Vec<String> {
-        &self.dev
+    pub fn obtain_env(&self, env: &str) -> Option<&str> {
+        self.env.iter().find_map(|a| match a {
+            Argument::EnvVar(target, var) => match target == env {
+                true => Some(var.as_str()),
+                false => None,
+            },
+            _ => None,
+        })
     }
 
-    pub fn get_env(&self) -> &Vec<String> {
-        &self.env
-    }
+    pub fn arguments(&self) -> Vec<&str> {
+        let mut vec = Vec::new();
 
-    pub fn get_dbus(&self) -> &Vec<String> {
-        &self.dbus
-    }
+        vec.reserve((self.sys.len() + self.bind.len() + self.env.len()) * 4);
 
-    //TODO: Temporary workaround until structure is rebuilt
-    pub fn get_var(&self, key: &str) -> Option<&String> {
-        self.vars.get(key)
+        for values in self.bind.iter().chain(self.sys.iter()).chain(self.env.iter()) {
+            vec.extend(values.to_vec());
+        }
+
+        vec
     }
 }
 
@@ -115,8 +139,8 @@ impl Debug for ExecutionArgs {
         writeln!(fmter, "bind: {:?}", self.bind)?;
         writeln!(fmter, "env:  {:?}", self.env)?;
 
-        if self.dev.len() > 0 {
-            writeln!(fmter, "dev:  {:?}", self.dev)?;
+        if self.sys.len() > 2 {
+            writeln!(fmter, "sys:  {:?}", self.sys)?;
         }
 
         if self.dbus.len() > 0 {

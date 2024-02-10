@@ -24,7 +24,7 @@ use crate::{
         permission::{Condition::Success, *},
         Permission,
     },
-    exec::args::ExecutionArgs,
+    exec::args::{Argument::HostNetworking, ExecutionArgs},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,7 +37,7 @@ impl Permission for Network {
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        args.push_env("--share-net");
+        args.push_env(HostNetworking);
         args.bind("/etc/resolv.conf", "/etc/resolv.conf");
     }
 

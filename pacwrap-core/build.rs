@@ -33,6 +33,20 @@ fn dist_filesystem() -> String {
     }
 }
 
+fn dist_config() -> String {
+    match var("PACWRAP_DIST_CONF") {
+        Ok(var) => var,
+        Err(_) => "../../../dist/default/pacwrap.yml".into(),
+    }
+}
+
+fn dist_repo_config() -> String {
+    match var("PACWRAP_DIST_REPO_CONF") {
+        Ok(var) => var,
+        Err(_) => "../../../dist/default/repositories.conf".into(),
+    }
+}
+
 fn main() {
     if !cfg!(target_os = "linux") || !cfg!(target_family = "unix") {
         panic!("Unsupported build target. Please refer to the documentation for further information.")
@@ -41,4 +55,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_FS");
     println!("cargo:rustc-env=PACWRAP_DIST_FS={}", dist_filesystem());
     println!("cargo:rustc-env=PACWRAP_DIST_META={}", dist_filesystem_meta());
+    println!("cargo:rustc-env=PACWRAP_DIST_REPO_CONF={}", dist_repo_config());
+    println!("cargo:rustc-env=PACWRAP_DIST_CONF={}", dist_config());
 }

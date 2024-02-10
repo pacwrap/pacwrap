@@ -1,0 +1,20 @@
+## See the pacwrap.yml(2) manpage for more detailed information.
+## Documentation is also available at https://github.com/pacwrap/pacwrap/docs/
+
+config:
+  logging: Basic
+  summary: Basic
+  #progress:
+    #transact: CondensedForeign
+    #download: CondensedForeign
+alpm:
+  #ignore_pkg:
+  #- somepackage
+  hold_pkg:
+  - pacman
+  - glibc
+  sig_level: Required DatabaseOptional
+  sig_level_local: Optional
+  #parallel_downloads: 5
+  #check_space: true
+  #download_timeout: true"

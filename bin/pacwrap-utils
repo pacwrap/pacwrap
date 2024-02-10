@@ -40,7 +40,6 @@ main () {
 		Uv*)		edit_file 1;;
 		Ue*)		edit_file;;
 		Uls*)		summary;;
-		Ul*)		link_root;;
 		*)		log_invalid_arguments $1
 	esac
 }
@@ -213,38 +212,6 @@ desktop_entry() {
 
 			log "$ARROW_GREEN Created desktop entry for $BOLD$application$RESET derived from container $BOLD$instance$RESET."
 	esac
-}
-
-link_root() {
-	local instance=${ARGS[0]}
-	local link=${ARGS[1]}
-
-	test_argument "Targets" $instance
-	check_root $link
-	check_root 1 $instance
-	
-	[[ ! $SWITCH_NO_CONFIRM ]] && printf "$BAR %s\n\n$BOLD%s\n\n" "Create virtual instance" "$instance $ARROW $BOLD$link"
-	[[ ! "$(query_confirm_Yn "Proceed with creation?")" ]] && return
-
-	log "$BAR_GREEN Creating virtual instance $instance $ARROW $BOLD$link"
-
-	ln -s "$INSTANCE_ROOT_DIR/$link" "$INSTANCE_ROOT_DIR/$instance"
-	mkdir -p "$INSTANCE_HOME_DIR/$instance"
-	echo 'PS1="'$instance'> "' > "$INSTANCE_HOME_DIR/$instance/.bashrc"
-	
-	load_configuration $link; instance=${ARGS[0]}
-
-	TYPE=LINK
-	DEPS=(${INSTANCE_CONFIG[$link,$CONF_DEPS]} $link)
-	MOUNT="${INSTANCE_CONFIG[$link,$CONF_MOUNT]}"
-	PERMISSIONS="${INSTANCE_CONFIG[$link,$CONF_PERMS]}"
-	PERMISSIONS_DBUS="${INSTANCE_CONFIG[$link,$CONF_DBUS]}"
-	ENV_VARS="${INSTANCE_CONFIG[$link,$CONF_ENV]}"
-
-	populate_configuration
-
-	log "$ARROW_GREEN Process complete!" \
-	    "Created $instance -> $link" 
 }
 
 replicate() { 

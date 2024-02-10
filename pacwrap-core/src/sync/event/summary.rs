@@ -185,11 +185,11 @@ impl Summary {
 
         for (name, old, new, net, dnl) in table_elements {
             let net = match net > 0 {
-                true => format!("{}{}", net.to_byteunit(SI), if net < 1000 { " " } else { "" }),
+                true => format!("{}{}", net.to_byteunit(IEC), if net < 1000 { " " } else { "" }),
                 false => "".into(),
             };
             let dnl = match dnl > 0 {
-                true => format!("{}{}", dnl.to_byteunit(SI), if dnl < 1000 { " " } else { "" }),
+                true => format!("{}{}", dnl.to_byteunit(IEC), if dnl < 1000 { " " } else { "" }),
                 false => "".into(),
             };
 
@@ -217,7 +217,8 @@ impl Summary {
         write!(fmt, "\n{}{preface}{}", *BOLD, *RESET)?;
 
         for pkg in self.elements.iter() {
-            let string_len = pkg.0.len() + pkg.1.len() + 2;
+            let ver = if pkg.2.is_empty() { &pkg.1 } else { &pkg.2 };
+            let string_len = pkg.0.len() + ver.len() + 2;
 
             if current_line_len + string_len >= line_delimiter {
                 writeln!(fmt, "{}", pkglist)?;
@@ -226,7 +227,7 @@ impl Summary {
             }
 
             current_line_len += string_len;
-            pkglist.push_str(&format!("{}-{}{}{} ", pkg.0, *DIM, pkg.1, *RESET));
+            pkglist.push_str(&format!("{}-{}{}{} ", pkg.0, *DIM, ver, *RESET));
         }
 
         write!(fmt, "{}\n\n", pkglist)?;
@@ -235,19 +236,19 @@ impl Summary {
 
     fn footer(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
         if self.installed != 0 {
-            writeln!(fmt, "{}Total Installed Size{}: {}", *BOLD, *RESET, self.installed.to_byteunit(SI))?;
+            writeln!(fmt, "{}Total Installed Size{}: {}", *BOLD, *RESET, self.installed.to_byteunit(IEC))?;
         }
 
         if self.removed != 0 {
-            writeln!(fmt, "{}Total Removed Size{}: {}", *BOLD, *RESET, self.removed.to_byteunit(SI))?;
+            writeln!(fmt, "{}Total Removed Size{}: {}", *BOLD, *RESET, self.removed.to_byteunit(IEC))?;
         }
 
         if self.download_size > 0 {
-            writeln!(fmt, "{}Total Download Size{}: {}", *BOLD, *RESET, self.download_size.to_byteunit(SI))?;
+            writeln!(fmt, "{}Total Download Size{}: {}", *BOLD, *RESET, self.download_size.to_byteunit(IEC))?;
         }
 
         if self.net_installed != 0 {
-            writeln!(fmt, "{}Net Upgrade Size{}: {}", *BOLD, *RESET, self.net_installed.to_byteunit(SI))?;
+            writeln!(fmt, "{}Net Upgrade Size{}: {}", *BOLD, *RESET, self.net_installed.to_byteunit(IEC))?;
         }
 
         Ok(())

@@ -86,16 +86,20 @@ pub fn process(args: &mut Arguments) -> Result<(), Error> {
 }
 
 fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
+    let mut all = false;
     let mut max_depth = 1;
     let mut cmd = 0;
     let mut exec = 0;
     let mut instances = Vec::new();
 
+    args.set_index(1);
+
     while let Some(arg) = args.next() {
         match arg {
-            Operand::Value("ps") => continue,
+            Operand::Value("ps") | Operand::Short('s') => continue,
             Operand::Short('d') | Operand::Short('t') | Operand::Long("depth") | Operand::Long("target") => continue,
             Operand::Short('x') | Operand::Long("exec") => exec += 1,
+            Operand::Short('a') | Operand::Long("all") => all = true,
             Operand::Short('c') | Operand::Long("command") => cmd += 1,
             Operand::ShortPos('t', val) | Operand::LongPos("target", val) => instances.push(val),
             Operand::ShortPos('d', val) | Operand::LongPos("depth", val) => match val.parse() {
@@ -113,12 +117,12 @@ fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
         true => list
             .list()
             .iter()
-            .filter_map(|a| match instances.contains(&a.instance()) && a.depth() <= max_depth {
+            .filter_map(|a| match instances.contains(&a.instance()) && a.depth() <= max_depth || all {
                 true => Some(*a),
                 false => None,
             })
             .collect(),
-        false => list.list().iter().filter(|a| a.depth() <= max_depth).map(|a| *a).collect(),
+        false => list.list().iter().filter(|a| a.depth() <= max_depth || all).map(|a| *a).collect(),
     };
 
     if list.len() == 0 {

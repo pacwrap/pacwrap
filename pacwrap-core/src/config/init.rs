@@ -28,42 +28,8 @@ use crate::{
     Result,
 };
 
-static REPO_CONF_DEFAULT: &'static str = r###"## See the pacman.conf(5) manpage for information on repository directives.
-## All other libalpm-related options therein are ignored.
-
-[options]
-Architecture = auto
-
-[core]
-Include = /etc/pacman.d/mirrorlist
-
-[extra]
-Include = /etc/pacman.d/mirrorlist 
-
-[multilib]
-Include = /etc/pacman.d/mirrorlist
-"###;
-static PACWRAP_CONF_DEFAULT: &'static str = r###"## See the pacwrap.yml(2) manpage for more detailed information.
-## Documentation is also available at https://git.sapphirus.org/pacwrap/pacwrap/docs/
-
-config:
-  logging: Basic
-  summary: Basic
-  #progress:
-    #transact: CondensedForeign
-    #download: CondensedForeign
-alpm:
-  #ignore_pkg:
-  #- somepackage
-  hold_pkg:
-  - pacwrap-base-dist
-  - pacman
-  - glibc
-  sig_level: Required DatabaseOptional
-  sig_level_local: Optional
-  #parallel_downloads: 5
-  #check_space: true
-  #download_timeout: true"###;
+static REPO_CONF_DEFAULT: &'static str = include_str!(env!("PACWRAP_DIST_REPO_CONF"));
+static PACWRAP_CONF_DEFAULT: &'static str = include_str!(env!("PACWRAP_DIST_CONF"));
 
 pub struct DirectoryLayout {
     dirs: Vec<&'static str>,
@@ -109,7 +75,7 @@ fn config_layout() -> DirectoryLayout {
     }
 }
 
-fn write_to_file(location: &str, contents: &str) -> Result<()> {
+fn initialize_file(location: &str, contents: &str) -> Result<()> {
     if Path::new(&location).exists() {
         return Ok(());
     }
@@ -130,8 +96,8 @@ pub fn init() -> Result<()> {
     config_layout().instantiate()?;
     data_layout().instantiate()?;
     cache_layout().instantiate()?;
-    write_to_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
-    write_to_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)?;
+    initialize_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
+    initialize_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)?;
 
     let _ = *CONFIG;
 
