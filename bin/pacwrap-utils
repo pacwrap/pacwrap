@@ -18,7 +18,7 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-source ./bin/pacwrap-common
+source pacwrap-common
 export PACWRAP_UTILS=1
 
 NUMFMT="numfmt --to=si --suffix=B --round=nearest --from-unit=1000 --format=%2f "

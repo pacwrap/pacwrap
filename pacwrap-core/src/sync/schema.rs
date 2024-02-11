@@ -218,7 +218,7 @@ pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
     }
 
     if magic != MAGIC_NUMBER {
-        print_warning(format!("'{}': Magic number mismatch ({MAGIC_NUMBER} != {magic})", schema));
+        print_warning(&format!("'{}': Magic number mismatch ({MAGIC_NUMBER} != {magic})", schema));
         Ok(OutOfDate(None))
     } else if major.0 != major.1 || minor.0 != minor.1 || patch.0 != patch.1 {
         Ok(OutOfDate(match bincode::deserialize_from::<&File, SchemaState>(&file) {

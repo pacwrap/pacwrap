@@ -36,14 +36,14 @@ fn dist_filesystem() -> String {
 fn dist_config() -> String {
     match var("PACWRAP_DIST_CONF") {
         Ok(var) => var,
-        Err(_) => "../../../dist/default/pacwrap.yml".into(),
+        Err(_) => "../../dist/pacwrap.yml".into(),
     }
 }
 
 fn dist_repo_config() -> String {
     match var("PACWRAP_DIST_REPO_CONF") {
         Ok(var) => var,
-        Err(_) => "../../../dist/default/repositories.conf".into(),
+        Err(_) => "../../dist/repositories.conf".into(),
     }
 }
 

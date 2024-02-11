@@ -218,7 +218,7 @@ impl<'a> FileSystemStateSync<'a> {
             Ok(file) => file,
             Err(err) => {
                 if err.kind() != IOErrorKind::NotFound {
-                    print_error(format!("'{}': {}", path, err.kind()));
+                    print_error(&format!("'{}': {}", path, err.kind()));
                 }
 
                 return self.blank_state(instance);
@@ -226,7 +226,7 @@ impl<'a> FileSystemStateSync<'a> {
         };
 
         if let Err(error) = file.read_exact(&mut header_buffer) {
-            print_error(format!("'{}{instance}{}.dat': {error}", *BOLD, *RESET));
+            print_error(&format!("'{}{instance}{}.dat': {error}", *BOLD, *RESET));
             return self.blank_state(instance);
         }
 
@@ -234,9 +234,9 @@ impl<'a> FileSystemStateSync<'a> {
         let version = read_le_32(&header_buffer, 4);
 
         if let Err(err) = file.rewind() {
-            print_error(format!("'{}': {}", path, err.kind()));
+            print_error(&format!("'{}': {}", path, err.kind()));
         } else if magic != MAGIC_NUMBER {
-            print_warning(format!("'{}{instance}{}.dat': Magic number mismatch ({MAGIC_NUMBER} != {magic})", *BOLD, *RESET));
+            print_warning(&format!("'{}{instance}{}.dat': Magic number mismatch ({MAGIC_NUMBER} != {magic})", *BOLD, *RESET));
             return self.blank_state(instance);
         } else if version != VERSION {
             return self.blank_state(instance);
@@ -248,7 +248,7 @@ impl<'a> FileSystemStateSync<'a> {
                 state
             }
             Err(err) => {
-                print_error(format!(
+                print_error(&format!(
                     "Deserialization failure occurred with '{}{instance}{}.dat': {}",
                     *BOLD,
                     *RESET,
@@ -271,14 +271,14 @@ impl<'a> FileSystemStateSync<'a> {
         let output = match File::create(path) {
             Ok(file) => file,
             Err(err) => {
-                print_warning(format!("Writing '{}': {}", path, err.kind()));
+                print_warning(&format!("Writing '{}': {}", path, err.kind()));
                 return;
             }
         };
 
         self.pool().unwrap().spawn(move || {
             if let Err(err) = bincode::serialize_into(output, &ds) {
-                print_error(format!("Serialization failure occurred with '{}{dep}{}.dat': {}", *BOLD, *RESET, err.to_string()));
+                print_error(&format!("Serialization failure occurred with '{}{dep}{}.dat': {}", *BOLD, *RESET, err.to_string()));
             }
 
             drop(tx);

@@ -19,7 +19,6 @@
 
 use std::{
     env::var,
-    fmt::Display,
     os::unix::net::UnixStream,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -43,12 +42,12 @@ pub mod prompt;
 pub mod table;
 pub mod termcontrol;
 
-pub fn print_warning(message: impl Into<String> + Display) {
-    eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, &message);
+pub fn print_warning(message: &str) {
+    eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, message);
 }
 
-pub fn print_error(message: impl Into<String> + Display) {
-    eprintln!("{}error:{} {}", *BOLD_RED, *RESET, &message);
+pub fn print_error(message: &str) {
+    eprintln!("{}error:{} {}", *BOLD_RED, *RESET, message);
 }
 
 pub fn env_var(env: &'static str) -> Result<String> {

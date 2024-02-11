@@ -228,12 +228,6 @@ fn synchronize_database(cache: &ContainerCache, force: bool) -> Result<()> {
 
             for i in cache.registered().iter() {
                 let ins: &ContainerHandle = cache.get_instance(i).unwrap();
-                let src = &format!("{}/pacman/sync/pacwrap.db", *DATA_DIR);
-                let dest = &format!("{}/var/lib/pacman/sync/pacwrap.db", ins.vars().root());
-
-                if let Err(error) = filesystem::create_hard_link(src, dest) {
-                    error.warn();
-                }
 
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
@@ -287,7 +281,7 @@ fn load_repositories() -> pacmanconf::Config {
         Err(error) => {
             //The following code is ugly, precisely because, the pacman_conf library does not
             //provide ergonomic error strings. At some point perhaps, pacman_conf should be
-            //eliminated as an upstream dependency.
+            //eliminated as an upstream dependency or otherwise forked.
 
             let error = error.to_string();
             let error = error.split("error: ").collect::<Vec<_>>()[1].split("\n").collect::<Vec<&str>>()[0];

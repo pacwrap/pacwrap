@@ -50,25 +50,24 @@ If a feature you see here is not completed, feel free to submit a PR; or submit 
 | Foreign Database Resolution (Lazy) | Not yet implemented                                                         | ❌            |
 | Conflict Resolution                | Not yet implemented                                                         | ❌            |
 | Package Installation               | Functional                                                                  | ✅            |
-| Package Removal                    | Functional, but lacks package holding                                       | ⚠            |
+| Package Removal                    | Functional                                                                  | ✅            |
 | Desktop Entry Creation             | ```pacwrap-utils``` at present provides this via ```pacwrap -Ud```          | ⚠            |
 | Container Execution                | Functional                                                                  | ✅            |
 | Launch within existing namespace   | Not yet implemented                                                         | ❌            |
 | Container Configuration            | Functional                                                                  | ✅            |
 | Container Creation                 | Functional                                                                  | ✅            |
 | Container Runtime                  | Embedded runtime environment                                                | ✅            |
-| Container Schema                   | Filesystem schema with version tracking                                     | ✅            |
+| Container Schema                   | Container filesystem schema with version tracking                           | ✅            |
 | Filesystem Deduplication           | Retains filesystem state across containers with hardlinks                   | ✅            |
 | Seccomp Filters                    | Application of seccomp filters to instances via libseccomp bindings         | ✅            |
-| Dbus Proxy                         | Functional - provided by xdg-dbus-proxy                                     | ✅            |
+| Dbus Isolation                     | Functional - provided by xdg-dbus-proxy                                     | ✅            |
 | Networking Isolation               | Not yet implemented                                                         | ❌            |
-| Port to Rust                       | Remaining script: pacwrap-utils                                             | ⚠            |
+| Port to Rust                       | Script: pacwrap-utils                                                       | ⚠            |
 | Configuration CLI (user friendly)  | Not yet implemented                                                         | ❌            |
 | Process API                        | Container process enumeration                                               | ✅            |
 | Process CLI                        | Functional                                                                  | ✅            |
 | Utility CLI (native)               | Not yet implemented                                                         | ❌            |
 | Localization                       | Not yet implemented                                                         | ❌            |
-
 
 ## Manual
 

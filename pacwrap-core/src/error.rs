@@ -23,7 +23,7 @@ use std::{
     process::exit,
 };
 
-use crate::utils::{print_error, print_warning};
+use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -71,17 +71,17 @@ impl Error {
     }
 
     pub fn handle(&self) {
-        print_error(&self.kind);
+        eprintln!("{}error:{} {}", *BOLD_RED, *RESET, self.kind);
         exit(self.kind.code());
     }
 
     pub fn error(&self) -> i32 {
-        print_error(&self.kind);
+        eprintln!("{}error:{} {}", *BOLD_RED, *RESET, self.kind);
         self.kind.code()
     }
 
     pub fn warn(&self) {
-        print_warning(&self.kind);
+        eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, self.kind);
     }
 
     pub fn kind(&self) -> &Box<dyn ErrorTrait> {

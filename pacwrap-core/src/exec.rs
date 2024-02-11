@@ -217,7 +217,7 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
 	];
 	
 	match Command::new(BWRAP_EXECUTABLE).env_clear()
-        .arg("--bind").arg(&ins.vars().root()).arg("/mnt/fs")
+        .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
         .arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
         .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/bin")
         .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/lib64")

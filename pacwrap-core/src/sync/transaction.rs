@@ -19,12 +19,12 @@
 
 use std::{borrow::Cow, collections::HashSet};
 
-use alpm::{Alpm, PackageReason, TransFlag};
+use alpm::{Alpm, Package, PackageReason, TransFlag};
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{ContainerHandle, Global},
+    config::{ContainerHandle, Global, CONFIG},
     constants::{ARROW_CYAN, BAR_CYAN, BOLD, BOLD_GREEN, BOLD_YELLOW, RESET},
     err,
     sync::{
@@ -35,7 +35,7 @@ use crate::{
         utils::AlpmUtils,
         SyncError,
     },
-    utils::print_warning,
+    utils::{print_warning, prompt::prompt},
     Error,
 };
 
@@ -107,9 +107,10 @@ bitflags! {
 
 pub struct TransactionHandle<'a> {
     meta: &'a mut TransactionMetadata<'a>,
-    config: &'a Global,
-    alpm: Option<Alpm>,
     fail: bool,
+    agent: bool,
+    config: Option<&'a Global>,
+    alpm: Option<Alpm>,
     deps: Option<Vec<String>>,
 }
 
@@ -117,6 +118,7 @@ pub struct TransactionHandle<'a> {
 pub struct TransactionMetadata<'a> {
     foreign_pkgs: HashSet<String>,
     resident_pkgs: HashSet<String>,
+    held_pkgs: HashSet<String>,
     queue: Vec<Cow<'a, str>>,
     mode: TransactionMode,
     flags: (u8, u32),
@@ -216,6 +218,7 @@ impl<'a> TransactionMetadata<'a> {
         Self {
             foreign_pkgs: HashSet::new(),
             resident_pkgs: HashSet::new(),
+            held_pkgs: HashSet::new(),
             mode: TransactionMode::Local,
             queue: queue.iter().map(|q| (*q).into()).collect::<Vec<_>>(),
             flags: (0, 0),
@@ -224,14 +227,30 @@ impl<'a> TransactionMetadata<'a> {
 }
 
 impl<'a> TransactionHandle<'a> {
-    pub fn new(global: &'a Global, alpm_handle: Alpm, metadata: &'a mut TransactionMetadata<'a>) -> Self {
+    pub fn new(metadata: &'a mut TransactionMetadata<'a>) -> Self {
         Self {
             meta: metadata,
-            alpm: Some(alpm_handle),
-            deps: None,
             fail: true,
-            config: global,
+            agent: false,
+            alpm: None,
+            deps: None,
+            config: None,
         }
+    }
+
+    pub fn config(mut self, config: &'a Global) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn alpm_handle(mut self, alpm_handle: Alpm) -> Self {
+        self.alpm = Some(alpm_handle);
+        self
+    }
+
+    pub fn agent(mut self) -> Self {
+        self.agent = true;
+        self
     }
 
     fn is_sync_req(&self, mode: TransactionMode) -> SyncReqResult {
@@ -282,9 +301,14 @@ impl<'a> TransactionHandle<'a> {
         self.fail = false;
     }
 
-    pub fn ignore(&mut self, silent: bool) {
+    pub fn ignore(&mut self) {
         let mut fail = self.fail;
         let alpm = self.alpm.as_mut().unwrap();
+        let config = match self.config {
+            Some(config) => config,
+            None => &*CONFIG,
+        };
+
         let ignore = match self.meta.mode {
             TransactionMode::Foreign => &self.meta.resident_pkgs,
             TransactionMode::Local => &self.meta.foreign_pkgs,
@@ -302,7 +326,7 @@ impl<'a> TransactionHandle<'a> {
             alpm.add_ignorepkg(pkg.as_bytes()).unwrap();
         }
 
-        for pkg in self.config.alpm().ignored() {
+        for pkg in config.alpm().ignored() {
             alpm.add_ignorepkg(pkg.as_bytes()).unwrap();
         }
 
@@ -310,25 +334,24 @@ impl<'a> TransactionHandle<'a> {
             .localdb()
             .pkgs()
             .iter()
-            .filter(|a| !ignore.contains(a.name()) && self.config.alpm().ignored().contains(&a.name()))
+            .filter(|a| !ignore.contains(a.name()) && config.alpm().ignored().contains(&a.name()))
         {
             let new = match package.sync_new_version(alpm.syncdbs()) {
                 Some(new) => {
                     fail = false;
-                    new
+
+                    match self.agent {
+                        true => break,
+                        false => new,
+                    }
                 }
                 None => continue,
             };
-
-            if silent {
-                break;
-            }
-
             let name = package.name();
             let ver = package.version();
             let ver_new = new.version();
 
-            print_warning(format!(
+            print_warning(&format!(
                 "{}{name}{}: Ignoring package upgrade ({}{ver}{} => {}{ver_new}{})",
                 *BOLD, *RESET, *BOLD_YELLOW, *RESET, *BOLD_GREEN, *RESET
             ));
@@ -344,49 +367,77 @@ impl<'a> TransactionHandle<'a> {
             TransactionMode::Local => &self.meta.foreign_pkgs,
         };
         let queue = self.meta.queue.iter().map(|i| i.as_ref()).collect::<Vec<_>>();
+        let config = match self.config {
+            Some(config) => config,
+            None => &*CONFIG,
+        };
 
         if let TransactionMode::Local = self.meta.mode {
-            let upstream = queue.iter().map(|a| *a).filter(|a| ignored.contains(*a)).collect::<Vec<&str>>();
+            let upstream = queue.iter().map(|a| *a).find(|a| ignored.contains(*a));
+            let forced = flags.contains(TransactionFlags::FORCE_DATABASE);
 
-            if !flags.contains(TransactionFlags::FORCE_DATABASE) && !upstream.is_empty() {
-                err!(SyncError::TargetUpstream(upstream[0].into()))?
+            if let (false, Some(upstream)) = (forced, upstream) {
+                err!(SyncError::TargetUpstream(upstream.into()))?
             }
         }
 
         match trans_type {
             TransactionType::Remove(..) => {
-                let not_installed = queue
+                if let Some(not_installed) = queue
                     .iter()
                     .map(|a| *a)
-                    .filter(|a| !ignored.contains(*a) && alpm.get_local_package(a).is_none())
-                    .collect::<Vec<&str>>();
-
-                if !not_installed.is_empty() {
-                    err!(SyncError::TargetNotInstalled(not_installed[0].into()))?
+                    .find(|a| !ignored.contains(*a) && alpm.get_local_package(a).is_none())
+                {
+                    err!(SyncError::TargetNotInstalled(not_installed.into()))?
                 }
 
-                for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type).enumerate(&queue)? {
+                for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type)
+                    .enumerate(&queue)?
+                    .iter()
+                    .filter_map(|a| match self.meta.held_pkgs.contains(a.name()) {
+                        false => Some(*a),
+                        true => None,
+                    })
+                    .collect::<Vec<Package<'_>>>()
+                {
+                    if !ignored.contains(pkg.name()) && config.alpm().held().contains(&pkg.name()) {
+                        if let Err(_) =
+                            prompt("::", format!("Target package {}{}{} is held. Remove it?", *BOLD, pkg.name(), *RESET), false)
+                        {
+                            self.meta.held_pkgs.insert(pkg.name().into());
+                            continue;
+                        }
+                    }
+
                     alpm.trans_remove_pkg(pkg).unwrap();
                 }
             }
             TransactionType::Upgrade(..) => {
-                let not_available = queue.iter().map(|a| *a).filter(|a| alpm.get_package(a).is_none()).collect::<Vec<&str>>();
-
-                if !not_available.is_empty() {
-                    err!(SyncError::TargetNotAvailable(not_available[0].into()))?
+                if let Some(not_available) = queue.iter().map(|a| *a).find(|a| alpm.get_package(a).is_none()) {
+                    err!(SyncError::TargetNotAvailable(not_available.into()))?
                 }
 
-                let packages = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
+                let (deps, packages) = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
 
-                for pkg in packages.1 {
+                for pkg in packages {
                     if let (None, TransactionMode::Foreign) = (self.meta.foreign_pkgs.get(pkg.name()), self.meta.mode) {
                         continue;
+                    }
+
+                    if config.alpm().ignored().contains(&pkg.name()) {
+                        if let Err(_) = prompt(
+                            "::",
+                            format!("Target package {}{}{} is ignored. Upgrade it?", *BOLD, pkg.name(), *RESET),
+                            false,
+                        ) {
+                            continue;
+                        }
                     }
 
                     alpm.trans_add_pkg(pkg).unwrap();
                 }
 
-                self.deps = packages.0;
+                self.deps = deps;
             }
         }
 

@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{process::Child, result::Result as StdResult};
+use std::{os::unix::process::ExitStatusExt, process::Child, result::Result as StdResult};
 
 use crate::{
     config::{ContainerHandle, CONFIG},
@@ -192,17 +192,21 @@ fn ready_state<'a>(
 
 fn wait_on_agent(mut agent: Child) -> Result<()> {
     match agent.wait() {
-        Ok(exit_status) => match exit_status.code().unwrap_or(-1) {
+        Ok(status) => match status.code().unwrap_or(-1) {
             0 => Ok(()),
             1 => err!(SyncError::TransactionFailureAgent),
             2 => err!(SyncError::ParameterAcquisitionFailure),
             3 => err!(SyncError::DeserializationFailure),
             4 => err!(SyncError::InvalidMagicNumber),
             5 => err!(SyncError::AgentVersionMismatch),
-            _ => err!(SyncError::TransactionFailure(format!(
-                "Generic failure of agent: Exit code {}",
-                exit_status.code().unwrap_or(-1)
-            )))?,
+            _ =>
+                if let Some(code) = status.code() {
+                    err!(SyncError::TransactionFailure(format!("General failure of agent: Exit code {}", code)))
+                } else if let Some(_) = status.signal() {
+                    err!(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))
+                } else {
+                    err!(SyncError::TransactionFailure(format!("General failure of agent")))
+                },
         },
         Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
     }

@@ -47,7 +47,7 @@ impl ContainerVariables {
             root: format!("{}/root/{ins}", *DATA_DIR).into(),
             pacman_gnupg: format!("{}/pacman/gnupg", *DATA_DIR).into(),
             pacman_cache: format!("{}/pkg", *CACHE_DIR).into(),
-            config: format!("{}/instance/{ins}.yml", *CONFIG_DIR).into(),
+            config: format!("{}/container/{ins}.yml", *CONFIG_DIR).into(),
             home_mount: format!("/home/{ins}").into(),
             user: ins.into(),
             instance: ins.into(),
