@@ -17,11 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashMap, process::exit};
+use std::{collections::HashMap, fs, path::Path, process::exit, thread};
+
+use signal_hook::{consts::*, iterator::Signals};
 
 use crate::{
-    config::{cache::ContainerCache, ContainerHandle, ContainerType, CONFIG},
-    constants::{ARROW_GREEN, UNIX_TIMESTAMP},
+    config::{cache::ContainerCache, ContainerHandle, ContainerType},
+    constants::{ARROW_GREEN, ARROW_RED, DATA_DIR, UNIX_TIMESTAMP},
     err,
     error::*,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
@@ -72,6 +74,8 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn aggregate(mut self) -> Result<()> {
+        signal_trap(self.cache);
+
         let _timestamp = *UNIX_TIMESTAMP;
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
@@ -150,7 +154,7 @@ impl<'a> TransactionAggregator<'a> {
         };
         let alpm = sync::instantiate_alpm(&inshandle);
         let mut meta = TransactionMetadata::new(queue);
-        let mut handle = TransactionHandle::new(&*CONFIG, alpm, &mut meta);
+        let mut handle = TransactionHandle::new(&mut meta).alpm_handle(alpm);
         let mut act: Box<dyn Transaction> = TransactionState::Prepare.from(self);
 
         self.action.begin_message(&inshandle);
@@ -247,6 +251,31 @@ impl<'a> TransactionAggregator<'a> {
         match self.filesystem_state.as_mut() {
             Some(linker) => Ok(linker),
             None => err!(ErrorKind::LinkerUninitialized),
+        }
+    }
+}
+
+fn signal_trap(cache: &ContainerCache<'_>) {
+    let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
+    let mut paths = vec![format!("{}/pacman/db.lck", *DATA_DIR)];
+    let container_vars: Vec<&ContainerHandle> = cache.registered_handles();
+    for container in container_vars {
+        paths.push(format!("{}/var/lib/pacman/db.lck", container.vars().root()));
+    }
+
+    thread::spawn(move || {
+        for s in signals.forever() {
+            unlock_databases(paths);
+            println!("\n{} Transaction interrupted by signal interrupt.", *ARROW_RED);
+            exit(128 + s);
+        }
+    });
+}
+
+fn unlock_databases(db_paths: Vec<String>) {
+    for path in db_paths {
+        if Path::new(&path).exists() {
+            fs::remove_file(&path).ok();
         }
     }
 }

@@ -101,6 +101,18 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().map(|a| *a.0).collect()
     }
 
+    pub fn registered_handles(&'a self) -> Vec<&'a ContainerHandle<'a>> {
+        self.instances.iter().map(|a| a.1).collect()
+    }
+
+    pub fn filter_handle(&'a self, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+        self.instances
+            .iter()
+            .filter(|a| filter.contains(a.1.metadata().container_type()))
+            .map(|a| a.1)
+            .collect()
+    }
+
     pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'a str> {
         self.instances
             .iter()

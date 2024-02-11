@@ -78,7 +78,7 @@ fn env_var(var: &String, set: &String) -> String {
     match env::var(&var) {
         Ok(env) => env,
         Err(_) => {
-            print_warning(format!("Environment variable {} is unset.", var));
+            print_warning(&format!("Environment variable {} is unset.", var));
             "".into()
         }
     }

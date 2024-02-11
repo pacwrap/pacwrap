@@ -27,6 +27,7 @@ use crate::{
         Permission,
     },
     err,
+    error,
     error::*,
     exec::args::ExecutionArgs,
     utils::print_warning,
@@ -37,7 +38,7 @@ pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVari
         match p.check(vars) {
             Ok(_) => p.register(args, vars),
             Err(condition) => match condition {
-                BindError::Warn(_) => print_warning(ConfigError::Filesystem(p.module(), condition)),
+                BindError::Warn(_) => error!(ConfigError::Filesystem(p.module(), condition)).warn(),
                 BindError::Fail(_) => err!(ConfigError::Filesystem(p.module(), condition))?,
             },
         }
@@ -54,13 +55,13 @@ pub fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut Execution
                     p.register(args);
 
                     if let Condition::SuccessWarn(warning) = b {
-                        print_warning(format!("{}: {} ", p.module(), warning));
+                        print_warning(&format!("{}: {} ", p.module(), warning));
                     }
                 }
                 None => continue,
             },
             Err(condition) => match condition {
-                PermError::Warn(_) => print_warning(ConfigError::Permission(p.module(), condition)),
+                PermError::Warn(_) => error!(ConfigError::Permission(p.module(), condition)).warn(),
                 PermError::Fail(_) => err!(ConfigError::Permission(p.module(), condition))?,
             },
         }

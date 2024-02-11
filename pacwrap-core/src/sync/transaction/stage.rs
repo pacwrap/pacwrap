@@ -79,7 +79,7 @@ impl Transaction for Stage {
 
         ag.action().action_message(self.mode);
         handle.set_mode(self.mode);
-        handle.ignore(false);
+        handle.ignore();
         handle.set_flags(ag.flags(), self.flags);
 
         match ag.action() {

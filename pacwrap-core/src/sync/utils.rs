@@ -81,16 +81,16 @@ pub fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Resu
                     FileConflictType::Filesystem => {
                         let file = conflict.file();
                         let target = conflict.target();
-                        print_warning(format!("{}: '{}' already exists.", target, file));
+                        print_warning(&format!("{}: '{}' already exists.", target, file));
                     }
                     FileConflictType::Target => {
                         let file = conflict.file();
                         let target = format!("{}{}{}", *BOLD_WHITE, conflict.target(), *RESET);
                         if let Some(conflicting) = conflict.conflicting_target() {
                             let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
-                            print_warning(format!("{conflicting}: '{target}' is owned by {file}"));
+                            print_warning(&format!("{conflicting}: '{target}' is owned by {file}"));
                         } else {
-                            print_warning(format!("{target}: '{file}' is owned by foreign target"));
+                            print_warning(&format!("{target}: '{file}' is owned by foreign target"));
                         }
                     }
                 }
@@ -101,7 +101,7 @@ pub fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Resu
         CommitResult::PkgInvalid(p) =>
             for pkg in p.iter() {
                 let pkg = format!("{}{pkg}{}", *BOLD_WHITE, *RESET);
-                print_error(format!("Invalid package: {}", pkg));
+                print_error(&format!("Invalid package: {}", pkg));
             },
         _ => (),
     }
@@ -113,7 +113,7 @@ pub fn erroneous_preparation<'a>(error: (PrepareResult<'a>, alpm::Error)) -> Res
     match error.0 {
         PrepareResult::PkgInvalidArch(list) =>
             for package in list.iter() {
-                print_error(format!(
+                print_error(&format!(
                     "Invalid architecture {}{}{} for {}{}{}",
                     *BOLD,
                     package.arch().unwrap(),
@@ -125,7 +125,7 @@ pub fn erroneous_preparation<'a>(error: (PrepareResult<'a>, alpm::Error)) -> Res
             },
         PrepareResult::UnsatisfiedDeps(list) =>
             for missing in list.iter() {
-                print_error(format!(
+                print_error(&format!(
                     "Unsatisifed dependency {}{}{} for target {}{}{}",
                     *BOLD,
                     missing.depend(),
@@ -137,7 +137,7 @@ pub fn erroneous_preparation<'a>(error: (PrepareResult<'a>, alpm::Error)) -> Res
             },
         PrepareResult::ConflictingDeps(list) =>
             for conflict in list.iter() {
-                print_error(format!(
+                print_error(&format!(
                     "Conflict between {}{}{} and {}{}{}: {}",
                     *BOLD,
                     conflict.package1(),

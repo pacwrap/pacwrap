@@ -66,7 +66,7 @@ lazy_static! {
     pub static ref VERSION_MINOR: u32 = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap();
     pub static ref VERSION_PATCH: u32 = env!("CARGO_PKG_VERSION_PATCH").parse().unwrap();
     pub static ref COLORTERM: &'static str = env_opt("COLORTERM");
-    pub static ref LANG: &'static str = env_default("LAMG", "en_US.UTF-8");
+    pub static ref LANG: &'static str = env_default("LANG", "en_US.UTF-8");
     pub static ref WAYLAND_DISPLAY: &'static str = env_opt("WAYLAND_DISPLAY");
     pub static ref X11_DISPLAY: &'static str = env_opt("DISPLAY");
     pub static ref XAUTHORITY: &'static str = env_opt("XAUTHORITY");

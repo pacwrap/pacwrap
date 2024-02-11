@@ -92,13 +92,18 @@ pub fn event(event: Event, pkgname: &str, percent: i32, howmany: usize, current:
     let ident = ident(event, pkgname);
     let progress = match this.bars.get(ident) {
         Some(progress) => progress,
-        None => this.insert(ident, &name(event, pkgname), howmany, current, 100),
+        None => match percent < 100 {
+            false => return,
+            true => this.insert(ident, &name(event, pkgname), howmany, current, 100),
+        },
     };
 
     progress.set_position(percent as u64);
 
     if percent == 100 {
-        progress.finish();
+        if let Some(bar) = this.bars.remove(ident) {
+            bar.finish();
+        }
     }
 }
 

@@ -285,7 +285,7 @@ fn process_kill<'a>(args: &mut Arguments) -> Result<(), Error> {
 }
 
 fn fork_warn(process: &Process) {
-    print_warning(format!(
+    print_warning(&format!(
         "Process fork detected with PID {}{}{} from an instance of {}{}{}.",
         *BOLD,
         process.pid(),

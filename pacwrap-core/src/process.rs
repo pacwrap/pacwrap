@@ -196,7 +196,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
             Some(vec) => vec.push(pid),
             None => {
                 if let None = cache.get_instance_option(&ins) {
-                    print_warning(format!("Container {ins} doesn't exist."));
+                    print_warning(&format!("Container {ins} doesn't exist."));
                 }
 
                 groups.insert(ins.clone(), vec![pid]);
@@ -304,19 +304,11 @@ fn qualify_process<'a>(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32
 }
 
 fn instance_from_path(var: &str) -> &str {
-    let mut index = 0;
     let length = CONTAINER_DIR.len();
     let var = var.split_at(length).1;
 
-    for char in var.char_indices() {
-        if char.1 == '/' {
-            index = char.0;
-            break;
-        }
-    }
-
-    match index {
-        0 => var,
-        _ => var.split_at(index).0,
+    match var.find('/') {
+        None => var,
+        Some(index) => var.split_at(index).0,
     }
 }

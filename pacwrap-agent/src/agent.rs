@@ -75,7 +75,7 @@ pub fn transact() -> Result<()> {
     let alpm_remotes: AlpmConfigData = deserialize(&mut file)?;
     let mut metadata: TransactionMetadata = deserialize(&mut file)?;
     let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes);
-    let mut handle = TransactionHandle::new(&config, alpm, &mut metadata);
+    let mut handle = TransactionHandle::new(&mut metadata).alpm_handle(alpm).config(&config).agent();
 
     conduct_transaction(&config, &mut handle, params)
 }
@@ -93,7 +93,7 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
         err!(SyncError::InitializationFailure(error.to_string().into()))?
     }
 
-    handle.ignore(true);
+    handle.ignore();
 
     if let TransactionType::Upgrade(upgrade, downgrade, _) = action {
         if upgrade {
@@ -124,7 +124,7 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
     if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/fs/etc/ld.so.cache") {
         match error.kind() {
             NotFound => (),
-            _ => print_warning(format!("Failed to propagate ld.so.cache: {}", error)),
+            _ => print_warning(&format!("Failed to propagate ld.so.cache: {}", error)),
         }
     }
 

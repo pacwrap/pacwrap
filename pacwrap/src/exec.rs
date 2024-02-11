@@ -58,6 +58,7 @@ use pacwrap_core::{
     },
     impl_error,
     utils::{
+        self,
         arguments::{Arguments, InvalidArgument, Operand as Op},
         check_root,
         env_var,
@@ -66,7 +67,7 @@ use pacwrap_core::{
     ErrorKind,
 };
 
-const SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
+static SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
 #[derive(Debug)]
 enum ExecError {
@@ -342,7 +343,7 @@ fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> R
     }
 
     thread::sleep(SOCKET_SLEEP_DURATION);
-    Ok(pacwrap_core::utils::check_socket(socket))
+    Ok(utils::check_socket(socket))
 }
 
 fn create_placeholder(path: &str) -> Result<()> {

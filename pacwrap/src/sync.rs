@@ -251,7 +251,7 @@ fn engage_aggregator<'a>(
             }
             Op::LongPos(_, package) | Op::Value(package) =>
                 if current_target != "" {
-                    match queue.get_mut(current_target.into()) {
+                    match queue.get_mut(current_target) {
                         Some(vec) => vec.push(package.into()),
                         None => {
                             queue.insert(current_target.into(), vec![package]);

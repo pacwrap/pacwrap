@@ -24,7 +24,7 @@ use crate::{
         self,
         schema::{self, *},
         transaction::{
-            SyncReqResult,
+            SyncReqResult::*,
             Transaction,
             TransactionAggregator,
             TransactionFlags,
@@ -92,7 +92,7 @@ impl Transaction for Prepare {
                 }
 
                 if handle.metadata().queue.len() == 0 {
-                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Local) {
+                    if let NotRequired = handle.is_sync_req(TransactionMode::Local) {
                         return Ok(UpToDate);
                     }
                 }
@@ -107,23 +107,23 @@ impl Transaction for Prepare {
             }
             PrepareForeign(updated) => {
                 if let ContainerType::Base = inshandle.metadata().container_type() {
-                    return Ok(Complete(false));
+                    return Ok(Complete(updated));
                 }
 
-                if !ag.flags().contains(TransactionFlags::FORCE_DATABASE) {
-                    if let SyncReqResult::NotRequired = handle.is_sync_req(TransactionMode::Foreign) {
-                        if ag.deps_updated(inshandle) {
-                            return Ok(StageForeign);
-                        }
-
-                        return match ag.action() {
-                            Remove(..) => Ok(Complete(updated)),
-                            Upgrade(..) => Ok(Stage),
-                        };
-                    }
+                if ag.flags().contains(TransactionFlags::FORCE_DATABASE) {
+                    return Ok(StageForeign);
                 }
 
-                Ok(StageForeign)
+                match ag.action() {
+                    Remove(..) => Ok(Complete(updated)),
+                    Upgrade(..) => Ok(match ag.deps_updated(inshandle) {
+                        true => match handle.is_sync_req(TransactionMode::Foreign) {
+                            Required => StageForeign,
+                            NotRequired => Stage,
+                        },
+                        false => Stage,
+                    }),
+                }
             }
             _ => unreachable!(),
         }

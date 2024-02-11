@@ -74,7 +74,7 @@ impl Display for ConfigError {
             Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
             Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
             Self::AlreadyExists(ins) => write!(fmter, "Container {}{ins}{} already exists.", *BOLD, *RESET),
-            Self::ConfigNotFound(ins) => write!(fmter, "Configuration '{}{ins}{}' not found.", *BOLD, *RESET),
+            Self::ConfigNotFound(ins) => write!(fmter, "Configuration for '{}{ins}{}' not found.", *BOLD, *RESET),
         }
     }
 }

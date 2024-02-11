@@ -34,8 +34,8 @@ fi
 LIB_DIR="/lib"
 BIN_DIR="/bin"
 ETC_DIR="/etc"
-DEST_DIR="./dist/runtime"
-DIST_SRC="./dist/src"
+DEST_DIR="$PWD/dist/runtime"
+DIST_SRC="$PWD/dist/src"
 FAKEROOT="/libfakeroot"
 FAKEROOT_DIR="/usr/lib/libfakeroot"
 FAKEROOT_SRC="$FAKEROOT_DIR/libfakeroot.so"
@@ -63,7 +63,7 @@ COREUTILS="cat chgrp chmod chown chroot cp cut dd df dir du head id install link
 copy_libs() {
 	for path in ${@}; do 
 		ldd $path | sed -e "s/.*=> //g;s/ (.*)//g;s/\t.*//g" | xargs cp -Lt $DEST_DIR$LIB_DIR
-	done
+    done
 }
 
 #
@@ -74,7 +74,10 @@ copy_libs() {
 copy_bins() {
 	for bin in ${@}; do 
 		cp /usr/bin/$bin $DEST_DIR$BIN_DIR/$bin
-	done
+
+        # Remove debuglink section, to ensure the Arch Build System doesn't complain 
+        objcopy --remove-section=.gnu_debuglink $DEST_DIR$BIN_DIR/$bin 2>/dev/null
+    done	
 }
 
 #
@@ -110,6 +113,11 @@ populate_lib() {
 	cp -L $FAKECHROOT_SRC $FAKECHROOT_DEST
 	ln -s .$FAKEROOT/libfakeroot.so $DEST_DIR$LIB_DIR/libfakeroot.so
 	ln -s .$FAKEROOT$FAKECHROOT/libfakechroot.so $DEST_DIR$LIB_DIR/libfakechroot.so
+
+    # Remove debuglink section, to ensure the Arch Build System doesn't complain
+    for lib in $(find $DEST_DIR$LIB_DIR -maxdepth 3 -printf "%p "); do
+        objcopy --remove-section=.gnu_debuglink $lib 2>/dev/null
+    done
 }
 
 #
