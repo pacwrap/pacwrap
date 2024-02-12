@@ -52,11 +52,13 @@ fn is_debug() -> bool {
 }
 
 fn main() {
+    let built = var("PACWRAP_SCHEMA_BUILT").is_ok();
+
     if !cfg!(target_os = "linux") || !cfg!(target_family = "unix") {
         panic!("Unsupported build target. Please refer to the build documentation for further information.")
-    } else if !Path::new("../dist/").exists() || !Path::new("../dist/tools/").exists() {
+    } else if built && (!Path::new("../dist/").exists() || !Path::new("../dist/tools/").exists()) {
         panic!("Distribution directory is missing. Please refer to the build documentation for further information.")
-    } else if !Path::new("../dist/filesystem.tar.zst").exists() {
+    } else if built && !Path::new("../dist/filesystem.tar.zst").exists() {
         panic!("Container fileystem schema is missing. Please refer to the build documentation for further information.")
     }
 
@@ -69,5 +71,7 @@ fn main() {
     println!("cargo:rustc-env=PACWRAP_BUILDTIME={}", time(debug));
     println!("cargo:rustc-env=PACWRAP_BUILD={}", release(debug));
 
-    schema::serialize_path("../dist/filesystem.tar.zst", "../dist/filesystem.dat");
+    if built {
+        schema::serialize_path("../dist/filesystem.tar.zst", "../dist/filesystem.dat");
+    }
 }
