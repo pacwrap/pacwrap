@@ -102,7 +102,7 @@ pub fn provide_new_handle(instance: &str) -> Result<ContainerHandle> {
 }
 
 fn save<T: Serialize>(obj: &T, path: &str) -> Result<()> {
-    let mut f = match File::create(Path::new(path)) {
+    let mut f = match File::create(path) {
         Ok(f) => f,
         Err(error) => err!(ErrorKind::IOError(path.into(), error.kind()))?,
     };

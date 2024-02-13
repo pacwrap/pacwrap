@@ -70,7 +70,7 @@ fn cache_layout() -> DirectoryLayout {
 
 fn config_layout() -> DirectoryLayout {
     DirectoryLayout {
-        dirs: vec!["/instance"],
+        dirs: vec!["/container"],
         root: *CONFIG_DIR,
     }
 }
