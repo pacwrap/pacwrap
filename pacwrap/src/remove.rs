@@ -79,12 +79,12 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
             Op::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
             Op::Short('p') | Op::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW,
             Op::Short('f') | Op::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC,
-            Op::ShortPos('t', target) | Op::LongPos("target", target) | Op::ShortPos(_, target) => {
+            Op::ShortPos('t', target) | Op::LongPos("target", target) => {
                 cache.get_instance(target)?;
                 current_target = Some(target);
                 targets.push(target);
             }
-            Op::LongPos(_, package) | Op::Value(package) =>
+            Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(target) = current_target {
                     match queue.get_mut(target) {
                         Some(vec) => vec.push(package),

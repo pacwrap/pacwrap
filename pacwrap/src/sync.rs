@@ -249,7 +249,7 @@ fn engage_aggregator<'a>(
                     base = false;
                 }
             }
-            Op::LongPos(_, package) | Op::Value(package) =>
+            Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if current_target != "" {
                     match queue.get_mut(current_target) {
                         Some(vec) => vec.push(package.into()),
