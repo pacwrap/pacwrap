@@ -23,7 +23,7 @@ Then to launch a shell inside of this container to configure it:
 $ pacwrap -Es base
 ```
 
-And finally, to install neovim inside of a fresh, aggregated container called ```editor```:
+And finally, to install ```neovim``` inside of a fresh, aggregated container called ```editor```:
 
 
 ```
@@ -35,7 +35,7 @@ elaborated upon **[here](./docs/)**.
 
 ## Features
 
-Since this project is a work in progress, net everything is yet completed. Please refer to the matrix below for further detail. 
+Since this project is a work in progress, not everything is yet completed. Please refer to the matrix below for further detail. 
 
 If a feature you see here is not completed, feel free to submit a PR; or submit an issue regarding a feature not listed herein for triage.
 
@@ -77,7 +77,7 @@ An online version of the user manual is viewable **[here](./docs/manual.md)**.
 
 A minimum version of Rust 1.72 is required to build with the following libraries fulfilled by your distribution:
 ```
-libalpm, libseccomp
+libalpm, libseccomp, libzstd
 ```
 
 ## Packaging requirements

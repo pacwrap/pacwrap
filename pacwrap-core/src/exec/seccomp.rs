@@ -60,7 +60,7 @@ static PERSONALITY: u64 = if cfg!(target_pointer_width = "64") {
  *
  * https://github.com/flatpak/flatpak/blob/main/common/flatpak-run.c#L1835
  *
- * Please do not open issue reports, esplicitly regarding lessened security, regarding filters
+ * Please do not open issue reports, explicitly regarding lessened security, regarding filters
  * that of which can be toggled. When the relevant options are activated, users are warned of
  * the potential ramifications of so doing.
  *

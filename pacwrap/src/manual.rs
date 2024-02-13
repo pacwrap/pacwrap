@@ -68,9 +68,10 @@ pub fn help(mut args: &mut Arguments) -> Result<(), Error> {
         topic.write(&mut buffer, help.1).unwrap();
     }
 
-    match help.1 {
-        HelpLayout::Console => print!("\x1b[?7l{buffer}\x1b[?7h"),
-        _ => print!("{buffer}"),
+    if let HelpLayout::Console = help.1 {
+        print!("\x1b[?7l{}\x1b[?7h", buffer)
+    } else {
+        print!("{}", buffer)
     }
 
     Ok(())
@@ -608,8 +609,8 @@ fn sync(buf: &mut String, layout: &HelpLayout) -> Result<(), std::fmt::Error> {
 
 {sub}--force-foreign{reset_bold}
 {tab}{tab}Force synchronization of foreign packages on resident container. Useful for when installing 
-{tab}{tab}a new package in a root container without all the prerequisite foreign dependencies synchronized 
-{tab}{tab}to this container's package database.
+{tab}{tab}a new package in an aggregate container without all the prerequisite foreign dependencies
+{tab}{tab}synchronized to this container's package database.
 
 {sub}--dbonly{reset_bold}
 {tab}{tab}Transact on resident containers with a database-only transaction.

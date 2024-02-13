@@ -83,7 +83,7 @@ dbus:
 Each ```base``` and ```aggregate``` type container can make use of filesystems, permissions, and dbus modules. 
 These provide a good, ergonomic way to abstract these problems, whilst minimising complexity, providing a flexible human-readable configuration language.
 
-You then might wonder: What are the individual modules, and what do each of them do? Here's a small breakdown of what each them do below:
+You then might wonder: What are the individual modules, and what do each of them do? Here's a small breakdown of what some of them do below:
 
 ### Networking module
 

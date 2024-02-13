@@ -117,7 +117,7 @@ fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
         true => list
             .list()
             .iter()
-            .filter_map(|a| match instances.contains(&a.instance()) && a.depth() <= max_depth || all {
+            .filter_map(|a| match instances.contains(&a.instance()) && (a.depth() <= max_depth || all) {
                 true => Some(*a),
                 false => None,
             })
