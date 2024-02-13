@@ -91,7 +91,7 @@ You then might wonder: What are the individual modules, and what do each of them
 - module: net
 ```
 
-This module instructs bubblewrap to provide host networking to the container.
+```net``` permission module instructs bubblewrap to provide host networking to the container.
 
 ### Display module
 
@@ -99,7 +99,7 @@ This module instructs bubblewrap to provide host networking to the container.
 - module: display
 ```
 
-The display module detects, validates, and provides an X11 or Wayland (if available) display socket to the container.
+```display``` permission module detects, validates, and provides an X11 or Wayland (if available) display socket to the container.
 
 ### GPU module
 
@@ -107,7 +107,7 @@ The display module detects, validates, and provides an X11 or Wayland (if availa
 - module: gpu
 ```
 
-And then this module, binds your system's graphics devices to the container.
+```gpu``` permission module binds your system's graphics devices to the container.
 
 ### Home bind module
 
@@ -120,7 +120,8 @@ And then this module, binds your system's graphics devices to the container.
     path: .config/fontconfig
 ```
 
-We then mount our Documents folder with read/write permissions and our .config/fontconfig directory with read-only permissions.
+```to_home``` mount module provides an easy way to mount files or directories from your home folder into the container's home directory.
+In this example, we mount our Documents folder with read/write permissions, and our .config/fontconfig directory with read-only permissions.
 
 ## Locations
 
