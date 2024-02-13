@@ -1,12 +1,12 @@
 [package]
 name = "pacwrap-core"
-version = "0.7.1"
+version = "0.7.2"
 authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
 edition = "2021"
 
-description = "Core library providing core functionality for pacwrap"
+description = "Core library providing the core functionality for pacwrap"
 homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://github.com/pacwrap/pacwrap"
 
