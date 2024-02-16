@@ -1,9 +1,11 @@
 #!/bin/bash
 #
-#  pacwrap - clean.sh
+#  pacwrap - prepare.sh
+#
+#  This script calls upon various binaries to build resources and package artifacts
 # 
 #  Copyright (C) 2023-2024 Xavier R.M. 
-#  sapphirus(at)azorium(dot)net
+#  sapphirus(at)azorium(dot)net#
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -22,44 +24,6 @@ if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensur
 
 source ./dist/tools/common.sh
 
-DIST_BIN="$PWD/dist/bin"
-DIST_RUNTIME="$PWD/dist/runtime"
-DIST_SCHEMA="$PWD/dist/schema"
-
-runtime() {
-	if [[ -d "$DIST_RUNTIME" ]]; then
-		rm -r "$DIST_RUNTIME"
-		mkdir -p "$DIST_RUNTIME"
-		cleaned "container runtime"
-    fi
-}
-
-filesystem() {
-	if [[ -d "$DIST_SCHEMA" ]]; then
-		rm -r "$DIST_SCHEMA"
-		mkdir -p "$DIST_SCHEMA"
-        cleaned "container schema"
-    fi
-}
-
-bin() {
-	if [[ -d "$DIST_BIN" ]]; then
-		rm -r "$DIST_BIN"
-		mkdir -p "$DIST_BIN"
-        cleaned "bin artifacts"
-    fi
-}
-
-main() {
-	for var in "$@"; do case $var in
-		schema)     filesystem;;
-		runtime)    runtime;;
-        bin)        bin;;
-        all)        bin
-                    filesystem
-					runtime;;
-		*)          error_fatal "Invalid parameter '$1'";;
-	esac; done
-}
-
-main $@
+validate_args $1; if [[ $? != 0 ]]; then error_fatal "Argument validation failed."; fi
+./dist/tools/key.sh $1; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap-key failed."; fi
+./dist/tools/schema.sh $1; if [[ $? != 0 ]]; then error_fatal "Build of container schema failed."; fi

@@ -33,7 +33,7 @@ use crate::{
     err,
     error,
     error::*,
-    exec::pacman_key,
+    exec::pacwrap_key,
     sync::event::download::{self, DownloadEvent},
     ErrorKind,
 };
@@ -174,8 +174,6 @@ fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConf
     handle
 }
 
-//TODO: Port pacman-key to Rust
-
 pub fn instantiate_trust() -> Result<()> {
     let path = &format!("{}/pacman/gnupg/", *DATA_DIR);
 
@@ -193,8 +191,8 @@ pub fn instantiate_trust() -> Result<()> {
         err!(ErrorKind::IOError(path.into(), error.kind()))?
     }
 
-    pacman_key(path, vec!["--init"])?;
-    pacman_key(path, vec!["--populate"])
+    pacwrap_key(vec!["--init"])?;
+    pacwrap_key(vec!["--populate"])
 }
 
 fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {

@@ -196,8 +196,7 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn keyring_update(&mut self, inshandle: &ContainerHandle) -> Result<()> {
-        fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacman-key", "--populate", "archlinux"])?;
-        fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacman-key", "--updatedb"])?;
+        fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacwrap-key", "--populate", "archlinux"])?;
         self.keyring = true;
         Ok(())
     }

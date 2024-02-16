@@ -5,3 +5,4 @@
 /dist/*.*
 /dist/schema
 /dist/runtime
+/dist/bin

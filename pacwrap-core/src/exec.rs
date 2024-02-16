@@ -181,7 +181,6 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
         } else {
             process.arg("--hostname").arg("FakeChroot")
                 .arg("--ro-bind").arg("/etc/resolv.conf").arg("/mnt/fs/etc/resolv.conf")
-                .arg("--ro-bind").arg(&format!("{}/etc/bash.bashrc",*DIST_IMG)).arg("/mnt/fs/etc/bash.bashrc")
                 .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/fs/etc/pacman.d/gnupg")
                 .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg") 
                 .arg("--setenv").arg("EUID").arg("0") 
@@ -264,12 +263,9 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
     }
 }
 
-pub fn pacman_key(path: &str, cmd: Vec<&str>) -> Result<()> {
+pub fn pacwrap_key(cmd: Vec<&str>) -> Result<()> {
     match Command::new(PACMAN_KEY_SCRIPT)
         .stderr(Stdio::null())
-        .env("EUID", "0")
-        .arg("--gpgdir")
-        .arg(path)
         .args(cmd)
         .spawn()
     {

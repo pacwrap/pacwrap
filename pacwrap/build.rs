@@ -58,7 +58,7 @@ fn main() {
         panic!("Unsupported build target. Please refer to the build documentation for further information.")
     } else if built && (!Path::new("../dist/").exists() || !Path::new("../dist/tools/").exists()) {
         panic!("Distribution directory is missing. Please refer to the build documentation for further information.")
-    } else if built && !Path::new("../dist/filesystem.tar.zst").exists() {
+    } else if built && !Path::new("../dist/bin/filesystem.tar.zst").exists() {
         panic!("Container fileystem schema is missing. Please refer to the build documentation for further information.")
     }
 
@@ -72,6 +72,6 @@ fn main() {
     println!("cargo:rustc-env=PACWRAP_BUILD={}", release(debug));
 
     if built {
-        schema::serialize_path("../dist/filesystem.tar.zst", "../dist/filesystem.dat");
+        schema::serialize_path("../dist/bin/filesystem.tar.zst", "../dist/bin/filesystem.dat");
     }
 }

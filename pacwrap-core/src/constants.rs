@@ -33,7 +33,7 @@ pub static PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
 pub const BWRAP_EXECUTABLE: &str = "bwrap";
 pub const DBUS_PROXY_EXECUTABLE: &str = "xdg-dbus-proxy";
 pub const DEFAULT_PATH: &str = "/usr/local/bin:/bin:/usr/bin/";
-pub const PACMAN_KEY_SCRIPT: &str = "pacman-key";
+pub const PACMAN_KEY_SCRIPT: &str = "pacwrap-key";
 pub const RUNTIME_DIRECTORY: &str = "/usr/share/pacwrap/runtime";
 pub const RUNTIME_TLS_STORE: &str = "/etc/ca-certificates/extracted/tls-ca-bundle.pem";
 
