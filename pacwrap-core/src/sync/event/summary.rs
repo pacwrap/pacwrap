@@ -132,7 +132,7 @@ impl Summary {
                 pkg_this.name().into(),
                 match is_installed {
                     true => pkg_this.version().to_string(),
-                    false => "".into(),
+                    false => String::new(),
                 },
                 pkg_sync.version().to_string(),
                 match installed_old == installed_new && !is_installed {
@@ -184,13 +184,10 @@ impl Summary {
         };
 
         for (name, old, new, net, dnl) in table_elements {
-            let net = match net > 0 {
-                true => format!("{}{}", net.to_byteunit(IEC), if net < 1000 { " " } else { "" }),
-                false => "".into(),
-            };
-            let dnl = match dnl > 0 {
-                true => format!("{}{}", dnl.to_byteunit(IEC), if dnl < 1000 { " " } else { "" }),
-                false => "".into(),
+            let net = format!("{}{}", net.to_byteunit(IEC), if net > -1024 && net < 1024 { "  " } else { "" });
+            let dnl = match dnl == 0 {
+                false => format!("{}{}", dnl.to_byteunit(IEC), if dnl < 1024 { "  " } else { "" }),
+                true => String::new(),
             };
 
             table.insert(match table_columns {
@@ -287,7 +284,7 @@ impl TableColumns {
 impl From<&Summary> for TableColumns {
     fn from(sum: &Summary) -> Self {
         match sum.columns() {
-            //Grr, don't try and figure out _how_ this works, just know that it does..
+            //Grr, don't try to figure out _how_ this works, just know that it does..
             (false, false, false, false, false) => Self::OldNet,
             (true, true, _, true, true) => Self::OldNewNetDownload,
             (.., true, false, true) => Self::NewNetDownload,

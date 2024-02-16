@@ -86,7 +86,7 @@ fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf> {
         Ok(path) => Ok(path),
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),
-            _ => err!(ErrorKind::IOError(exec.into(), err.kind()))?,
+            _ => err!(ErrorKind::IOError(exec.into(), err.kind())),
         },
     }
 }
