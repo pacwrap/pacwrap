@@ -73,19 +73,33 @@ package() {
 
 
 version_string() {
-    local git=$(git rev-parse --short HEAD)
-    local release=
-    local dev=
- 
-    case $1 in
-        release)    release="RELEASE"
-                    date=$(git log -1 --date=format:%d/%m/%Y --format=%ad);;
-        debug)      release="DEV"
-                    date=$(date +'%d/%m/%Y %T');;
-    esac
-
     eval $(cat pacwrap/Cargo.toml | grep version | head -n1 | sed -e "s/version = /local version=/g")
-    echo "$version-$git-$release ($date)"
+
+    if [[ ! -z "$(type -P git)" ]] && [[ -d ".git" ]]; then
+        local git=$(git rev-parse --short HEAD)
+        local release=
+        local date=
+
+        case $1 in
+            release)    release="RELEASE"
+                        date=$(git log -1 --date=format:%d/%m/%Y --format=%ad);;
+            debug)      release="DEV"
+                        date=$(date +'%d/%m/%Y %T');;
+        esac
+
+        echo "$version-$git-$release ($date)"
+    else
+        IFS="_"; local meta=($(cat .package));
+        local git=${meta[0]};
+        local date=${meta[1]}; IFS=" "
+
+        case $1 in
+            release)    release="RELEASE";;
+            debug)      release="DEV";;
+        esac
+
+        echo "$version-$git-$release ($date)"
+    fi
 }
 
 main $@

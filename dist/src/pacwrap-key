@@ -265,7 +265,7 @@ colorize() {
     CHILD_HEADER=$SUB_TEXT$BOLD
     CHILD_SUBTEXT=$TAB$TAB$TAB
 
-	readonly RESET BOLD BLUE GREEN RED YELLOW \
+    readonly RESET BOLD BLUE GREEN RED YELLOW \
         HEADER HEADER_RESET \
         SUB_HEADER SUBTEXT \
         CHILD_HEADER CHILD_SUBTEXT; COLOR_SET=1
@@ -311,7 +311,7 @@ usage() {
 
 version() {
     cat << ENDOF
-${VERSION}
+pacwrap-key v${VERSION}
 Copyright (C) 2023-2024 Xavier R.M.
 Copyright (C) 2010-2021 Pacman Development Team
 

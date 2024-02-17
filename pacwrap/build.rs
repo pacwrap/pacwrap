@@ -18,7 +18,7 @@
  */
 
 use pacwrap_core::sync::schema;
-use std::{env::var, path::Path, process::Command};
+use std::{env::var, fs::read_to_string, path::Path, process::Command};
 
 fn head() -> String {
     match Command::new("git").args(["rev-parse", "--short", "HEAD"]).output() {
@@ -51,6 +51,14 @@ fn is_debug() -> bool {
     var("DEBUG").unwrap().parse().unwrap()
 }
 
+fn package<'a>() -> Option<Vec<String>> {
+    if let (false, Ok(pkg)) = (Path::new("../.git").exists(), read_to_string("../.package")) {
+        return Some(pkg.split("_").map(|a| a.to_string()).collect());
+    }
+
+    None
+}
+
 fn main() {
     let built = var("PACWRAP_SCHEMA_BUILT").is_ok();
 
@@ -67,9 +75,15 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_META");
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_FS");
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_REPO");
-    println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", head());
-    println!("cargo:rustc-env=PACWRAP_BUILDTIME={}", time(debug));
     println!("cargo:rustc-env=PACWRAP_BUILD={}", release(debug));
+
+    if let Some(meta) = package() {
+        println!("cargo:rustc-env=PACWRAP_BUILDHEAD={}", meta[0]);
+        println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", meta[1]);
+    } else {
+        println!("cargo:rustc-env=PACWRAP_BUILDHEAD={}", head());
+        println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", time(debug));
+    }
 
     if built {
         schema::serialize_path("../dist/bin/filesystem.tar.zst", "../dist/bin/filesystem.dat");

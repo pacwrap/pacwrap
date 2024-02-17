@@ -264,11 +264,7 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
 }
 
 pub fn pacwrap_key(cmd: Vec<&str>) -> Result<()> {
-    match Command::new(PACMAN_KEY_SCRIPT)
-        .stderr(Stdio::null())
-        .args(cmd)
-        .spawn()
-    {
+    match Command::new(PACMAN_KEY_SCRIPT).stderr(Stdio::null()).args(cmd).spawn() {
         Ok(proc) => wait_on_process(PACMAN_KEY_SCRIPT, proc),
         Err(error) => err!(ErrorKind::ProcessInitFailure(PACMAN_KEY_SCRIPT, error.kind()))?,
     }

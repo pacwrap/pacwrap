@@ -235,7 +235,7 @@ impl<'a> FileSystemStateSync<'a> {
 
         if let Err(err) = file.rewind() {
             print_error(&format!("'{}': {}", path, err.kind()));
-            return self.blank_state(instance); 
+            return self.blank_state(instance);
         } else if magic != MAGIC_NUMBER {
             print_warning(&format!("'{}{instance}{}.dat': Magic number mismatch ({MAGIC_NUMBER} != {magic})", *BOLD, *RESET));
             return self.blank_state(instance);

@@ -83,7 +83,7 @@ prepare_and_validate() {
     BIN_PATHS=("$agent")
 
     clean
-	mkdir -p $DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT $DEST_DIR$BIN_DIR $DEST_DIR$ETC_DIR
+    mkdir -p $DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT $DEST_DIR$BIN_DIR $DEST_DIR$ETC_DIR
 
     if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
 		error_fatal "'$DEST_DIR': directory not found."
