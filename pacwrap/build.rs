@@ -31,7 +31,7 @@ fn head() -> String {
 fn time(debug: bool) -> String {
     match debug {
         false => Command::new("git")
-            .args(["log", "-1", "--date=format:%d/%m/%Y", "--format=%ad"])
+            .args(["log", "-1", "--date=format:%d/%m/%Y", "--format=%cd"])
             .output()
             .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
             .and_then(|date| Ok(date.is_empty().then(|| mtime()).unwrap_or(date)))

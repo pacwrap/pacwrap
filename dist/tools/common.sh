@@ -92,7 +92,7 @@ version() {
 
         case $1 in
             release)    release="RELEASE"
-                        date=$(git log -1 --date=format:%d/%m/%Y --format=%ad);;
+                        date=$(git log -1 --date=format:%d/%m/%Y --format=%cd);;
             debug)      release="DEV"
                         date=$(date +'%d/%m/%Y %T%:z');;
         esac
