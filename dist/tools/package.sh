@@ -24,7 +24,9 @@ if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensur
 
 source ./dist/tools/common.sh
 
+DIST_MAN="$PWD/dist/man"
+
 validate_args $1
-./target/$1/pacwrap --help=all --format=man > ./dist/bin/pacwrap.1; if [[ $? != 0 ]]; then error_fatal "Generation of manpage failed."; fi
-./target/$1/pacwrap --help=pacwrap.yml --format=man > ./dist/bin/pacwrap.yml.2; if [[ $? != 0 ]]; then error_fatal "Generation of manpage failed"; fi
+package $DIST_MAN/pacwrap.1 $DIST_BIN/pacwrap.1 $1; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap.1 manpage failed."; fi
+package $DIST_MAN/pacwrap.yml.2 $DIST_BIN/pacwrap.yml.2 $1; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap.yml.2 manpage failed."; fi
 ./dist/tools/runtime.sh $1; if [[ $? != 0 ]]; then error_fatal "Build of container runtime failed."; fi

@@ -20,31 +20,19 @@
 use std::env::var;
 
 fn dist_filesystem_meta() -> String {
-    match var("PACWRAP_DIST_META") {
-        Ok(var) => var,
-        Err(_) => "/usr/share/pacwrap/filesystem.dat".into(),
-    }
+    var("PACWRAP_DIST_META").unwrap_or("/usr/share/pacwrap/filesystem.dat".into())
 }
 
 fn dist_filesystem() -> String {
-    match var("PACWRAP_DIST_FS") {
-        Ok(var) => var,
-        Err(_) => "/usr/share/pacwrap/filesystem.tar.zst".into(),
-    }
+    var("PACWRAP_DIST_FS").unwrap_or("/usr/share/pacwrap/filesystem.tar.zst".into())
 }
 
 fn dist_config() -> String {
-    match var("PACWRAP_DIST_CONF") {
-        Ok(var) => var,
-        Err(_) => "../../dist/pacwrap.yml".into(),
-    }
+    var("PACWRAP_DIST_CONF").unwrap_or("../../dist/pacwrap.yml".into())
 }
 
 fn dist_repo_config() -> String {
-    match var("PACWRAP_DIST_REPO_CONF") {
-        Ok(var) => var,
-        Err(_) => "../../dist/repositories.conf".into(),
-    }
+    var("PACWRAP_DIST_REPO_CONF").unwrap_or("../../dist/repositories.conf".into())
 }
 
 fn main() {

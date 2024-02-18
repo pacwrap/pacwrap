@@ -1,0 +1,212 @@
+.nh
+.TH pacwrap 1 "17/02/2024" "pacwrap version_string_placeholder" "User Manual"
+
+.SH
+NAME
+pacwrap
+
+.SH
+SYNOPSIS
+pacwrap [\fPOPERATION\fP] [\fPARGUMENTS\fP] [\fPTARGETS\fP]	
+
+.SH
+DESCRIPTION
+A package management front-end which utilises libalpm to facilitate the creation of unprivileged, 
+namespace containers with parallelised, filesystem-agnostic deduplication. These containers
+are constructed with bubblewrap to execute package transactions and launch applications.
+
+.PP
+This application is designed to allow for the creation and execution of secure, replicable 
+containerised environments for general-purpose use. CLI and GUI applications are all supported. 
+Once a container environment is configured, it can be re-established or replicated on any system. 
+
+.SH
+OPERATIONS
+.TP
+\fB-S, --sync\fP
+Synchronize package databases and update packages in target containers. 
+
+.TP
+\fB-U, --utils\fP
+Invoke miscellaneous utilities to manage containers.
+
+.TP
+\fB-P, --process\fP
+Manage and show status of running container processes.
+
+.TP
+\fB-E, --execute\fP
+Executes application in target container using bubblewrap.
+
+.TP
+\fB-h, --help=OPTION\fP
+Invoke a printout of this manual to \fPSTDOUT\fP.
+
+.TP
+\fB-V, --version\fP
+Display version and copyright information in \fPSTDOUT\fP.
+
+.SH
+EXECUTE
+.TP
+\fB-r, --root\fP
+Execute operation with fakeroot and fakechroot. Facilitates a command with faked privileges.
+	
+.TP
+\fB-s, --shell\fP
+Invoke a bash shell
+
+.SH
+SYNCHRONIZATION
+.TP
+\fB-y, --refresh\fP
+Synchronize remote package databases. Specify up to 2 times to force a refresh.
+
+.TP
+\fB-u, --upgrade\fP
+Execute aggregate upgrade routine on all or specified containers. Use \fP-t, --target=TARGET\fP to limit
+package synchronization operations to the specified target containers. Packages applicable to 
+a target \fPmust\fP be specified only after the target operand. 
+e.g. '-t electron element-desktop -t mozilla firefox thunderbird'
+
+.TP
+\fB-f, --filesystem\fP
+Force execution of filesystem synchronization target on all or specified containers. In combination
+with \fP-o/--target-only\fP, in addition to no other specified targets, filesystem slices will be
+synchronized without package synchronization on all applicable containers.
+
+.TP
+\fB-c, --create\fP
+Create a container with the first specified target. A container type argument is also required.
+
+.TP
+\fB-b, --base\fP
+Base container type. Specify alongside \fP-c, --create\fP to assign this container type during creation.
+
+This container type is used as the base layer for all downstream containers. Only one base container 
+dependency per slice or aggregate is supported. Filesystem and package deduplication via slices and 
+aggregate containers are recommended, but optional.
+
+.TP
+\fB-s, --slice\fP
+Slice container type. Specify alongside \fP-c, --create\fP to assign this container type during creation.
+
+Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
+packages and influence ordering of downstream synchronization target(s). Container slicing provides
+the ability to install packages in a lightweight, sliced filesytem, which aid in the deduplication 
+of common downstream package and filesystem dependencies.
+
+Useful for graphics drivers, graphical toolkits, fonts, etc.; these are not meant for applications.
+
+.TP
+\fB-a, --aggegrate\fP
+Aggregate container type. Specify alongside \fP-c, --create\fP to this assign container type during creation.
+
+Requires a base dependency, and optionally one or more sliced dependencies, in order to acertain foreign
+packages and amalgamate the target. These containers are ideal for installing software with the aid of
+filesystem and package deduplication. 
+
+Useful for all general purpose applications, browsers, e-mail clients, and even terminal user interface 
+applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
+
+.TP
+\fB-t, --target=TARGET\fP
+Specify a target container for the specified operation.
+
+.TP
+\fB-d, --dep=DEPEND\fP
+Specify a dependent container for the specified operation.
+
+.TP
+\fB-o, --target-only\fP
+Apply specified operation on the specified target only.
+
+.TP
+\fB--force-foreign\fP
+Force synchronization of foreign packages on resident container. Useful for when installing 
+a new package in an aggregate container without all the prerequisite foreign dependencies
+synchronized to this container's package database.
+
+.TP
+\fB--dbonly\fP
+Transact on resident containers with a database-only transaction.
+
+.TP
+\fB--noconfirm\fP
+Override confirmation prompts and confirm all operations.
+
+.SH
+PROCESS
+.TP
+\fB-s, --summary\fP
+Enumerate a process summary of containers being executed by pacwrap.
+
+.TP
+\fB-k, --kill\fP
+Kill target containers and their associated processes.
+
+.TP
+\fB-a, --all\fP
+Enumerate all processes associated with running containers.
+
+.TP
+\fB-d, --depth\fP
+Enumerate all processes at the specified depth associated with running containers.
+
+.TP
+\fB-t, --target=TARGET\fP
+Specify a target container for the specified operation.
+
+.TP
+\fB--noconfirm\fP
+Override confirmation prompts and confirm all operations.
+
+.SH
+UTILITIES
+-TODO-
+
+.SH
+HELP
+.TP
+\fB-m, --more\fP
+When specifying a topic to display, show the default topic in addition to specified options.
+
+.TP
+\fB-f, --format=FORMAT\fP
+Change output format of help in \fPSTDOUT\fP. Format options include: 'ansi', 'dumb', 'markdown', and 'man'. 
+This option is for the express purposes of generating documentation at build time, and has little utility
+outside the context of package maintenance. 'man' option produces troff-formatted documents for man pages.
+
+.TP
+\fB-a, --all, --help=all\fP
+Display all help topics.
+
+.SH
+ENVIRONMENT VARIABLES
+.TP
+\fBPACWRAP_CONFIG_DIR\fP
+Overrides the default XDG Directory Specification compliant configuration directory.
+
+.TP
+\fBPACWRAP_DATA_DIR\fP
+Overrides the default XDG Directory Specification compliant data directory.
+
+.TP
+\fBPACWRAP_CACHE_DIR\fP
+Overrides the default XDG Directory Specification compliant cache directory.
+
+.SH
+VERSION
+.TP
+\fB-V, --version, --version=min\fP
+Sends version information to \fPSTDOUT\fP with colourful ASCII art. 
+The 'min' option provides a minimalistic output as is provided to non-colour terms.
+
+.SH
+COPYRIGHT
+Copyright (C) 2023-2024 Xavier R.M.
+
+.PP
+This program may be freely redistributed under the
+terms of the GNU General Public License v3 only.
+

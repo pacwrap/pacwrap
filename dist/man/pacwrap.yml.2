@@ -1,0 +1,142 @@
+.nh
+.TH pacwrap.yml 2 "17/02/2024" "pacwrap version_string_placeholder" "Pacwrap Configuration Directives"
+
+.SH
+NAME
+.TP
+\fBpacwrap.yml\fP - pacwrap configuration file.
+.TP
+\fBrepositories.conf\fP - pacman repository file.
+
+.SH
+SYNOPSIS
+.TP
+\fB~/.config/pacwrap/pacwrap.yml\fP
+.TP
+\fB~/.config/pacwrap/repositories.conf\fP
+
+.SH
+DESCRIPTION
+Pacwrap upon invocation will attempt to deserialise \fPpacwrap.yml\fP(2) at the location specified herein
+compliant with the XDG Directory Specification. Upon activation of \fPlibalpm\fP(3), the repositories.conf
+file will be deserialised by the pacman_conf crate in order to faciliate the population of package
+repositories and mirrors.
+
+.PP
+Repository configuration is parsed using \fPpacman.conf\fP(5)'s ini format. All other options related the
+\fPlibalpm\fP(3) as defined by \fPpacman.conf\fP(5) therein are otherwise ignored. At present by default, 
+the repository configuration, as defined, references the mirrorlist defined by your system. 
+This ensures as smooth of an out-of-box experience as humanly possible.
+
+Optionally you may specify environment variables, as specified in \fPpacwrap\fP(1), to override
+these locations. These options are designated for experienced users only.
+
+.SH
+EXAMPLE
+
+config:
+  logging: Basic
+  summary: Table
+  progress:
+    transact: CondensedForeign
+    download: CondensedForeign
+alpm:
+  ignore_pkg:
+  - nvidia-utils
+  - lib32-nvidia-utils
+
+
+.SH
+SECTIONS
+.TP
+\fBconfig:\fP
+.PP
+Configuration pertaining to \fPpacwrap\fP(1) are to be declared within this section.
+
+.TP
+\fBalpm:\fP
+.PP
+Configuration pertaining to \fPlibalpm\fP(3) are to be declared within this section.
+
+.SH
+CONFIG
+.TP
+\fBlogging\fP: Basic
+Logging verbosity specified here. Available options are \fPBasic\fP, \fPVerbose\fP, and \fPNone\fP.
+
+.TP
+\fBsummary\fP: Basic
+Transaction summary type. Available options are \fPBasic\fP, \fPBasicForeign\fP, \fPTable\fP, and \fPTableForeign\fP. 
+
+Each option suffixed with the \fPForeign\fP juxtaposition, will take effect only during the
+juxtaposed transaction type with otherwise the opposite effect.
+
+.TP
+\fBprogress:\fP
+Progress types are declared within this subsection.
+
+.SH
+PROGRESS
+.TP
+\fBtransact\fP: CondensedForeign
+Progress type for transaction progress is specified with this option. Available values are 
+\fPBasic\fP, \fPCondensed\fP, \fPCondensedForeign\fP, \fPCondensedLocal\fP, and \fPVerbose\fP.
+
+Each option suffixed with the \fPForeign\fP or \fPLocal\fP juxtaposition, will take effect only during 
+the juxtaposed transaction type with otherwise the opposite effect.
+
+.TP
+\fBdownload\fP: Verbose
+Download type for download progress is specified with this option. Available values are 
+\fPBasic\fP, \fPCondensed\fP, \fPCondensedForeign\fP, \fPCondensedLocal\fP, and \fPVerbose\fP.
+
+Each option suffixed with the \fPForeign\fP or \fPLocal\fP juxtaposition, will take effect only during 
+the juxtaposed transaction type with otherwise the opposite effect.
+
+.SH
+ALPM
+.TP
+\fBignore_pkg:\fP
+Ignored package(s) are declared herein with a string array.
+
+.TP
+\fBhold_pkg:\fP
+Held package(s) are declared herein with a string array.
+
+.TP
+\fBsig_level\fP: Required DatabaseOptional
+Default global signature level - see \fPpacman.conf\fP(5) for valid options. Options are declared
+as a singular string value.
+
+.TP
+\fBsig_level_local\fP: Optional
+Default local signature level - see \fPpacman.conf\fP(5) for valid options. Options are declared
+as a single string value.
+
+.TP
+\fBcheck_space\fP: true
+Instructs \fPlibalpm\fP(3), where applicable, to check if there's available space on disk in order 
+to facilitate a transaction. Value is declared with a \fPbool\fP.
+
+.TP
+\fBdownload_timeout\fP: true
+Instructs \fPlibalpm\fP(3) to timeout downloads from unsatisfactory mirrors. Value is declared with 
+a \fPbool\fP.
+
+.TP
+\fBparallel_downloads\fP: 1
+Instructs \fPlibalpm\fP(3) to parallelise the download queue with a maximum queue amount. Specify an 
+\fPinteger\fP to declare a maximum value.
+
+.SH
+SEE ALSO
+\fPpacman.conf\fP(5), \fPlibalpm\fP(3)
+
+.SH
+COPYRIGHT
+Copyright (C) 2023-2024 Xavier R.M.
+
+.PP
+This program may be freely redistributed under the
+terms of the GNU General Public License v3 only.
+

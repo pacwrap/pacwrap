@@ -32,8 +32,6 @@ source ./dist/tools/common.sh
 USR_DIR="/usr"
 ETC_DIR="/etc"
 DEST_DIR="$PWD/dist/schema"
-DIST_SRC="$PWD/dist/src"
-DIST_BIN="$PWD/dist/bin"
 
 #
 # Main function

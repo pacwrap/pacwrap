@@ -25,5 +25,6 @@ if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensur
 source ./dist/tools/common.sh
 
 validate_args $1; if [[ $? != 0 ]]; then error_fatal "Argument validation failed."; fi
-./dist/tools/key.sh $1; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap-key failed."; fi
+layout_dir; if [[ $? != 0 ]]; then error_fatal "Directory initialization failed."; fi
+package $DIST_SRC/pacwrap-key $DIST_BIN/pacwrap-key $1 0; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap-key failed."; fi
 ./dist/tools/schema.sh $1; if [[ $? != 0 ]]; then error_fatal "Build of container schema failed."; fi
