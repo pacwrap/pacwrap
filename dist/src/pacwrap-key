@@ -212,6 +212,8 @@ _USAGE
 }
 
 check() {
+    [[ $SWITCH == *h* ]] || [[ $SWITCH == *V* ]] && return
+
     if ! type -p gpg >/dev/null; then
         error_fatal "$(gettext "Cannot find the %s binary required for all %s operations.")" "gpg" "pacwrap-key"
     fi

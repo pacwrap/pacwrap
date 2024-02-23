@@ -2,7 +2,6 @@ use std::fmt::{Debug, Display};
 
 use crate::{err, impl_error, Error, ErrorTrait, Result};
 
-#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BufferMode {
     Write,
     Read,
@@ -148,7 +147,7 @@ impl ByteBuffer {
             err!(BufferError::BufferOverrun(self.position, self.buffer.len()))?
         }
 
-        match self.mode {
+        match &self.mode {
             Some(mode) => match mode {
                 BufferMode::Write => err!(BufferError::WriteOnRead),
                 BufferMode::Read => Ok(()),
@@ -158,7 +157,7 @@ impl ByteBuffer {
     }
 
     fn check_write(&self) -> Result<()> {
-        match self.mode {
+        match &self.mode {
             Some(mode) => match mode {
                 BufferMode::Read => err!(BufferError::ReadOnWrite),
                 BufferMode::Write => Ok(()),

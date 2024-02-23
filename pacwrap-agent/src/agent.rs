@@ -40,7 +40,7 @@ use pacwrap_core::{
         AlpmConfigData,
         SyncError,
     },
-    utils::{print_warning, read_le_32},
+    utils::{bytebuffer::ByteBuffer, print_warning},
     Error,
     Result,
 };
@@ -50,7 +50,7 @@ use crate::error::AgentError;
 static AGENT_PARAMS: &'static str = "/mnt/agent_params";
 
 pub fn transact() -> Result<()> {
-    let mut header_buffer = vec![0; 7];
+    let mut header = ByteBuffer::with_capacity(7).read();
     let mut file = match File::open(AGENT_PARAMS) {
         Ok(file) => file,
         Err(error) => {
@@ -64,11 +64,11 @@ pub fn transact() -> Result<()> {
         }
     };
 
-    if let Err(error) = file.read_exact_at(&mut header_buffer, 0) {
+    if let Err(error) = file.read_exact_at(header.as_slice_mut(), 0) {
         err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
     }
 
-    decode_header(&header_buffer)?;
+    decode_header(&mut header)?;
 
     let params: TransactionParameters = deserialize(&mut file)?;
     let config: Global = deserialize(&mut file)?;
@@ -131,11 +131,11 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
     Ok(())
 }
 
-fn decode_header(buffer: &Vec<u8>) -> Result<()> {
-    let magic = read_le_32(&buffer, 0);
-    let major: (u8, u8) = (env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(), buffer[4]);
-    let minor: (u8, u8) = (env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(), buffer[5]);
-    let patch: (u8, u8) = (env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(), buffer[6]);
+fn decode_header(buffer: &mut ByteBuffer) -> Result<()> {
+    let magic = buffer.read_le_32();
+    let major: (u8, u8) = (env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(), buffer.read_byte());
+    let minor: (u8, u8) = (env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(), buffer.read_byte());
+    let patch: (u8, u8) = (env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(), buffer.read_byte());
 
     if magic != MAGIC_NUMBER {
         err!(AgentError::InvalidMagic(magic, MAGIC_NUMBER))?
