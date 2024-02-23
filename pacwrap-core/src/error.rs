@@ -19,13 +19,15 @@
 
 use std::{
     any::Any,
-    fmt::{Debug, Display},
+    fmt::{Debug, Display, Formatter},
     process::exit,
+    result::Result as StdResult,
+    fmt::Result as FmtResult,
 };
 
 use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = StdResult<T, Error>;
 
 #[macro_export]
 macro_rules! err {
@@ -60,6 +62,21 @@ pub trait Downcast {
     fn as_any(&self) -> &dyn Any;
 }
 
+pub trait ErrorGeneric<R, E> {
+    fn prepend<F>(self, f: F) -> StdResult<R, Error>
+    where
+        F: FnOnce() -> String;
+    fn prepend_io<F>(self, f: F) -> StdResult<R, Error>
+    where
+        F: FnOnce() -> String;
+}
+
+#[derive(Debug)]
+struct GenericError {
+    prepend: String,
+    error: String,
+}
+
 #[derive(Debug)]
 pub struct Error {
     kind: Box<dyn ErrorTrait>,
@@ -88,11 +105,48 @@ impl Error {
         &self.kind
     }
 
-    pub fn downcast<T: 'static>(&self) -> std::result::Result<&T, &Self> {
+    pub fn downcast<T: 'static>(&self) -> StdResult<&T, &Self> {
         match self.kind.as_any().downcast_ref::<T>() {
             Some(inner) => Ok(inner),
             None => Err(self),
         }
+    }
+}
+
+impl_error!(GenericError);
+
+impl<R, E> ErrorGeneric<R, E> for StdResult<R, E>
+where
+    E: Display,
+{
+    fn prepend<F>(self, f: F) -> StdResult<R, Error>
+    where
+        F: FnOnce() -> String, {
+        match self {
+            Ok(f) => Ok(f),
+            Err(err) => err!(GenericError {
+                prepend: f(),
+                error: err.to_string(),
+            }),
+        }
+    }
+
+    fn prepend_io<F>(self, f: F) -> StdResult<R, Error>
+    where
+        F: FnOnce() -> String, {
+        match self {
+            Ok(f) => Ok(f),
+            Err(err) => err!(GenericError {
+                prepend: format!("'{}'", f()),
+                error: err.to_string(),
+            }),
+        }
+    }
+}
+
+impl Display for GenericError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}: {}", self.prepend, self.error)
     }
 }
 

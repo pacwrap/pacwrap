@@ -18,7 +18,7 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     fs::{File, OpenOptions},
     io::Write,
     path::Path,
@@ -40,7 +40,7 @@ pub enum LoggerError {
 }
 
 impl Display for LoggerError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Uninitialized => write!(fmter, "Logger is uninitialized"),
         }

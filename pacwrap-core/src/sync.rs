@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     path::Path,
     process::exit,
 };
@@ -32,10 +32,16 @@ use crate::{
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET},
     err,
     error,
-    error::*,
     exec::pacwrap_key,
-    sync::event::download::{self, DownloadEvent},
+    sync::{
+        event::download::{self, DownloadEvent},
+        filesystem::create_hard_link,
+    },
+    Error,
+    ErrorGeneric,
     ErrorKind,
+    ErrorTrait,
+    Result,
 };
 
 pub mod event;
@@ -75,7 +81,7 @@ pub enum SyncError {
 }
 
 impl Display for SyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::DependentContainerMissing(u) =>
                 write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET),
@@ -230,7 +236,7 @@ fn synchronize_database(cache: &ContainerCache, force: bool) -> Result<()> {
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", ins.vars().root(), repo.name);
-                    if let Err(error) = filesystem::create_hard_link(src, dest) {
+                    if let Err(error) = create_hard_link(src, dest).prepend(|| format!("Failed to hardlink db '{}'", dest)) {
                         error.warn();
                     }
                 }

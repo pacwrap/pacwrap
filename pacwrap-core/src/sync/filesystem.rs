@@ -20,8 +20,8 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Error as FmtError, Formatter},
-    fs::{self, File, Metadata},
-    io::{ErrorKind as IOErrorKind, Read, Seek},
+    fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, File, Metadata},
+    io::{copy, BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
@@ -35,35 +35,57 @@ use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use rayon::{prelude::*, ThreadPool, ThreadPoolBuilder};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
+use zstd::{Decoder, Encoder};
 
 use crate::{
     config::{ContainerCache, ContainerHandle, ContainerType::*},
-    constants::{ARROW_CYAN, BAR_GREEN, BOLD, DATA_DIR, RESET},
+    constants::{BAR_GREEN, BOLD, DATA_DIR, RESET},
     err,
     impl_error,
-    utils::{print_error, print_warning, read_le_32},
+    utils::bytebuffer::ByteBuffer,
     Error,
+    ErrorGeneric,
     ErrorKind,
     ErrorTrait,
 };
 
-static VERSION: u32 = 1;
+static VERSION: u32 = 2;
 static MAGIC_NUMBER: u32 = 408948530;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct FileSystemState {
-    magic: u32,
-    version: u32,
     files: IndexMap<Arc<str>, (FileType, Arc<str>)>,
 }
 
 impl FileSystemState {
     fn new() -> Self {
-        Self {
-            magic: MAGIC_NUMBER,
-            version: VERSION,
-            files: IndexMap::new(),
+        Self { files: IndexMap::new() }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FilesystemStateError {
+    MagicMismatch(String, u32),
+    ChecksumMismatch(String),
+    UnsupportedVersion(String, u32),
+    DeserializationFailure(String, String),
+    SerializationFailure(String, String),
+}
+
+impl_error!(FilesystemStateError);
+
+impl Display for FilesystemStateError {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), FmtError> {
+        match self {
+            Self::SerializationFailure(file, err) => write!(fmter, "Serialization failure occurred with '{file}': {err}"),
+            Self::UnsupportedVersion(file, ver) =>
+                write!(fmter, "'{file}': Unsupported filesystem version: {}{ver}{}", *BOLD, *RESET),
+            Self::DeserializationFailure(file, err) =>
+                write!(fmter, "Deserialization failure occurred with '{}{file}{}.dat': {err}", *BOLD, *RESET),
+            Self::ChecksumMismatch(file) => write!(fmter, "'{file}': Checksum mismatch"),
+            Self::MagicMismatch(file, magic) => write!(fmter, "'{file}': Magic number mismatch ({MAGIC_NUMBER} != {magic})"),
         }
     }
 }
@@ -74,6 +96,11 @@ enum FileType {
     SymLink,
     Directory,
     Invalid(i8),
+}
+
+pub enum SyncType {
+    Filesystem,
+    RefreshState,
 }
 
 impl From<i8> for FileType {
@@ -106,39 +133,37 @@ enum SyncMessage {
 
 pub struct FileSystemStateSync<'a> {
     state_map: HashMap<Arc<str>, FileSystemState>,
-    state_map_prev: HashMap<Arc<str>, FileSystemState>,
+    state_map_prev: HashMap<Arc<str>, Option<FileSystemState>>,
     linked: HashSet<Arc<str>>,
     queued: HashSet<&'a str>,
-    progress: ProgressBar,
+    progress: Option<ProgressBar>,
     cache: &'a ContainerCache<'a>,
     pool: Option<ThreadPool>,
     max_chars: u16,
+    sync_type: SyncType,
 }
 
 impl<'a> FileSystemStateSync<'a> {
     pub fn new(inscache: &'a ContainerCache) -> Self {
-        let size = Term::size(&Term::stdout());
-        let column_half = size.1 / 2;
-        let style = ProgressStyle::with_template(
-            &(" {spinner:.green} {msg:<".to_owned() + column_half.to_string().as_str() + "} [{wide_bar}] {percent:<3}%"),
-        )
-        .unwrap()
-        .progress_chars("#-")
-        .tick_strings(&[">", "✓"]);
-        let pr = ProgressBar::new(0).with_style(style);
-
-        pr.set_draw_target(ProgressDrawTarget::hidden());
-
         Self {
             pool: None,
-            progress: pr,
+            progress: None,
             state_map: HashMap::new(),
             state_map_prev: HashMap::new(),
             queued: HashSet::new(),
             linked: HashSet::new(),
             cache: inscache,
-            max_chars: column_half - 20,
+            max_chars: 0,
+            sync_type: SyncType::Filesystem,
         }
+    }
+
+    pub fn refresh_state(&mut self) {
+        self.sync_type = SyncType::RefreshState;
+    }
+
+    pub fn filesystem_state(&mut self) {
+        self.sync_type = SyncType::Filesystem;
     }
 
     pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<(), Error> {
@@ -183,13 +208,13 @@ impl<'a> FileSystemStateSync<'a> {
         while let Ok(recv) = rx.recv() {
             match recv {
                 SyncMessage::LinkComplete(ins) => {
-                    let instance = ins.as_ref();
-                    let status = queue_status(&queue, instance, self.max_chars as usize);
+                    if let Some(progress) = &self.progress {
+                        progress.set_message(queue_status(&self.sync_type, &queue, ins.as_ref(), self.max_chars as usize));
+                        progress.inc(1);
+                    }
 
-                    queue.remove(instance);
+                    queue.remove(ins.as_ref());
                     self.linked.insert(ins);
-                    self.progress.set_message(status);
-                    self.progress.inc(1);
                 }
                 SyncMessage::SaveState(dep, fs_state) => {
                     if let Some(_) = self.state_map.get(&dep) {
@@ -200,97 +225,80 @@ impl<'a> FileSystemStateSync<'a> {
                         continue;
                     }
 
+                    let tx = write_chan.0.clone();
+
                     self.state_map.insert(dep.clone(), fs_state.clone());
-                    self.write(write_chan.0.clone(), fs_state, dep);
+                    self.pool().unwrap().spawn(move || {
+                        if let Err(err) = serialize(dep, fs_state) {
+                            err.warn();
+                            drop(tx);
+                        }
+                    });
                 }
             }
         }
     }
 
-    fn previous_state(&mut self, instance: &Arc<str>) -> FileSystemState {
+    fn previous_state(&mut self, instance: &Arc<str>) -> Result<Option<FileSystemState>, Error> {
         if let Some(st) = self.state_map_prev.get(instance) {
-            return st.clone();
+            return Ok(st.clone());
         }
 
-        let mut header_buffer = vec![0; 8];
-        let path = format!("{}/state/{}.dat", *DATA_DIR, instance);
-        let mut file = match File::open(&path) {
+        let path = &format!("{}/state/{}.dat", *DATA_DIR, instance);
+        let mut header = ByteBuffer::with_capacity(8).read();
+        let mut file = match File::open(path) {
             Ok(file) => file,
-            Err(err) => {
-                if err.kind() != IOErrorKind::NotFound {
-                    print_error(&format!("'{}': {}", path, err.kind()));
-                }
-
-                return self.blank_state(instance);
+            Err(err) => if let IOErrorKind::NotFound = err.kind() {
+                return Ok(None);
+            } else {
+                return Err(err).prepend_io(|| path.into());
             }
         };
 
-        if let Err(error) = file.read_exact(&mut header_buffer) {
-            print_error(&format!("'{}{instance}{}.dat': {error}", *BOLD, *RESET));
-            return self.blank_state(instance);
-        }
+        file.read_exact(header.as_slice_mut()).prepend_io(|| path.into())?;
 
-        let magic = read_le_32(&header_buffer, 0);
-        let version = read_le_32(&header_buffer, 4);
+        let magic = header.read_le_32();
+        let version = header.read_le_32();
 
-        if let Err(err) = file.rewind() {
-            print_error(&format!("'{}': {}", path, err.kind()));
-            return self.blank_state(instance);
-        } else if magic != MAGIC_NUMBER {
-            print_warning(&format!("'{}{instance}{}.dat': Magic number mismatch ({MAGIC_NUMBER} != {magic})", *BOLD, *RESET));
-            return self.blank_state(instance);
+        if magic != MAGIC_NUMBER {
+            err!(FilesystemStateError::MagicMismatch(path.into(), magic))?
         } else if version != VERSION {
-            return self.blank_state(instance);
-        }
+            let state = match version {
+                1 => deserialize::<File, FileSystemState>(&instance, file)?,
+                _ => err!(FilesystemStateError::UnsupportedVersion(path.into(), version))?,
+            };
 
-        match bincode::deserialize_from::<&File, FileSystemState>(&file) {
-            Ok(state) => {
-                self.state_map_prev.insert(instance.clone(), state.clone());
-                state
+            self.state_map_prev.insert(instance.clone(), Some(state.clone()));
+            Ok(Some(state))
+        } else {
+            let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path.into())?;
+
+            if ! checksum_valid {
+                err!(FilesystemStateError::ChecksumMismatch(path.into()))?
             }
-            Err(err) => {
-                print_error(&format!(
-                    "Deserialization failure occurred with '{}{instance}{}.dat': {}",
-                    *BOLD,
-                    *RESET,
-                    err.as_ref()
-                ));
-                return self.blank_state(instance);
-            }
+
+            let buf_reader = BufReader::new(state_buffer.as_slice());
+            let state = deserialize::<BufReader<&[u8]>, FileSystemState>(&instance, buf_reader)?;
+
+            self.state_map_prev.insert(instance.clone(), Some(state.clone()));
+            Ok(Some(state))
         }
     }
 
-    fn blank_state(&mut self, instance: &Arc<str>) -> FileSystemState {
-        let state = FileSystemState::new();
-
-        self.state_map_prev.insert(instance.clone(), state.clone());
-        state
-    }
-
-    fn write(&mut self, tx: Sender<()>, ds: FileSystemState, dep: Arc<str>) {
-        let path: &str = &format!("{}/state/{}.dat", *DATA_DIR, dep);
-        let output = match File::create(path) {
-            Ok(file) => file,
-            Err(err) => {
-                print_warning(&format!("Writing '{}': {}", path, err.kind()));
-                return;
-            }
-        };
-
-        self.pool().unwrap().spawn(move || {
-            if let Err(err) = bincode::serialize_into(output, &ds) {
-                print_error(&format!("Serialization failure occurred with '{}{dep}{}.dat': {}", *BOLD, *RESET, err.to_string()));
-            }
-
-            drop(tx);
-        });
+    fn blank_state(&mut self, instance: &Arc<str>) -> Option<FileSystemState> {
+        self.state_map_prev.insert(instance.clone(), None);
+        None
     }
 
     fn obtain_slice(&mut self, inshandle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
         let instance: Arc<str> = inshandle.vars().instance().into();
         let root = inshandle.vars().root().into();
 
-        self.previous_state(&instance);
+        if let Err(err) = self.previous_state(&instance) {
+            self.blank_state(&instance);
+            err.warn();
+        }
+
         Ok(self.pool()?.spawn(move || {
             let mut state = FileSystemState::new();
 
@@ -314,8 +322,16 @@ impl<'a> FileSystemStateSync<'a> {
                 Some(state) => state.clone(),
                 None => FileSystemState::new(),
             };
+            let dep = &Arc::from(dep.as_ref());
+            let prev_state = match self.previous_state(dep) {
+                Ok(state) => state,
+                Err(err) => {
+                    err.warn();
+                    self.blank_state(dep)
+                }
+            };
 
-            prev.push(self.previous_state(&Arc::from(dep.as_ref())));
+            prev.push(prev_state);
             map.push((dephandle.vars().root().into(), state));
         }
 
@@ -338,38 +354,37 @@ impl<'a> FileSystemStateSync<'a> {
         }
     }
 
-    pub fn prepare_single(&mut self) {
-        println!("{} Synchronizing container state...", *ARROW_CYAN);
-
-        if let None = self.pool {
-            self.pool = Some(
-                ThreadPoolBuilder::new()
-                    .thread_name(|f| format!("PW-LINKER-{}", f))
-                    .num_threads(2)
-                    .build()
-                    .unwrap(),
-            );
-        }
-    }
-
     pub fn prepare(&mut self, length: usize) {
-        println!("{} {}Synchronizing container filesystems...{} ", *BAR_GREEN, *BOLD, *RESET);
+        let size = Term::size(&Term::stdout());
+        let column_half = size.1 / 2;
+        let style = ProgressStyle::with_template(
+            &(" {spinner:.green} {msg:<".to_owned() + column_half.to_string().as_str() + "} [{wide_bar}] {percent:<3}%"),
+        )
+        .unwrap()
+        .progress_chars("#-")
+        .tick_strings(&[">", "✓"]);
+        let progress = ProgressBar::new(0).with_style(style);
+
+        println!("{} {}{}...{} ", *BAR_GREEN, *BOLD, self.sync_type.prepare(), *RESET);
+        progress.set_draw_target(ProgressDrawTarget::stdout());
+        progress.set_message(self.sync_type.progress());
+        progress.set_position(0);
+        progress.set_length(length.try_into().unwrap_or(0));
 
         self.pool = Some(ThreadPoolBuilder::new().thread_name(|f| format!("PW-LINKER-{}", f)).build().unwrap());
-        self.progress.set_draw_target(ProgressDrawTarget::stdout());
-        self.progress.set_message("Synhcronizing containers..");
-        self.progress.set_position(0);
-        self.progress.set_length(length.try_into().unwrap_or(0));
-    }
-
-    pub fn set_cache(&mut self, inscache: &'a ContainerCache) {
-        self.cache = inscache;
+        self.progress = Some(progress);
+        self.max_chars = column_half - 20;
     }
 
     pub fn finish(&mut self) {
-        self.progress.set_message("Synchronization complete.");
-        self.progress.finish();
+        if let Some(progress) = &self.progress {
+            progress.set_message(self.sync_type.finish());
+            progress.finish();
+        }
+
         self.pool = None;
+        self.progress = None;
+        self.max_chars = 0;
     }
 
     pub fn release(self) -> Option<FileSystemStateSync<'a>> {
@@ -378,11 +393,120 @@ impl<'a> FileSystemStateSync<'a> {
     }
 }
 
-fn previous_state(map: Vec<FileSystemState>) -> FileSystemState {
+impl SyncType {
+    fn prepare(&self) -> &str {
+        match self {
+            Self::Filesystem => "Synchronizing container filesystems",
+            Self::RefreshState => "Refreshing filesystem state data",
+        }
+    }
+
+    fn progress(&self) -> &'static str {
+        match self {
+            Self::Filesystem => "Synchronizing filesystems..",
+            Self::RefreshState => "Refreshing state..",
+        }
+    }
+
+    fn finish(&self) -> &'static str {
+        match self {
+            Self::Filesystem => "Synchronization complete.",
+            Self::RefreshState => "Refresh complete.",
+        }
+    }
+}
+
+fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T, Error> {
+    match bincode::deserialize_from::<R, T>(reader) {
+        Ok(state) => Ok(state),
+        Err(err) => err!(FilesystemStateError::DeserializationFailure(instance.into(), err.to_string())),
+    }
+}
+
+fn serialize(dep: Arc<str>, ds: FileSystemState) -> Result<(), Error> {
+    let error_path = &format!("'{}{}{}.dat'", *BOLD, dep, *RESET);
+    let path = &format!("{}/state/{}.dat", *DATA_DIR, dep);
+    let mut hasher = Sha256::new();
+    let mut state_data = Vec::new();
+
+    if let Err(err) = bincode::serialize_into(&mut state_data, &ds) {
+        err!(FilesystemStateError::SerializationFailure(error_path.into(), err.as_ref().to_string()))?
+    }
+
+    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| error_path.into())?;
+    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| error_path.into())?;
+    Ok(())
+}
+
+fn decode_state<'a, R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
+    let mut header_buffer = ByteBuffer::with_capacity(10).read();
+
+    stream.read_exact(&mut header_buffer.as_slice_mut())?;
+
+    let mut hash_buffer = vec![0; header_buffer.read_le_16() as usize];
+    let mut state_buffer = vec![0; header_buffer.read_le_64() as usize];
+
+    stream.read_exact(&mut hash_buffer)?;
+
+    let mut hasher = Sha256::new();
+    let mut reader = Decoder::new(stream)?;
+
+    reader.read_exact(&mut state_buffer)?;
+    copy(&mut state_buffer.as_slice(), &mut hasher)?;
+
+    Ok((state_buffer, hasher.finalize().to_vec() == hash_buffer))
+}
+
+fn encode_state(path: &str, state_data: Vec<u8>, hash: Vec<u8>) -> IOResult<u64> {
+    let mut output = File::create(path)?;
+    let mut header = ByteBuffer::new().write();
+
+    header.write_le_32(MAGIC_NUMBER);
+    header.write_le_32(VERSION);
+    header.write_le_16(hash.len() as u16);
+    header.write_le_64(state_data.len() as u64);
+    output.write(header.as_slice())?;
+    output.write(&hash)?;
+    copy(&mut state_data.as_slice(), &mut Encoder::new(output, 3)?.auto_finish())
+}
+
+fn check(instance: &str) -> Result<bool, Error> {
+    let path = &format!("{}/state/{}.dat", *DATA_DIR, instance);
+    let mut header_buffer = ByteBuffer::with_capacity(8).read();
+    let mut file = File::open(path).prepend_io(|| path.into())?;
+
+    file.read_exact(header_buffer.as_slice_mut()).prepend_io(|| path.into())?;
+
+    let magic = header_buffer.read_le_32();
+    let version = header_buffer.read_le_32();
+
+    Ok(magic != MAGIC_NUMBER || version != VERSION)
+}
+
+pub fn invalid_fs_states<'a>(vec: &'a Vec<&'a str>) -> bool {
+    for instance in vec {
+        match check(instance) {
+            Ok(bool) =>
+                if bool {
+                    return true;
+                },
+            Err(err) => {
+                err.warn();
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+fn previous_state(map: Vec<Option<FileSystemState>>) -> FileSystemState {
     let mut state = FileSystemState::new();
 
     for ins_state in map {
-        state.files.extend(ins_state.files);
+        if let Some(ins_state) = ins_state {
+            state.files.extend(ins_state.files);
+        }
     }
 
     state
@@ -427,12 +551,18 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
 
 fn link_filesystem(state: &FileSystemState, root: &str) {
     state.files.par_iter().for_each(|file| {
+        if let FileType::Directory = file.1 .0 {
+            return;
+        }
+
+        let path = &format!("{}{}", root, file.0);
+
         if let FileType::SymLink = file.1 .0 {
-            if let Err(error) = create_soft_link(&file.1 .1, &format!("{}{}", root, file.0)) {
+            if let Err(error) = create_soft_link(&file.1 .1, path).prepend(|| format!("Failed to symlink '{path}'")) {
                 error.warn();
             }
         } else if let FileType::HardLink = file.1 .0 {
-            if let Err(error) = create_hard_link(&file.1 .1, &format!("{}{}", root, file.0)) {
+            if let Err(error) = create_hard_link(&file.1 .1, path).prepend(|| format!("Failed to hardlink '{path}'")) {
                 error.warn();
             }
         }
@@ -446,16 +576,20 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
     state_res.files.par_iter().for_each(|file| {
         let _ = tx_clone;
 
+        if let FileType::Directory = file.1 .0 {
+            return;
+        }
+
         if let None = state.files.get(file.0) {
-            let path: &str = &format!("{}{}", root, file.0);
-            let path = Path::new(path);
+            let path_str = &format!("{}{}", root, file.0);
+            let path = Path::new(path_str);
 
             if let FileType::SymLink = file.1 .0 {
-                if let Err(error) = remove_symlink(path) {
+                if let Err(error) = remove_symlink(path).prepend(|| format!("Failed to remove symlink '{path_str}'")) {
                     error.warn();
                 }
             } else if let (true, FileType::HardLink) = (path.exists(), &file.1 .0) {
-                if let Err(error) = remove_file(path) {
+                if let Err(error) = remove_file(path).prepend(|| format!("Failed to remove file '{path_str}'")) {
                     error.warn();
                 }
             }
@@ -482,7 +616,7 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
             }
 
             if let FileType::Directory = file.1 .0 {
-                remove_directory(path).ok();
+                remove_dir_all(path).ok();
             }
         }
     });
@@ -491,12 +625,9 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
     rx.try_iter();
 }
 
-fn create_soft_link(src: &str, dest: &str) -> Result<(), Error> {
+fn create_soft_link(src: &str, dest: &str) -> IOResult<()> {
     let dest_path = Path::new(&dest);
-    let src_path = match fs::read_link(src) {
-        Ok(path) => path,
-        Err(err) => err!(FilesystemError::ReadSymlink(src.into(), err.kind()))?,
-    };
+    let src_path = fs::read_link(src)?;
 
     if let Ok(src_path_dest) = fs::read_link(dest_path) {
         if src_path.as_path() == src_path_dest.as_path() {
@@ -505,7 +636,7 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(), Error> {
     }
 
     if dest_path.is_dir() {
-        remove_directory(dest_path)
+        remove_dir_all(dest_path)
     } else if dest_path.exists() {
         remove_file(dest_path)
     } else {
@@ -514,26 +645,26 @@ fn create_soft_link(src: &str, dest: &str) -> Result<(), Error> {
 
     if let Some(path) = dest_path.parent() {
         if !path.exists() {
-            create_directory(&path)?;
+            create_dir_all(&path)?;
         }
     }
 
-    soft_link(&src_path, dest_path)
+    symlink(&src_path, dest_path)
 }
 
-pub fn create_hard_link(src: &str, dest: &str) -> Result<(), Error> {
+pub fn create_hard_link(src: &str, dest: &str) -> IOResult<()> {
     let src_path = Path::new(&src);
     let dest_path = Path::new(&dest);
 
     if !src_path.exists() {
-        err!(FilesystemError::SourceNotFound(src.into()))?
+        Err(IOErrorKind::NotFound)?
     }
 
     if !dest_path.exists() {
         if let Some(path) = dest_path.parent() {
             if !path.exists() {
                 remove_symlink(&path)?;
-                create_directory(&path)?;
+                create_dir_all(&path)?;
             }
         }
 
@@ -545,7 +676,7 @@ pub fn create_hard_link(src: &str, dest: &str) -> Result<(), Error> {
 
         if meta_src.ino() != meta_dest.ino() {
             if meta_dest.is_dir() {
-                remove_directory(dest_path)
+                remove_dir_all(dest_path)
             } else {
                 remove_file(dest_path)
             }?;
@@ -557,7 +688,16 @@ pub fn create_hard_link(src: &str, dest: &str) -> Result<(), Error> {
     }
 }
 
-fn queue_status(queue: &HashSet<&str>, compare: &str, max_chars: usize) -> String {
+#[inline]
+fn remove_symlink(path: &Path) -> IOResult<()> {
+    if let Ok(_) = fs::read_link(path) {
+        remove_file(path)?
+    }
+
+    Ok(())
+}
+
+fn queue_status(sync_type: &SyncType, queue: &HashSet<&str>, compare: &str, max_chars: usize) -> String {
     let mut char_amt = 0;
     let mut diff = 0;
     let mut string = String::new();
@@ -595,87 +735,8 @@ fn queue_status(queue: &HashSet<&str>, compare: &str, max_chars: usize) -> Strin
     }
 
     if string.len() == 0 {
-        string.push_str("Synchronizing containers..");
+        string.push_str(sync_type.progress());
     }
 
     string
-}
-
-#[derive(Debug, Clone)]
-pub enum FilesystemError {
-    SoftLinkFailure(String, IOErrorKind),
-    HardLinkFailure(String, IOErrorKind),
-    DirectoryCreationFailure(String, IOErrorKind),
-    RemovalFailure(String, IOErrorKind),
-    MetadataFailure(String, IOErrorKind),
-    SourceNotFound(String),
-    ReadSymlink(String, IOErrorKind),
-}
-
-impl Display for FilesystemError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), FmtError> {
-        match self {
-            Self::SoftLinkFailure(dir, err) => write!(fmter, "Failed to create hardlink '{dir}': {err}"),
-            Self::HardLinkFailure(dir, err) => write!(fmter, "Failed to create symlink '{dir}': {err}"),
-            Self::DirectoryCreationFailure(dir, err) => write!(fmter, "Failed to create directory tree '{dir}': {err}"),
-            Self::RemovalFailure(dir, err) => write!(fmter, "Failed to remove '{dir}': {err}"),
-            Self::MetadataFailure(dir, err) => write!(fmter, "Failed to obtain metadata '{dir}': {err}"),
-            Self::SourceNotFound(src) => write!(fmter, "Source '{src}': entity not found."),
-            Self::ReadSymlink(dir, err) => write!(fmter, "Failed to read symlink '{dir}': {err}"),
-        }
-    }
-}
-
-impl_error!(FilesystemError);
-
-fn metadata(path: &Path) -> Result<Metadata, Error> {
-    match fs::metadata(path) {
-        Ok(meta) => Ok(meta),
-        Err(err) => err!(FilesystemError::MetadataFailure(path.to_str().unwrap().into(), err.kind())),
-    }
-}
-
-fn hard_link(src_path: &Path, dest_path: &Path) -> Result<(), Error> {
-    match fs::hard_link(src_path, dest_path) {
-        Ok(_) => Ok(()),
-        Err(err) => err!(FilesystemError::HardLinkFailure(dest_path.to_str().unwrap().into(), err.kind())),
-    }
-}
-
-fn soft_link<'a>(src_path: &'a Path, dest_path: &'a Path) -> Result<(), Error> {
-    match symlink(src_path, dest_path) {
-        Ok(_) => Ok(()),
-        Err(err) => err!(FilesystemError::SoftLinkFailure(dest_path.to_str().unwrap().into(), err.kind())),
-    }
-}
-
-fn create_directory(path: &Path) -> Result<(), Error> {
-    match fs::create_dir_all(path) {
-        Ok(_) => Ok(()),
-        Err(err) => err!(FilesystemError::DirectoryCreationFailure(path.to_str().unwrap().into(), err.kind())),
-    }
-}
-
-fn remove_directory(path: &Path) -> Result<(), Error> {
-    match fs::remove_dir_all(path) {
-        Ok(_) => Ok(()),
-        Err(err) => err!(FilesystemError::RemovalFailure(path.to_str().unwrap().into(), err.kind())),
-    }
-}
-
-fn remove_file(path: &Path) -> Result<(), Error> {
-    match fs::remove_file(path) {
-        Ok(_) => Ok(()),
-        Err(err) => err!(FilesystemError::RemovalFailure(path.to_str().unwrap().into(), err.kind())),
-    }
-}
-
-fn remove_symlink(path: &Path) -> Result<(), Error> {
-    if let Ok(_) = fs::read_link(path) {
-        if let Err(err) = fs::remove_file(path) {
-            err!(FilesystemError::RemovalFailure(path.to_str().unwrap().into(), err.kind()))?
-        }
-    }
-
-    Ok(())
 }

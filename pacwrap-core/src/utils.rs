@@ -38,6 +38,7 @@ pub use arguments::Arguments;
 pub use termcontrol::TermControl;
 
 pub mod arguments;
+pub mod bytebuffer;
 pub mod prompt;
 pub mod table;
 pub mod termcontrol;
@@ -81,8 +82,19 @@ pub fn unix_time_as_seconds() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
 
+#[deprecated]
 pub fn read_le_32(vec: &Vec<u8>, pos: usize) -> u32 {
     ((vec[pos + 0] as u32) << 0) + ((vec[pos + 1] as u32) << 8) + ((vec[pos + 2] as u32) << 16) + ((vec[pos + 3] as u32) << 24)
+}
+
+#[deprecated]
+pub fn write_le_32(buf: &mut Vec<u8>, value: u32) {
+    buf.extend(vec![
+        (value >> 0) as u8,
+        (value >> 8) as u8,
+        (value >> 16) as u8,
+        (value >> 24) as u8,
+    ]);
 }
 
 pub fn check_root() -> Result<()> {

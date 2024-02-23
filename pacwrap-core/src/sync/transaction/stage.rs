@@ -99,11 +99,10 @@ impl Transaction for Stage {
     }
 }
 
-fn check_keyring(ag: &TransactionAggregator, handle: &mut TransactionHandle, inshandle: &ContainerHandle) -> bool {
-    match inshandle.metadata().container_type() {
-        Base => !ag.is_keyring_synced() && handle.alpm().trans_add().iter().find(|a| a.name() == "archlinux-keyring").is_some(),
-        _ => false,
-    }
+fn check_keyring(ag: &TransactionAggregator, handle: &TransactionHandle, inshandle: &ContainerHandle) -> bool {
+    inshandle.metadata().container_type() == &Base
+        && !ag.is_keyring_synced()
+        && handle.alpm().trans_add().iter().find(|a| a.name() == "archlinux-keyring").is_some()
 }
 
 fn next_state(state: &TransactionState, option: bool) -> Result<TransactionState> {

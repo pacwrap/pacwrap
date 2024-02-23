@@ -18,13 +18,11 @@
  */
 
 use std::{
-    fmt::{Display, Error as FmtError, Formatter},
     fs::{self, File},
     hash::{Hash, Hasher},
-    io::{BufReader, ErrorKind as IOErrorKind, Read, Seek},
+    io::{BufReader, Read, Seek},
     path::Path,
     process::exit,
-    result::Result as StdResult,
 };
 
 use indexmap::IndexSet;
@@ -39,11 +37,10 @@ use crate::{
     config::ContainerHandle,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     err,
-    impl_error,
-    utils::{print_warning, read_le_32},
+    utils::{bytebuffer::ByteBuffer, print_warning},
     Error,
+    ErrorGeneric,
     ErrorKind,
-    ErrorTrait,
     Result,
 };
 
@@ -57,25 +54,6 @@ lazy_static! {
         Err(e) => exit(e.error()),
     };
 }
-
-#[derive(Debug, Clone)]
-pub enum SchemaError {
-    CopyFailure(String, IOErrorKind),
-    RemovalFailure(String, IOErrorKind),
-    DeserializationError(String, String),
-}
-
-impl Display for SchemaError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> StdResult<(), FmtError> {
-        match self {
-            Self::CopyFailure(dir, err) => write!(fmter, "Failed to copy '{dir}': {err}"),
-            Self::RemovalFailure(dir, err) => write!(fmter, "Failed to remove '{dir}': {err}"),
-            Self::DeserializationError(dir, err) => write!(fmter, "Schema deserialization failure '{dir}': {err}"),
-        }
-    }
-}
-
-impl_error!(SchemaError);
 
 pub enum SchemaStatus {
     UpToDate,
@@ -168,30 +146,24 @@ pub fn extract(inshandle: &ContainerHandle, old_schema: &Option<SchemaState>) ->
     }
 
     for entry in access_archive(ARCHIVE_PATH)?.entries().unwrap() {
-        let mut entry = match entry {
-            Ok(entry) => entry,
-            Err(error) => err!(ErrorKind::IOError(ARCHIVE_PATH.into(), error.kind()))?,
-        };
-        let path = match entry.path() {
-            Ok(path) => path.to_string_lossy().to_string(),
-            Err(err) => err!(ErrorKind::IOError(ARCHIVE_PATH.into(), err.kind()))?,
-        };
+        let mut entry = entry.prepend_io(|| ARCHIVE_PATH.into())?;
+        let path = entry.path().prepend_io(|| ARCHIVE_PATH.into())?.to_string_lossy().to_string();
         let dest_path = format!("{}/{}", inshandle.vars().root(), path);
 
-        if let Err(error) = entry.unpack(&dest_path) {
-            err!(ErrorKind::IOError(dest_path, error.kind()))?
+        if let Err(err) = entry.unpack(&dest_path).prepend_io(|| ARCHIVE_PATH.into()) {
+            err.warn();
         }
     }
 
-    if let Err(err) = fs::copy(env!("PACWRAP_DIST_META"), &meta_path) {
-        err!(ErrorKind::IOError(meta_path, err.kind()))?
+    if let Err(err) = fs::copy(env!("PACWRAP_DIST_META"), &meta_path).prepend_io(|| ARCHIVE_PATH.into()) {
+        err.warn();
     }
 
     Ok(())
 }
 
 pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
-    let mut header_buffer = vec![0; 16];
+    let mut header = ByteBuffer::with_capacity(16).read();
     let schema: &str = &format!("{}/{}", inshandle.vars().root(), SCHEMA_META);
     let mut file = match File::open(&schema) {
         Ok(file) => file,
@@ -204,27 +176,23 @@ pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
         }
     };
 
-    if let Err(error) = file.read_exact(&mut header_buffer) {
-        err!(ErrorKind::IOError(schema.into(), error.kind()))?
-    }
+    file.read_exact(header.as_slice_mut()).prepend_io(|| schema.into())?;
 
-    let magic = read_le_32(&header_buffer, 0);
-    let major: (u32, u32) = (*VERSION_MAJOR, read_le_32(&header_buffer, 4));
-    let minor: (u32, u32) = (*VERSION_MINOR, read_le_32(&header_buffer, 8));
-    let patch: (u32, u32) = (*VERSION_PATCH, read_le_32(&header_buffer, 12));
+    let magic = header.read_le_32();
+    let major: (u32, u32) = (*VERSION_MAJOR, header.read_le_32());
+    let minor: (u32, u32) = (*VERSION_MINOR, header.read_le_32());
+    let patch: (u32, u32) = (*VERSION_PATCH, header.read_le_32());
 
-    if let Err(error) = file.rewind() {
-        err!(ErrorKind::IOError(schema.into(), error.kind()))?
-    }
+    file.rewind().prepend_io(|| schema.into())?;
 
     if magic != MAGIC_NUMBER {
         print_warning(&format!("'{}': Magic number mismatch ({MAGIC_NUMBER} != {magic})", schema));
         Ok(OutOfDate(None))
     } else if major.0 != major.1 || minor.0 != minor.1 || patch.0 != patch.1 {
-        Ok(OutOfDate(match bincode::deserialize_from::<&File, SchemaState>(&file) {
-            Ok(ver) => Some(ver),
-            Err(err) => err!(SchemaError::DeserializationError(schema.into(), err.to_string()))?,
-        }))
+        Ok(OutOfDate(Some(
+            bincode::deserialize_from::<&File, SchemaState>(&file)
+                .prepend(|| format!("Schema deserialization failure '{schema}'"))?,
+        )))
     } else {
         Ok(UpToDate)
     }
@@ -247,50 +215,28 @@ pub fn serialize_path(from: &str, dest: &str) {
 
 fn deserialize() -> Result<SchemaState> {
     let schema = env!("PACWRAP_DIST_META");
-    let file = match File::open(schema) {
-        Ok(file) => file,
-        Err(err) => err!(ErrorKind::IOError(schema.into(), err.kind()))?,
-    };
+    let file = File::open(schema).prepend_io(|| schema.into())?;
 
-    match bincode::deserialize_from::<&File, SchemaState>(&file) {
-        Ok(ver) => Ok(ver),
-        Err(err) => err!(SchemaError::DeserializationError(schema.into(), err.to_string())),
-    }
+    Ok(bincode::deserialize_from::<&File, SchemaState>(&file).prepend(|| format!("Schema deserialization failure '{schema}'"))?)
 }
 
 fn access_archive<'a>(path: &str) -> Result<Archive<Decoder<'a, BufReader<File>>>> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(err) => err!(ErrorKind::IOError(path.into(), err.kind()))?,
-    };
-    let file = match Decoder::new(file) {
-        Ok(file) => file,
-        Err(err) => err!(ErrorKind::IOError(path.into(), err.kind()))?,
-    };
-
-    Ok(Archive::new(file))
+    Ok(Archive::new(Decoder::new(File::open(path).prepend_io(|| path.into())?).prepend_io(|| path.into())?))
 }
 
 fn remove_file(path: String) -> Result<()> {
-    let pacnew_path = format!("{}.pacnew", &path);
-
-    match Path::new(&pacnew_path).exists() {
-        false => match fs::remove_file(&path) {
-            Ok(_) => Ok(()),
-            Err(err) => err!(SchemaError::RemovalFailure(path, err.kind())),
-        },
-        true => match fs::copy(&pacnew_path, &path) {
-            Ok(_) => Ok(()),
-            Err(err) => err!(SchemaError::CopyFailure(pacnew_path, err.kind())),
-        },
+    if Path::new(&format!("{}.pacnew", &path)).exists() {
+        fs::remove_file(&path).prepend(|| format!("Failed to remove '{path}'"))?;
+    } else {
+        fs::copy(&format!("{}.pacnew", &path), &path).prepend(|| format!("Failed to copy '{path}'"))?;
     }
+
+    Ok(())
 }
 
 fn remove_symlink(path: String) -> Result<()> {
     if let Ok(_) = fs::read_link(&path) {
-        if let Err(err) = fs::remove_file(&path) {
-            err!(SchemaError::RemovalFailure(path, err.kind()))?
-        }
+        fs::remove_file(&path).prepend(|| format!("Failed to remove symlink '{path}'"))?;
     }
 
     Ok(())
@@ -301,15 +247,9 @@ fn remove_directory(path: String) -> Result<()> {
         return Ok(());
     }
 
-    match fs::remove_dir(&path) {
-        Ok(_) => Ok(()),
-        Err(err) => err!(SchemaError::RemovalFailure(path, err.kind())),
-    }
+    fs::remove_dir(&path).prepend(|| format!("Failed to remove directory '{path}'"))
 }
 
 fn is_directory_occupied(path: &str) -> Result<bool> {
-    match fs::read_dir(path) {
-        Ok(dir) => Ok(dir.count() > 0),
-        Err(err) => err!(ErrorKind::IOError(path.into(), err.kind()))?,
-    }
+    Ok(fs::read_dir(path).prepend_io(|| path.into())?.count() > 0)
 }

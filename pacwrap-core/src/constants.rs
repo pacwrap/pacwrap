@@ -68,6 +68,7 @@ lazy_static! {
     pub static ref COLORTERM: &'static str = env_opt("COLORTERM");
     pub static ref LANG: &'static str = env_default("LANG", "en_US.UTF-8");
     pub static ref WAYLAND_DISPLAY: &'static str = env_opt("WAYLAND_DISPLAY");
+    pub static ref EDITOR: &'static str = env_default("EDITOR", "vi");
     pub static ref X11_DISPLAY: &'static str = env_opt("DISPLAY");
     pub static ref XAUTHORITY: &'static str = env_opt("XAUTHORITY");
     pub static ref CONTAINER_DIR: &'static str = format_str!("{}/root/", *DATA_DIR);

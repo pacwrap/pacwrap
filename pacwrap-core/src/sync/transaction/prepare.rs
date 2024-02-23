@@ -116,12 +116,9 @@ impl Transaction for Prepare {
 
                 match ag.action() {
                     Remove(..) => Ok(Complete(updated)),
-                    Upgrade(..) => Ok(match ag.deps_updated(inshandle) {
-                        true => match handle.is_sync_req(TransactionMode::Foreign) {
-                            Required => StageForeign,
-                            NotRequired => Stage,
-                        },
-                        false => Stage,
+                    Upgrade(..) => Ok(match handle.is_sync_req(TransactionMode::Foreign) {
+                        Required => StageForeign,
+                        NotRequired => Stage,
                     }),
                 }
             }

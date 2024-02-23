@@ -44,3 +44,6 @@ rayon = "1.7.0"
 # CLI libraries
 dialoguer = "0.10.4"
 indicatif = "0.17.5"
+
+#Cryptography
+sha2 = "0.10.8"

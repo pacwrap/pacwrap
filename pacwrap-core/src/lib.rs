@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use crate::constants::{BOLD, RESET};
 
@@ -48,7 +48,7 @@ pub enum ErrorKind {
 }
 
 impl Display for ErrorKind {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::DependencyNotFound(dep, ins) =>
                 write!(fmter, "Instance '{}{}{}': Dependency {}{}{} not found.", *BOLD, ins, *RESET, *BOLD, dep, *RESET),

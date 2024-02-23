@@ -18,10 +18,9 @@
  */
 
 use std::{
-    fmt::{Display, Error as FmtError, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     os::{fd::AsRawFd, unix::process::ExitStatusExt},
     process::{Child, Command, ExitStatus, Stdio},
-    result::Result as StdResult,
 };
 
 use command_fds::{CommandFdExt, FdMapping};
@@ -83,7 +82,7 @@ pub enum ExecutionError {
 }
 
 impl Display for ExecutionError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> StdResult<(), FmtError> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::InvalidPathVar(dir, err) => write!(fmter, "Invalid {}PATH{} variable '{dir}': {err}", *BOLD, *RESET),
             Self::ExecutableUnavailable(exec) => write!(fmter, "'{}': Not available in container {}PATH{}.", exec, *BOLD, *RESET),

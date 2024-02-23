@@ -30,7 +30,7 @@ use crate::{
     log::Logger,
     sync::{
         self,
-        filesystem::FileSystemStateSync,
+        filesystem::{invalid_fs_states, FileSystemStateSync},
         transaction::{Transaction, TransactionFlags, TransactionHandle, TransactionMetadata, TransactionState, TransactionType},
         SyncError,
     },
@@ -93,21 +93,30 @@ impl<'a> TransactionAggregator<'a> {
         };
         let downstream = self.cache.filter(vec![ContainerType::Aggregate]);
         let upstream = self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]);
-        let containers = (upstream, downstream);
+
+        if invalid_fs_states(&upstream) && downstream.len() > 0 {
+            let linker = self.fs_sync().unwrap();
+
+            linker.refresh_state();
+            linker.prepare(upstream.len());
+            linker.engage(&upstream)?;
+            linker.finish();
+        }
 
         if let Some(ins) = target {
             if let ContainerType::Base | ContainerType::Slice = ins.metadata().container_type() {
                 self.transact(ins)?;
             }
         } else if upgrade {
-            self.transaction(&containers.0)?;
+            self.transaction(&upstream)?;
         }
 
         if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
-            if containers.1.len() > 0 {
+            if downstream.len() > 0 {
                 let file = self.cache.registered();
                 let linker = self.fs_sync().unwrap();
 
+                linker.filesystem_state();
                 linker.prepare(file.len());
                 linker.engage(&file)?;
                 linker.finish();
@@ -121,7 +130,7 @@ impl<'a> TransactionAggregator<'a> {
                 self.transact(ins)?;
             }
         } else if upgrade {
-            self.transaction(&containers.1)?;
+            self.transaction(&downstream)?;
         }
 
         println!("{} Transaction complete.", *ARROW_GREEN);
@@ -201,17 +210,6 @@ impl<'a> TransactionAggregator<'a> {
         Ok(())
     }
 
-    pub fn sync_filesystem(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
-        if let ContainerType::Aggregate = inshandle.metadata().container_type() {
-            return Ok(());
-        }
-
-        let fs_sync = self.fs_sync().unwrap();
-
-        fs_sync.prepare_single();
-        fs_sync.engage(&vec![inshandle.vars().instance()])
-    }
-
     pub fn cache(&self) -> &ContainerCache {
         &self.cache
     }
@@ -222,16 +220,6 @@ impl<'a> TransactionAggregator<'a> {
 
     pub fn updated(&self, inshandle: &ContainerHandle<'a>) -> bool {
         self.updated.contains(&inshandle.vars().instance())
-    }
-
-    pub fn deps_updated(&self, inshandle: &ContainerHandle<'a>) -> bool {
-        for ins in inshandle.metadata().dependencies() {
-            if self.updated.contains(&ins) {
-                return true;
-            }
-        }
-
-        false
     }
 
     pub fn is_keyring_synced(&self) -> bool {
