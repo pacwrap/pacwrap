@@ -225,9 +225,12 @@ impl<'a> FileSystemStateSync<'a> {
                         continue;
                     }
 
+                    if let SyncType::Filesystem = self.sync_type {
+                        self.state_map.insert(dep.clone(), fs_state.clone());  
+                    }
+
                     let tx = write_chan.0.clone();
 
-                    self.state_map.insert(dep.clone(), fs_state.clone());
                     self.pool().unwrap().spawn(move || {
                         if let Err(err) = serialize(dep, fs_state) {
                             err.warn();
@@ -382,6 +385,8 @@ impl<'a> FileSystemStateSync<'a> {
             progress.finish();
         }
 
+        self.queued.drain();
+        self.linked.drain();
         self.pool = None;
         self.progress = None;
         self.max_chars = 0;
