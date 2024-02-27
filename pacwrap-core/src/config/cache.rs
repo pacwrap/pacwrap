@@ -17,24 +17,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashMap, fs::read_dir};
+use std::fs::read_dir;
+
+use indexmap::IndexMap;
 
 use crate::{
     config::{self, ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables},
-    constants::{CONTAINER_DIR, DATA_DIR},
+    constants::CONTAINER_DIR,
     err,
     error::*,
     ErrorKind,
 };
 
 pub struct ContainerCache<'a> {
-    instances: HashMap<&'a str, ContainerHandle<'a>>,
+    instances: IndexMap<&'a str, ContainerHandle<'a>>,
 }
 
 impl<'a> ContainerCache<'a> {
     pub fn new() -> Self {
         Self {
-            instances: HashMap::new(),
+            instances: IndexMap::new(),
         }
     }
 
@@ -155,24 +157,10 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
 }
 
 fn roots<'a>() -> Result<Vec<&'a str>> {
-    match read_dir(*CONTAINER_DIR) {
-        Ok(dir) => Ok(dir
-            .filter(|f| match f {
-                Ok(f) => match f.metadata() {
-                    Ok(meta) => meta.is_dir() | meta.is_symlink(),
-                    Err(_) => false,
-                },
-                Err(_) => false,
-            })
-            .map(|s| match s {
-                Ok(f) => match f.file_name().to_str() {
-                    Some(f) => f.to_owned().leak(),
-                    None => "",
-                },
-                Err(_) => "",
-            })
-            .filter(|e| !e.is_empty())
-            .collect()),
-        Err(error) => err!(ErrorKind::IOError(format!("{}/root", *DATA_DIR), error.kind())),
-    }
+    Ok(read_dir(*CONTAINER_DIR)
+        .prepend_io(|| CONTAINER_DIR.to_string())?
+        .filter(|f| f.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_dir() | m.is_symlink())))
+        .map(|s| s.unwrap().file_name().to_str().unwrap_or_default().to_string().leak() as &'a str)
+        .filter(|e| !e.is_empty())
+        .collect())
 }

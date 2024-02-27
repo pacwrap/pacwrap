@@ -24,10 +24,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use nix::unistd::isatty;
-
 use crate::{
-    constants::{BOLD_RED, BOLD_YELLOW, COLORTERM, GID, RESET, TERM, UID},
+    constants::{BOLD_RED, BOLD_YELLOW, GID, RESET, UID},
     err,
     Error,
     ErrorKind,
@@ -36,7 +34,9 @@ use crate::{
 
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
+pub use ansi::{is_color_terminal, is_truecolor_terminal};
 
+pub mod ansi;
 pub mod arguments;
 pub mod bytebuffer;
 pub mod prompt;
@@ -63,19 +63,6 @@ pub fn check_socket(socket: &String) -> bool {
         Ok(_) => true,
         Err(_) => false,
     }
-}
-
-pub fn is_color_terminal() -> bool {
-    let value = *TERM;
-    let is_dumb = !value.is_empty() && value.to_lowercase() != "dumb";
-
-    is_dumb && isatty(0).is_ok() && isatty(1).is_ok()
-}
-
-pub fn is_truecolor_terminal() -> bool {
-    let value = COLORTERM.to_lowercase();
-
-    is_color_terminal() && value == "truecolor" || value == "24bit"
 }
 
 pub fn unix_time_as_seconds() -> u64 {

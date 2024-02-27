@@ -43,10 +43,9 @@ use pacwrap_core::{
         ContainerType::Slice,
         Dbus,
     },
-    constants::{self, BWRAP_EXECUTABLE, DBUS_PROXY_EXECUTABLE, DBUS_SOCKET, DEFAULT_PATH, XDG_RUNTIME_DIR},
+    constants::{BWRAP_EXECUTABLE, DBUS_PROXY_EXECUTABLE, DBUS_SOCKET, DEFAULT_PATH, IS_COLOR_TERMINAL, XDG_RUNTIME_DIR},
     err,
     error,
-    error::*,
     exec::{
         args::{Argument, ExecutionArgs},
         fakeroot_container,
@@ -64,7 +63,11 @@ use pacwrap_core::{
         env_var,
         TermControl,
     },
+    Error,
+    ErrorGeneric,
     ErrorKind,
+    ErrorTrait,
+    Result,
 };
 
 static SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
@@ -175,7 +178,7 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
         false => error!(ExecError::ConsoleSessionRetention).warn(),
     }
 
-    match shell && *constants::IS_COLOR_TERMINLAL {
+    match shell && *IS_COLOR_TERMINAL {
         true => exec.env("TERM", "xterm"),
         false => exec.env("TERM", "dumb"),
     }
@@ -278,7 +281,7 @@ fn execute_fakeroot(ins: &ContainerHandle, arguments: Option<Vec<&str>>, verbosi
 }
 
 fn cleanup() -> Result<()> {
-    clean_up_socket(&*DBUS_SOCKET)?;
+    remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
     Ok(())
 }
 
@@ -341,7 +344,7 @@ fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) ->
 fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> Result<bool> {
     if increment == &200 {
         process_child.kill().ok();
-        clean_up_socket(&*DBUS_SOCKET)?;
+        remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
         err!(ExecutionError::SocketTimeout(socket.into()))?
     }
 
@@ -353,15 +356,5 @@ fn create_placeholder(path: &str) -> Result<()> {
     match File::create(path) {
         Ok(file) => Ok(drop(file)),
         Err(error) => err!(ErrorKind::IOError(path.into(), error.kind())),
-    }
-}
-
-fn clean_up_socket(path: &str) -> Result<()> {
-    match remove_file(path) {
-        Ok(_) => Ok(()),
-        Err(error) => match error.kind() {
-            std::io::ErrorKind::NotFound => Ok(()),
-            _ => err!(ErrorKind::IOError(path.into(), error.kind()))?,
-        },
     }
 }

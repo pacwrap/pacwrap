@@ -226,7 +226,7 @@ impl<'a> FileSystemStateSync<'a> {
                     }
 
                     if let SyncType::Filesystem = self.sync_type {
-                        self.state_map.insert(dep.clone(), fs_state.clone());  
+                        self.state_map.insert(dep.clone(), fs_state.clone());
                     }
 
                     let tx = write_chan.0.clone();
@@ -251,11 +251,12 @@ impl<'a> FileSystemStateSync<'a> {
         let mut header = ByteBuffer::with_capacity(8).read();
         let mut file = match File::open(path) {
             Ok(file) => file,
-            Err(err) => if let IOErrorKind::NotFound = err.kind() {
-                return Ok(None);
-            } else {
-                return Err(err).prepend_io(|| path.into());
-            }
+            Err(err) =>
+                if let IOErrorKind::NotFound = err.kind() {
+                    return Ok(None);
+                } else {
+                    return Err(err).prepend_io(|| path.into());
+                },
         };
 
         file.read_exact(header.as_slice_mut()).prepend_io(|| path.into())?;
@@ -276,7 +277,7 @@ impl<'a> FileSystemStateSync<'a> {
         } else {
             let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path.into())?;
 
-            if ! checksum_valid {
+            if !checksum_valid {
                 err!(FilesystemStateError::ChecksumMismatch(path.into()))?
             }
 

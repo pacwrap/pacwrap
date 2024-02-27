@@ -69,7 +69,7 @@ pub enum TransactionType {
     Remove(bool, bool, bool),
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TransactionMode {
     Foreign,
     Local,
@@ -118,6 +118,7 @@ pub struct TransactionHandle<'a> {
 pub struct TransactionMetadata<'a> {
     foreign_pkgs: HashSet<String>,
     resident_pkgs: HashSet<String>,
+    ignored_pkgs: HashSet<String>,
     held_pkgs: HashSet<String>,
     queue: Vec<Cow<'a, str>>,
     mode: TransactionMode,
@@ -219,6 +220,7 @@ impl<'a> TransactionMetadata<'a> {
             foreign_pkgs: HashSet::new(),
             resident_pkgs: HashSet::new(),
             held_pkgs: HashSet::new(),
+            ignored_pkgs: HashSet::new(),
             mode: TransactionMode::Local,
             queue: queue.iter().map(|q| (*q).into()).collect::<Vec<_>>(),
             flags: (0, 0),
@@ -394,13 +396,11 @@ impl<'a> TransactionHandle<'a> {
                 for pkg in LocalDependencyResolver::new(alpm, &ignored, trans_type)
                     .enumerate(&queue)?
                     .iter()
-                    .filter_map(|a| match self.meta.held_pkgs.contains(a.name()) {
-                        false => Some(*a),
-                        true => None,
-                    })
+                    .filter(|a| !self.meta.held_pkgs.contains(a.name()))
+                    .map(|a| *a)
                     .collect::<Vec<Package<'_>>>()
                 {
-                    if !ignored.contains(pkg.name()) && config.alpm().held().contains(&pkg.name()) {
+                    if !self.agent && !ignored.contains(pkg.name()) && config.alpm().held().contains(&pkg.name()) {
                         if let Err(_) =
                             prompt("::", format!("Target package {}{}{} is held. Remove it?", *BOLD, pkg.name(), *RESET), false)
                         {
@@ -419,17 +419,22 @@ impl<'a> TransactionHandle<'a> {
 
                 let (deps, packages) = DependencyResolver::new(alpm, &ignored).enumerate(&queue)?;
 
-                for pkg in packages {
-                    if let (None, TransactionMode::Foreign) = (self.meta.foreign_pkgs.get(pkg.name()), self.meta.mode) {
-                        continue;
-                    }
-
-                    if config.alpm().ignored().contains(&pkg.name()) {
+                for pkg in packages
+                    .iter()
+                    .filter(|a| {
+                        !self.meta.ignored_pkgs.contains(a.name())
+                            && !(self.meta.mode == TransactionMode::Foreign && self.meta.foreign_pkgs.contains(a.name()))
+                    })
+                    .map(|a| *a)
+                    .collect::<Vec<Package<'_>>>()
+                {
+                    if !self.agent && config.alpm().ignored().contains(&pkg.name()) {
                         if let Err(_) = prompt(
                             "::",
                             format!("Target package {}{}{} is ignored. Upgrade it?", *BOLD, pkg.name(), *RESET),
                             false,
                         ) {
+                            self.meta.ignored_pkgs.insert(pkg.name().into());
                             continue;
                         }
                     }

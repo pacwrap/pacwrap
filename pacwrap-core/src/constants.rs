@@ -24,7 +24,7 @@ use nix::unistd::{getegid, geteuid};
 
 use crate::{
     error,
-    utils::{is_color_terminal, is_truecolor_terminal, unix_time_as_seconds},
+    utils::{ansi::*, unix_time_as_seconds},
     Error,
     ErrorKind,
 };
@@ -81,7 +81,7 @@ lazy_static! {
     pub static ref WAYLAND_SOCKET: String = format!("{}{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
     pub static ref LOG_LOCATION: &'static str = format_str!("{}/pacwrap.log", *DATA_DIR);
     pub static ref UNIX_TIMESTAMP: u64 = unix_time_as_seconds();
-    pub static ref IS_COLOR_TERMINLAL: bool = is_color_terminal();
+    pub static ref IS_COLOR_TERMINAL: bool = is_color_terminal();
     pub static ref IS_TRUECOLOR_TERMINLAL: bool = is_truecolor_terminal();
     pub static ref BOLD: &'static str = bold();
     pub static ref RESET: &'static str = reset();
@@ -98,126 +98,7 @@ lazy_static! {
     pub static ref ARROW_CYAN: &'static str = arrow_cyan();
     pub static ref ARROW_RED: &'static str = arrow_red();
     pub static ref ARROW_GREEN: &'static str = arrow_green();
-}
-
-fn yellow() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[33m"
-    } else {
-        ""
-    }
-}
-
-fn arrow_red() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;31m->[0m"
-    } else {
-        "->"
-    }
-}
-
-fn arrow_cyan() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;36m->[0m"
-    } else {
-        "->"
-    }
-}
-
-fn arrow_green() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;32m->[0m"
-    } else {
-        "->"
-    }
-}
-
-fn bar_red() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;31m::[0m"
-    } else {
-        "::"
-    }
-}
-
-fn bar_green() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;32m::[0m"
-    } else {
-        "::"
-    }
-}
-
-fn bar_cyan() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;36m::[0m"
-    } else {
-        "::"
-    }
-}
-
-fn dim() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[2m"
-    } else {
-        ""
-    }
-}
-
-fn bold() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1m"
-    } else {
-        ""
-    }
-}
-
-fn bold_white() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;37m"
-    } else {
-        ""
-    }
-}
-
-fn bold_red() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;31m"
-    } else {
-        ""
-    }
-}
-
-fn bold_yellow() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;33m"
-    } else {
-        ""
-    }
-}
-
-fn bold_green() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[1;32m"
-    } else {
-        ""
-    }
-}
-
-fn checkmark() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        " [1;32m✓[0m"
-    } else {
-        " ✓"
-    }
-}
-
-fn reset() -> &'static str {
-    if *IS_COLOR_TERMINLAL {
-        "[0m"
-    } else {
-        ""
-    }
+    pub static ref UNDERLINE: &'static str = underline();
 }
 
 fn env(env: &'static str) -> &'static str {

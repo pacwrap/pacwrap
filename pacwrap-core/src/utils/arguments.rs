@@ -69,13 +69,7 @@ impl Display for InvalidArgument {
 impl<'a> Arguments<'a> {
     pub fn new() -> Self {
         Self {
-            inner: env::args()
-                .skip(1)
-                .map(|a| {
-                    let a: &str = a.leak();
-                    a
-                })
-                .collect::<Vec<_>>(),
+            inner: env::args().skip(1).map(|a| a.leak() as &'a str).collect::<Vec<_>>(),
             operands: Vec::new(),
             idx: 0,
             cur: 0,

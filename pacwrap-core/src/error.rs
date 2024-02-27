@@ -19,10 +19,9 @@
 
 use std::{
     any::Any,
-    fmt::{Debug, Display, Formatter},
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
     process::exit,
     result::Result as StdResult,
-    fmt::Result as FmtResult,
 };
 
 use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
