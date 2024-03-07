@@ -32,9 +32,9 @@ use crate::{
     Result,
 };
 
+pub use ansi::{is_color_terminal, is_truecolor_terminal};
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
-pub use ansi::{is_color_terminal, is_truecolor_terminal};
 
 pub mod ansi;
 pub mod arguments;

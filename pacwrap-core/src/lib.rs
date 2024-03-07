@@ -56,7 +56,7 @@ impl Display for ErrorKind {
             Self::EnvVarUnset(var) => write!(fmter, "${}{var}{} is unset.", *BOLD, *RESET),
             Self::ProcessInitFailure(exec, err) => write!(fmter, "Unable to initialize '{exec}': {err}"),
             Self::ProcessWaitFailure(exec, err) => write!(fmter, "Unable to wait on '{exec}': {err}"),
-            Self::InstanceNotFound(ins) => write!(fmter, "Instance {}{ins}{} not found.", *BOLD, *RESET),
+            Self::InstanceNotFound(ins) => write!(fmter, "Container '{}{ins}{}' not found.", *BOLD, *RESET),
             Self::IOError(ins, error) => write!(fmter, "'{ins}': {error}"),
             Self::ThreadPoolUninitialized => write!(fmter, "Threadpool uninitialized"),
             Self::LinkerUninitialized => write!(fmter, "Filesystem synchronization structure is uninitialized."),

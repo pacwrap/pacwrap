@@ -22,12 +22,14 @@ use std::fs::read_dir;
 use indexmap::IndexMap;
 
 use crate::{
-    config::{self, ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables},
-    constants::CONTAINER_DIR,
+    config::{provide_handle, provide_new_handle, ConfigError, ContainerHandle, ContainerType},
+    constants::{CONFIG_DIR, CONTAINER_DIR},
     err,
     error::*,
     ErrorKind,
 };
+
+use super::{handle, ContainerVariables};
 
 pub struct ContainerCache<'a> {
     instances: IndexMap<&'a str, ContainerHandle<'a>>,
@@ -51,27 +53,19 @@ impl<'a> ContainerCache<'a> {
             }
         }
 
-        let deps = deps.iter().map(|a| (*a).into()).collect();
-        let handle = match config::provide_new_handle(ins) {
-            Ok(mut handle) => {
-                handle.metadata_mut().set(deps, vec![]);
-                handle
-            }
-            Err(err) => match err.downcast::<ConfigError>() {
-                Ok(error) => match error {
-                    ConfigError::ConfigNotFound(_) => {
-                        let vars = ContainerVariables::new(ins);
-                        let cfg = Container::new(instype, deps, vec![]);
+        Ok(self.register(ins, provide_new_handle(ins, instype, deps.iter().map(|a| (*a).into()).collect())?))
+    }
 
-                        ContainerHandle::new(cfg, vars)
-                    }
-                    _ => Err(err)?,
-                },
-                _ => Err(err)?,
-            },
-        };
+    pub fn replace(&mut self, ins: &'a str, handle: ContainerHandle<'a>) -> Result<()> {
+        Ok(self.register(ins, handle.default_vars()))
+    }
 
-        Ok(self.register(ins, handle))
+    pub fn add_handle(&mut self, ins: &'a str, handle: ContainerHandle<'a>) -> Result<()> {
+        if let Some(_) = self.instances.get(ins) {
+            err!(ConfigError::AlreadyExists(ins.into()))?
+        }
+
+        Ok(self.register(ins, handle.default_vars()))
     }
 
     fn map(&mut self, ins: &'a str) -> Result<()> {
@@ -81,7 +75,7 @@ impl<'a> ContainerCache<'a> {
 
         Ok(self.register(
             ins,
-            match config::provide_handle(ins) {
+            match provide_handle(ins) {
                 Ok(ins) => ins,
                 Err(error) => {
                     error.warn();
@@ -107,12 +101,24 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().map(|a| a.1).collect()
     }
 
-    pub fn filter_handle(&'a self, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+    pub fn filter_target(&'a self, target: &Vec<&'a str>, filter: Vec<ContainerType>) -> Vec<&'a str> {
         self.instances
             .iter()
-            .filter(|a| filter.contains(a.1.metadata().container_type()))
+            .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
+            .map(|a| *a.0)
+            .collect()
+    }
+
+    pub fn filter_target_handle(&'a self, target: &Vec<&'a str>, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+        self.instances
+            .iter()
+            .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
             .map(|a| a.1)
             .collect()
+    }
+
+    pub fn count(&self, filter: Vec<ContainerType>) -> usize {
+        self.instances.iter().filter(|a| filter.contains(a.1.metadata().container_type())).count()
     }
 
     pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'a str> {
@@ -120,6 +126,14 @@ impl<'a> ContainerCache<'a> {
             .iter()
             .filter(|a| filter.contains(a.1.metadata().container_type()))
             .map(|a| *a.0)
+            .collect()
+    }
+
+    pub fn filter_handle(&'a self, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+        self.instances
+            .iter()
+            .filter(|a| filter.contains(a.1.metadata().container_type()))
+            .map(|a| a.1)
             .collect()
     }
 
@@ -152,15 +166,43 @@ pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
     Ok(cache)
 }
 
-pub fn populate<'a>() -> Result<ContainerCache<'a>> {
-    populate_from(&roots()?)
+pub fn populate_nonexistant_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
+    let mut cache = ContainerCache::new();
+
+    for name in vec {
+        cache.add_handle(&name, handle(ContainerVariables::new(name))?)?;
+    }
+
+    Ok(cache)
 }
 
-fn roots<'a>() -> Result<Vec<&'a str>> {
-    Ok(read_dir(*CONTAINER_DIR)
-        .prepend_io(|| CONTAINER_DIR.to_string())?
-        .filter(|f| f.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_dir() | m.is_symlink())))
-        .map(|s| s.unwrap().file_name().to_str().unwrap_or_default().to_string().leak() as &'a str)
-        .filter(|e| !e.is_empty())
-        .collect())
+pub fn populate<'a>() -> Result<ContainerCache<'a>> {
+    populate_from(
+        &read_dir(*CONTAINER_DIR)
+            .prepend_io(|| CONTAINER_DIR.to_string())?
+            .filter(|e| e.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_dir() | m.is_symlink())))
+            .filter_map(|e| match e.unwrap().file_name().to_str() {
+                Some(str) => Some(str.to_string().leak() as &'a str),
+                None => None,
+            })
+            .collect(),
+    )
+}
+
+pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
+    populate_nonexistant_from(
+        &read_dir(&format!("{}/container", *CONFIG_DIR))
+            .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
+            .filter(|e| e.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_file() && !m.is_symlink())))
+            .filter_map(|e| {
+                let file = e.unwrap().file_name();
+                let file = file.to_str().unwrap_or_default();
+
+                match file.ends_with(".yml") {
+                    true => Some(file.to_string().leak().split_at(file.len() - 4).0 as &'a str),
+                    false => None,
+                }
+            })
+            .collect(),
+    )
 }

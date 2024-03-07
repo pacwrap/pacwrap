@@ -56,7 +56,7 @@ pub fn remove(mut args: &mut Arguments) -> Result<()> {
 
 fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, log: &'a mut Logger) -> Result<()> {
     let cache = cache::populate()?;
-    let mut action_flags = TransactionFlags::NONE;
+    let mut flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
     let mut queue: HashMap<&'a str, Vec<&'a str>> = HashMap::new();
     let mut current_target = None;
@@ -74,11 +74,11 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
             | Op::Short('c')
             | Op::Short('s')
             | Op::Short('t') => continue,
-            Op::Long("dbonly") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
-            Op::Long("noconfirm") => action_flags = action_flags | TransactionFlags::NO_CONFIRM,
-            Op::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
-            Op::Short('p') | Op::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW,
-            Op::Short('f') | Op::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC,
+            Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
+            Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
+            Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
+            Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
+            Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
             Op::ShortPos('t', target) | Op::LongPos("target", target) => {
                 cache.get_instance(target)?;
                 current_target = Some(target);
@@ -101,5 +101,9 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
         err!(InvalidArgument::TargetUnspecified)?
     }
 
-    Ok(TransactionAggregator::new(&cache, queue, log, action_flags, action_type, current_target).aggregate()?)
+    Ok(TransactionAggregator::new(&cache, log, action_type)
+        .flag(flags)
+        .queue(queue)
+        .target(Some(targets))
+        .aggregate()?)
 }

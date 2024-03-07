@@ -39,19 +39,20 @@ pub struct ContainerVariables {
 impl ContainerVariables {
     pub fn new(ins: &str) -> Self {
         Self {
-            home: match var("PACWRAP_HOME") {
-                Err(_) => format!("{}/home/{ins}", *DATA_DIR),
-                Ok(var) => var,
-            }
-            .into(),
-            root: format!("{}/root/{ins}", *DATA_DIR).into(),
+            home: var("PACWRAP_HOME").unwrap_or(format!("{}/home/{ins}", *DATA_DIR)),
+            root: var("PACWRAP_ROOT").unwrap_or(format!("{}/root/{ins}", *DATA_DIR)),
+            config: format!("{}/container/{ins}.yml", *CONFIG_DIR).into(),
             pacman_gnupg: format!("{}/pacman/gnupg", *DATA_DIR).into(),
             pacman_cache: format!("{}/pkg", *CACHE_DIR).into(),
-            config: format!("{}/container/{ins}.yml", *CONFIG_DIR).into(),
             home_mount: format!("/home/{ins}").into(),
             user: ins.into(),
             instance: ins.into(),
         }
+    }
+
+    pub fn config(mut self, path: &str) -> Self {
+        self.config = path.into();
+        self
     }
 
     pub fn pacman_cache(&self) -> &str {

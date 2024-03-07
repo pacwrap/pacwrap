@@ -85,7 +85,6 @@ impl From<ConfigError> for String {
     }
 }
 
-#[inline]
 pub fn provide_handle(instance: &str) -> Result<ContainerHandle> {
     let vars = ContainerVariables::new(instance);
 
@@ -93,31 +92,55 @@ pub fn provide_handle(instance: &str) -> Result<ContainerHandle> {
         err!(ErrorKind::InstanceNotFound(instance.into()))?
     }
 
-    handle(instance, vars)
+    handle(vars)
 }
 
-#[inline]
-pub fn provide_new_handle(instance: &str) -> Result<ContainerHandle> {
-    handle(instance, ContainerVariables::new(instance))
+pub fn compose_handle<'a>(instance: &'a str, path: Option<&'a str>) -> Result<ContainerHandle<'a>> {
+    let vars = match path {
+        Some(path) => ContainerVariables::new(instance).config(path),
+        None => ContainerVariables::new(instance),
+    };
+
+    if Path::new(vars.root()).exists() {
+        err!(ConfigError::AlreadyExists(instance.into()))?
+    }
+
+    Ok(handle(vars)?.create())
+}
+
+pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<ContainerHandle<'a>> {
+    match handle(ContainerVariables::new(instance)) {
+        Ok(mut handle) => {
+            handle.metadata_mut().set(deps, vec![]);
+            Ok(handle.create())
+        }
+        Err(err) => {
+            if let Ok(err) = err.downcast::<ConfigError>() {
+                if let ConfigError::ConfigNotFound(_) = err {
+                    let cfg = Container::new(instype, deps, vec![]);
+                    let vars = ContainerVariables::new(instance);
+
+                    return Ok(ContainerHandle::new(cfg, vars).create());
+                }
+            }
+
+            Err(err)?
+        }
+    }
 }
 
 fn save<T: Serialize>(obj: &T, path: &str) -> Result<()> {
-    let mut f = match File::create(path) {
-        Ok(f) => f,
-        Err(error) => err!(ErrorKind::IOError(path.into(), error.kind()))?,
-    };
+    let mut f = File::create(path).prepend_io(|| path.into())?;
     let config = match serde_yaml::to_string(&obj) {
         Ok(file) => file,
         Err(error) => err!(ConfigError::Save(path.into(), error.to_string()))?,
     };
 
-    match write!(f, "{}", config) {
-        Ok(_) => Ok(()),
-        Err(error) => err!(ErrorKind::IOError(path.into(), error.kind())),
-    }
+    write!(f, "{}", config).prepend_io(|| path.into())
 }
 
-fn handle<'a>(instance: &str, vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
+#[inline]
+fn handle<'a>(vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
     match File::open(vars.config_path()) {
         Ok(file) => {
             let config = match serde_yaml::from_reader(&file) {
@@ -128,7 +151,7 @@ fn handle<'a>(instance: &str, vars: ContainerVariables) -> Result<ContainerHandl
             Ok(ContainerHandle::new(config, vars))
         }
         Err(error) => match error.kind() {
-            NotFound => err!(ConfigError::ConfigNotFound(instance.into()))?,
+            NotFound => err!(ConfigError::ConfigNotFound(vars.instance().into()))?,
             _ => err!(ErrorKind::IOError(vars.config_path().into(), error.kind()))?,
         },
     }

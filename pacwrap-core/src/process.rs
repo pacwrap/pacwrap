@@ -58,6 +58,14 @@ impl ProcessList {
         self.list.iter().map(|a| a.1).collect()
     }
 
+    pub fn filter_by_target(&self, targets: &Vec<&str>) -> Vec<&Process> {
+        self.list.iter().filter(|a| targets.contains(&a.1.instance())).map(|a| a.1).collect()
+    }
+
+    pub fn filter_by_pid(&self, targets: &Vec<i32>) -> Vec<&Process> {
+        self.list.iter().filter(|a| targets.contains(&a.1.pid())).map(|a| a.1).collect()
+    }
+
     pub fn keys_by_instance(&self, ins: &str) -> Option<&Vec<i32>> {
         match self.groups.get(ins) {
             Some(ins) => Some(ins),

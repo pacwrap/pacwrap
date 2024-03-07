@@ -163,6 +163,7 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
     let vars = ins.vars();
+    let dbus = cfg.dbus().len() > 0;
 
     if !cfg.allow_forking() {
         exec.push_env(Argument::DieWithParent);
@@ -183,7 +184,7 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
         false => exec.env("TERM", "dumb"),
     }
 
-    if cfg.dbus().len() > 0 {
+    if dbus {
         jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec)?);
     }
 
@@ -280,11 +281,6 @@ fn execute_fakeroot(ins: &ContainerHandle, arguments: Option<Vec<&str>>, verbosi
     fakeroot_container(Interactive, Some(signal_trap), ins, arguments)
 }
 
-fn cleanup() -> Result<()> {
-    remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
-    Ok(())
-}
-
 fn signal_trap(bwrap_pid: i32) {
     let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
 
@@ -357,4 +353,12 @@ fn create_placeholder(path: &str) -> Result<()> {
         Ok(file) => Ok(drop(file)),
         Err(error) => err!(ErrorKind::IOError(path.into(), error.kind())),
     }
+}
+
+fn cleanup() -> Result<()> {
+    if Path::new(&*DBUS_SOCKET).exists() {
+        remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
+    } 
+
+    Ok(())
 }

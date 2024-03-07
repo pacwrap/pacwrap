@@ -22,6 +22,9 @@ use dialoguer::{
     theme::ColorfulTheme,
     Input,
 };
+use std::io::Error;
+
+use crate::constants::{BAR_RED, BOLD, RESET};
 
 pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool) -> Result<(), ()> {
     if let Ok(value) = create_prompt(prompt.into(), prefix, yn_prompt) {
@@ -35,7 +38,7 @@ pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool) -> Resul
     }
 }
 
-fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<String, std::io::Error> {
+fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<String, Error> {
     let prompt = match yn_prompt {
         true => ("[Y/n]", style(prefix.into()).blue().bold()),
         false => ("[y/N]", style(prefix.into()).red().bold()),
@@ -53,4 +56,15 @@ fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<Strin
     };
 
     return Input::with_theme(&theme).with_prompt(message).allow_empty(true).interact_text();
+}
+
+pub fn prompt_targets(targets: &Vec<&str>, ins_prompt: impl Into<String>, yn_prompt: bool) -> Result<(), ()> {
+    eprintln!("{} {}Container{}{}\n", *BAR_RED, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
+
+    for target in targets.iter() {
+        eprint!("{}{}{} ", *BOLD, target, *RESET);
+    }
+
+    eprintln!("\n");
+    prompt("::", ins_prompt, yn_prompt)
 }

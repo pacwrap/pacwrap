@@ -58,6 +58,7 @@ impl<'a> Container<'a> {
 pub struct ContainerHandle<'a> {
     inner: Container<'a>,
     meta: ContainerVariables,
+    creation: bool,
 }
 
 impl<'a> ContainerHandle<'a> {
@@ -65,7 +66,13 @@ impl<'a> ContainerHandle<'a> {
         Self {
             inner: ins,
             meta: ins_vars,
+            creation: false,
         }
+    }
+
+    pub fn create(mut self) -> Self {
+        self.creation = true;
+        self
     }
 
     pub fn config(&self) -> &ContainerRuntime {
@@ -78,6 +85,15 @@ impl<'a> ContainerHandle<'a> {
 
     pub fn metadata(&self) -> &ContainerMetadata {
         &self.inner.metadata
+    }
+
+    pub fn is_creation(&self) -> bool {
+        self.creation
+    }
+
+    pub fn default_vars(mut self) -> Self {
+        self.meta = ContainerVariables::new(self.meta.instance());
+        self
     }
 
     pub fn vars(&self) -> &ContainerVariables {
@@ -179,10 +195,10 @@ pub enum ContainerType {
 impl ContainerType {
     fn as_str<'a>(&self) -> &'a str {
         match self {
-            Self::Symbolic => "LINK",
-            Self::Base => "BASE",
-            Self::Slice => "DEP",
-            Self::Aggregate => "ROOT",
+            Self::Symbolic => "Sumbolic",
+            Self::Base => "Base",
+            Self::Slice => "Slice",
+            Self::Aggregate => "Aggregate",
         }
     }
 }

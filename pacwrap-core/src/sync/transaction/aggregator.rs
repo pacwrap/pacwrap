@@ -17,7 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashMap, fs, path::Path, process::exit, thread};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+    process::exit,
+    thread,
+};
 
 use signal_hook::{consts::*, iterator::Signals};
 
@@ -34,12 +40,13 @@ use crate::{
         transaction::{Transaction, TransactionFlags, TransactionHandle, TransactionMetadata, TransactionState, TransactionType},
         SyncError,
     },
+    utils::arguments::InvalidArgument,
     ErrorKind,
 };
 
 pub struct TransactionAggregator<'a> {
-    queried: Vec<&'a str>,
-    updated: Vec<&'a str>,
+    queried: HashSet<&'a str>,
+    updated: HashSet<&'a str>,
     pkg_queue: HashMap<&'a str, Vec<&'a str>>,
     action: TransactionType,
     filesystem_state: Option<FileSystemStateSync<'a>>,
@@ -47,30 +54,38 @@ pub struct TransactionAggregator<'a> {
     keyring: bool,
     logger: &'a mut Logger,
     flags: TransactionFlags,
-    target: Option<&'a str>,
+    targets: Option<Vec<&'a str>>,
 }
 
 impl<'a> TransactionAggregator<'a> {
-    pub fn new(
-        inscache: &'a ContainerCache,
-        queue: HashMap<&'a str, Vec<&'a str>>,
-        log: &'a mut Logger,
-        action_flags: TransactionFlags,
-        action_type: TransactionType,
-        current_target: Option<&'a str>,
-    ) -> Self {
+    pub fn new(inscache: &'a ContainerCache, log: &'a mut Logger, action_type: TransactionType) -> Self {
         Self {
-            queried: Vec::new(),
-            updated: Vec::new(),
-            pkg_queue: queue,
+            queried: HashSet::new(),
+            updated: HashSet::new(),
+            pkg_queue: HashMap::new(),
             filesystem_state: Some(FileSystemStateSync::new(inscache)),
             action: action_type,
             cache: inscache,
             keyring: false,
             logger: log,
-            flags: action_flags,
-            target: current_target,
+            flags: TransactionFlags::NONE,
+            targets: None,
         }
+    }
+
+    pub fn flag(mut self, flags: TransactionFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    pub fn queue(mut self, queue: HashMap<&'a str, Vec<&'a str>>) -> Self {
+        self.pkg_queue = queue;
+        self
+    }
+
+    pub fn target(mut self, targets: Option<Vec<&'a str>>) -> Self {
+        self.targets = targets;
+        self
     }
 
     pub fn aggregate(mut self) -> Result<()> {
@@ -79,22 +94,30 @@ impl<'a> TransactionAggregator<'a> {
         let _timestamp = *UNIX_TIMESTAMP;
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
+                if !upgrade && !refresh && !self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
+                    err!(InvalidArgument::OperationUnspecified)?
+                }
+
                 if refresh {
                     sync::synchronize_database(self.cache, force)?;
                 }
 
                 upgrade
             }
-            _ => false,
+            TransactionType::Remove(..) => self.targets.is_some(),
         };
-        let target = match self.target {
-            Some(s) => self.cache.get_instance_option(s),
-            None => None,
-        };
-        let downstream = self.cache.filter(vec![ContainerType::Aggregate]);
-        let upstream = self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]);
 
-        if invalid_fs_states(&upstream) && downstream.len() > 0 {
+        let upstream = match self.targets.as_ref() {
+            Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Base, ContainerType::Slice]),
+            None => self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]),
+        };
+        let downstream = match self.targets.as_ref() {
+            Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Aggregate]),
+            None => self.cache.filter(vec![ContainerType::Aggregate]),
+        };
+        let are_downstream = self.cache.count(vec![ContainerType::Aggregate]) > 0;
+
+        if invalid_fs_states(&upstream) && are_downstream {
             let linker = self.fs_sync().unwrap();
 
             linker.refresh_state();
@@ -103,16 +126,12 @@ impl<'a> TransactionAggregator<'a> {
             linker.finish();
         }
 
-        if let Some(ins) = target {
-            if let ContainerType::Base | ContainerType::Slice = ins.metadata().container_type() {
-                self.transact(ins)?;
-            }
-        } else if upgrade {
+        if upgrade {
             self.transaction(&upstream)?;
         }
 
         if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
-            if downstream.len() > 0 {
+            if are_downstream {
                 let file = self.cache.registered();
                 let linker = self.fs_sync().unwrap();
 
@@ -125,11 +144,7 @@ impl<'a> TransactionAggregator<'a> {
             self.filesystem_state = self.filesystem_state.unwrap().release();
         }
 
-        if let Some(ins) = target {
-            if let ContainerType::Aggregate = ins.metadata().container_type() {
-                self.transact(ins)?;
-            }
-        } else if upgrade {
+        if upgrade {
             self.transaction(&downstream)?;
         }
 
@@ -148,8 +163,16 @@ impl<'a> TransactionAggregator<'a> {
                 None => continue,
             };
 
-            self.queried.push(ins);
-            self.transaction(&inshandle.metadata().dependencies())?;
+            self.queried.insert(ins);
+            self.transaction(
+                &inshandle
+                    .metadata()
+                    .dependencies()
+                    .iter()
+                    .filter(|a| containers.contains(a))
+                    .map(|a| *a)
+                    .collect(),
+            )?;
             self.transact(inshandle)?;
         }
 
@@ -173,13 +196,13 @@ impl<'a> TransactionAggregator<'a> {
                 Ok(result) => {
                     if let TransactionState::Complete(updated) = result {
                         if updated {
-                            self.updated.push(inshandle.vars().instance());
+                            self.updated.insert(inshandle.vars().instance());
                         }
 
                         handle.release();
                         return Ok(());
                     } else if let TransactionState::Prepare = result {
-                        self.updated.push(inshandle.vars().instance());
+                        self.updated.insert(inshandle.vars().instance());
                     }
 
                     result

@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use std::{
-    fmt::{Display, Error as FmtError, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     str::FromStr,
 };
 
@@ -27,19 +27,21 @@ use nix::{
 };
 use pacwrap_core::{
     config::cache,
-    constants::{ARROW_GREEN, BAR_RED, BOLD, RESET},
+    constants::{ARROW_GREEN, BOLD, RESET},
     err,
     impl_error,
     process::{self, Process},
     utils::{
         arguments::{InvalidArgument, Operand},
         print_warning,
-        prompt,
+        prompt::prompt_targets,
         table::{ColumnAttribute, Table},
         Arguments,
     },
     Error,
+    ErrorGeneric,
     ErrorTrait,
+    Result,
 };
 
 #[derive(Debug)]
@@ -53,7 +55,7 @@ pub enum ProcError {
 impl_error!(ProcError);
 
 impl Display for ProcError {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
         match self {
             ProcError::NotEnumerable => write!(fmt, "No containers running for pacwrap to enumerate."),
             ProcError::SpecifiedNotEnumerable => write!(fmt, "Specified containers are not enumerable."),
@@ -65,7 +67,7 @@ impl Display for ProcError {
     }
 }
 
-pub fn process(args: &mut Arguments) -> Result<(), Error> {
+pub fn process(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
         Operand::Long("summary") | Operand::Short('s') => summary(args),
         Operand::Long("id-list") | Operand::Short('i') => process_id(args),
@@ -85,7 +87,7 @@ pub fn process(args: &mut Arguments) -> Result<(), Error> {
     }
 }
 
-fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
+fn summary(args: &mut Arguments) -> Result<()> {
     let mut all = false;
     let mut max_depth = 1;
     let mut cmd = 0;
@@ -168,7 +170,7 @@ fn summary<'a>(args: &mut Arguments) -> Result<(), Error> {
     Ok(())
 }
 
-fn process_id<'a>(args: &mut Arguments) -> Result<(), Error> {
+fn process_id(args: &mut Arguments) -> Result<()> {
     let mut instance = Vec::new();
     let mut all = false;
 
@@ -216,7 +218,7 @@ fn process_id<'a>(args: &mut Arguments) -> Result<(), Error> {
     Ok(())
 }
 
-fn process_kill<'a>(args: &mut Arguments) -> Result<(), Error> {
+fn process_kill(args: &mut Arguments) -> Result<()> {
     let mut process: Vec<&str> = Vec::new();
     let mut sigint = Signal::SIGHUP;
     let mut all = false;
@@ -265,23 +267,13 @@ fn process_kill<'a>(args: &mut Arguments) -> Result<(), Error> {
         }
     }
 
-    if !no_confirm {
-        eprintln!("{} {}Instances{}\n", *BAR_RED, *BOLD, *RESET);
-
-        for list in list.iter() {
-            eprint!("{} ({}{}{}) ", list.pid(), *BOLD, list.instance(), *RESET);
-        }
-
-        eprintln!("\n");
-
-        if let Ok(_) = prompt::prompt("::", format!("Kill processes?"), false) {
-            kill_processes(&list, sigint);
-        }
+    if no_confirm {
+        kill_processes(&list, sigint)
+    } else if let Ok(_) = prompt_targets(&list.iter().map(|a| a.instance()).collect(), "Kill processes?", false) {
+        kill_processes(&list, sigint)
     } else {
-        kill_processes(&list, sigint);
+        Ok(())
     }
-
-    Ok(())
 }
 
 fn fork_warn(process: &Process) {
@@ -296,9 +288,11 @@ fn fork_warn(process: &Process) {
     ));
 }
 
-fn kill_processes(process_list: &Vec<&Process>, sigint: Signal) {
+fn kill_processes(process_list: &Vec<&Process>, sigint: Signal) -> Result<()> {
     for list in process_list {
-        kill(Pid::from_raw(list.pid()), sigint).unwrap();
+        kill(Pid::from_raw(list.pid()), sigint).prepend(|| format!("Error killing '{}':", list.pid()))?;
         eprintln!("{} Killed process {} ({}{}{}) ", *ARROW_GREEN, list.pid(), *BOLD, list.instance(), *RESET);
     }
+
+    Ok(())
 }

@@ -74,7 +74,7 @@ fn main() {
     } else if built && !Path::new("../dist/bin/filesystem.tar.zst").exists() {
         panic!("Container fileystem schema is missing. Please refer to the build documentation for further information.")
     }
-    
+
     let debug: bool = is_debug();
 
     println!("cargo:rerun-if-env-changed=PACWRAP_DIST_META");

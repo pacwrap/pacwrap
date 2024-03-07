@@ -19,26 +19,30 @@
 
 use pacwrap_core::utils::arguments::{Arguments, Operand as Op};
 
-mod compat;
+use crate::utils::list;
+
+mod compose;
 mod exec;
 mod manual;
 mod proc;
 mod query;
 mod remove;
 mod sync;
+mod utils;
 
 fn main() {
     let arguments = &mut Arguments::new().populate();
     let result = match arguments.next().unwrap_or_default() {
         Op::Short('E') | Op::Long("exec") | Op::Value("shell") | Op::Value("run") => exec::execute(arguments),
         Op::Short('S') | Op::Long("sync") | Op::Value("sync") | Op::Value("init") => sync::synchronize(arguments),
+        Op::Short('L') | Op::Long("list") | Op::Value("ls") | Op::Value("list") => list::list_containers(arguments),
         Op::Short('R') | Op::Long("remove") | Op::Value("remove") => remove::remove(arguments),
         Op::Short('Q') | Op::Long("query") | Op::Value("query") => query::query(arguments),
+        Op::Short('C') | Op::Long("compose") | Op::Value("compose") => compose::compose(arguments),
         Op::Short('P') | Op::Long("process") | Op::Value("ps") => proc::process(arguments),
+        Op::Short('U') | Op::Long("utils") | Op::Value("utils") => utils::engage_utility(arguments),
         Op::Short('V') | Op::Long("version") | Op::Value("version") => manual::print_version(arguments),
         Op::Short('h') | Op::Long("help") | Op::Value("help") => manual::help(arguments),
-        Op::Short('U') | Op::Long("utils") => compat::execute_utils(arguments),
-        Op::Long("compat") => compat::compat(arguments),
         _ => arguments.invalid_operand(),
     };
 

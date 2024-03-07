@@ -17,7 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    fs::create_dir,
+    io::ErrorKind as IOErrorKind,
+};
 
 use indexmap::IndexMap;
 use pacwrap_core::{
@@ -63,8 +67,9 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
 
         TransactionType::Upgrade(u > 0, y > 0, y > 1)
     };
+    let create = create(args);
 
-    if create(args) {
+    if create {
         if let TransactionType::Upgrade(upgrade, refresh, _) = action {
             if !refresh {
                 err!(UnsuppliedOperand("--refresh", "Required for container creation."))?
@@ -77,7 +82,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
         instantiate(&mut logger, &mut cache, acquire_depends(args)?)?;
     }
 
-    engage_aggregator(&cache, action, args, &mut logger)
+    engage_aggregator(&cache, action, args, &mut logger, create)
 }
 
 fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (ContainerType, Vec<&'a str>)>> {
@@ -173,13 +178,11 @@ fn instantiate_container<'a>(logger: &mut Logger, handle: &'a ContainerHandle<'a
     let ins = handle.vars().instance();
     let instype = handle.metadata().container_type();
 
-    if let Err(err) = std::fs::create_dir(handle.vars().root()) {
-        err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
-    }
+    create_dir(handle.vars().root()).prepend_io(|| handle.vars().root().into())?;
 
     if let ContainerType::Aggregate | ContainerType::Base = instype {
-        if let Err(err) = std::fs::create_dir(handle.vars().home()) {
-            if err.kind() != std::io::ErrorKind::AlreadyExists {
+        if let Err(err) = create_dir(handle.vars().home()) {
+            if err.kind() != IOErrorKind::AlreadyExists {
                 err!(ErrorKind::IOError(handle.vars().root().into(), err.kind()))?
             }
         }
@@ -200,14 +203,15 @@ fn engage_aggregator<'a>(
     action_type: TransactionType,
     args: &'a mut Arguments,
     log: &'a mut Logger,
+    create: bool,
 ) -> Result<()> {
-    let mut action_flags = if let Op::Value("init") = args[0] {
+    let mut flags = if create {
         TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE
     } else {
         TransactionFlags::NONE
     };
-    let mut targets = Vec::new();
-    let mut queue: HashMap<&'a str, Vec<&'a str>> = HashMap::new();
+    let mut targets = HashSet::new();
+    let mut queue = HashMap::new();
     let mut current_target = "";
     let mut base = false;
 
@@ -223,26 +227,26 @@ fn engage_aggregator<'a>(
             | Op::Short('t')
             | Op::Short('y')
             | Op::Short('u')
+            | Op::Short('c')
             | Op::Long("aggregate")
             | Op::Long("slice")
             | Op::Long("dep")
             | Op::Long("target")
             | Op::Long("refresh")
             | Op::Long("upgrade")
+            | Op::Long("create")
             | Op::LongPos("dep", _) => continue,
             Op::Short('b') | Op::Long("base") => base = true,
-            Op::Short('o') | Op::Long("target-only") => action_flags = action_flags | TransactionFlags::TARGET_ONLY,
-            Op::Short('f') | Op::Long("filesystem") => action_flags = action_flags | TransactionFlags::FILESYSTEM_SYNC,
-            Op::Short('p') | Op::Long("preview") => action_flags = action_flags | TransactionFlags::PREVIEW,
-            Op::Long("dbonly") => action_flags = action_flags | TransactionFlags::DATABASE_ONLY,
-            Op::Long("force-foreign") => action_flags = action_flags | TransactionFlags::FORCE_DATABASE,
-            Op::Long("noconfirm") => action_flags = action_flags | TransactionFlags::NO_CONFIRM,
-            Op::Short('c') | Op::Long("create") =>
-                action_flags = action_flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE,
+            Op::Short('o') | Op::Long("target-only") => flags = flags | TransactionFlags::TARGET_ONLY,
+            Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
+            Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
+            Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
+            Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
+            Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
             Op::ShortPos('t', target) | Op::LongPos("target", target) => {
                 cache.get_instance(target)?;
                 current_target = target;
-                targets.push(target);
+                targets.insert(target);
 
                 if base {
                     queue.insert(current_target.into(), vec!["base"]);
@@ -251,35 +255,39 @@ fn engage_aggregator<'a>(
             }
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if current_target != "" {
-                    match queue.get_mut(current_target) {
-                        Some(vec) => vec.push(package.into()),
-                        None => {
-                            queue.insert(current_target.into(), vec![package]);
-                        }
+                    if let Some(vec) = queue.get_mut(current_target) {
+                        vec.push(package.into());
+                    } else {
+                        queue.insert(current_target.into(), vec![package]);
                     }
                 },
             _ => args.invalid_operand()?,
         }
     }
 
-    let current_target = match action_flags.intersects(TransactionFlags::TARGET_ONLY) {
+    if flags.contains(TransactionFlags::CREATE) {
+        for cache in cache.registered_handles().iter().filter(|a| a.is_creation()) {
+            targets.extend(cache.metadata().dependencies());
+        }
+    }
+
+    let targets: Option<Vec<&str>> = match flags.contains(TransactionFlags::TARGET_ONLY) {
         true => {
-            if current_target == "" && !action_flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
+            if current_target == "" && !flags.contains(TransactionFlags::FILESYSTEM_SYNC) {
                 err!(TargetUnspecified)?
             }
 
-            Some(current_target)
-        }
-        false => {
-            if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
-                if !upgrade && !refresh {
-                    err!(OperationUnspecified)?
-                }
+            match flags.contains(TransactionFlags::FILESYSTEM_SYNC) {
+                false => Some(targets.into_iter().collect()),
+                true => None,
             }
-
-            None
         }
+        false => None,
     };
 
-    Ok(TransactionAggregator::new(cache, queue, log, action_flags, action_type, current_target).aggregate()?)
+    Ok(TransactionAggregator::new(cache, log, action_type)
+        .flag(flags)
+        .queue(queue)
+        .target(targets)
+        .aggregate()?)
 }
