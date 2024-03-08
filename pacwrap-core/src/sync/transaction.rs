@@ -421,11 +421,14 @@ impl<'a> TransactionHandle<'a> {
 
                 for pkg in packages
                     .iter()
-                    .filter(|a| {
-                        !self.meta.ignored_pkgs.contains(a.name())
-                            && !(self.meta.mode == TransactionMode::Foreign && self.meta.foreign_pkgs.contains(a.name()))
+                    .filter(|a| !self.meta.ignored_pkgs.contains(a.name()))
+                    .filter_map(|a| {
+                        if let (None, TransactionMode::Foreign) = (self.meta.foreign_pkgs.get(a.name()), self.meta.mode) {
+                            None
+                        } else {
+                            Some(*a)
+                        }
                     })
-                    .map(|a| *a)
                     .collect::<Vec<Package<'_>>>()
                 {
                     if !self.agent && config.alpm().ignored().contains(&pkg.name()) {

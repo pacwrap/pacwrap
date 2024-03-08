@@ -21,7 +21,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Error as FmtError, Formatter},
     fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, File, Metadata},
-    io::{copy, BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
+    io::{copy, BufReader, Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
@@ -30,6 +30,7 @@ use std::{
     },
 };
 
+use bincode::Options;
 use dialoguer::console::Term;
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
@@ -51,8 +52,9 @@ use crate::{
     ErrorTrait,
 };
 
-static VERSION: u32 = 2;
-static MAGIC_NUMBER: u32 = 408948530;
+const VERSION: u32 = 2;
+const MAGIC_NUMBER: u32 = 408948530;
+const BYTE_LIMIT: u64 = 134217728;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct FileSystemState {
@@ -90,7 +92,7 @@ impl Display for FilesystemStateError {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 enum FileType {
     HardLink,
     SymLink,
@@ -423,7 +425,12 @@ impl SyncType {
 }
 
 fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T, Error> {
-    match bincode::deserialize_from::<R, T>(reader) {
+    match bincode::options()
+        .with_fixint_encoding()
+        .allow_trailing_bytes()
+        .with_limit(BYTE_LIMIT)
+        .deserialize_from::<R, T>(reader)
+    {
         Ok(state) => Ok(state),
         Err(err) => err!(FilesystemStateError::DeserializationFailure(instance.into(), err.to_string())),
     }
@@ -435,7 +442,12 @@ fn serialize(dep: Arc<str>, ds: FileSystemState) -> Result<(), Error> {
     let mut hasher = Sha256::new();
     let mut state_data = Vec::new();
 
-    if let Err(err) = bincode::serialize_into(&mut state_data, &ds) {
+    if let Err(err) = bincode::options()
+        .with_fixint_encoding()
+        .allow_trailing_bytes()
+        .with_limit(BYTE_LIMIT)
+        .serialize_into(&mut state_data, &ds)
+    {
         err!(FilesystemStateError::SerializationFailure(error_path.into(), err.as_ref().to_string()))?
     }
 
@@ -449,8 +461,18 @@ fn decode_state<'a, R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
 
     stream.read_exact(&mut header_buffer.as_slice_mut())?;
 
-    let mut hash_buffer = vec![0; header_buffer.read_le_16() as usize];
-    let mut state_buffer = vec![0; header_buffer.read_le_64() as usize];
+    let hash_length = header_buffer.read_le_16();
+    let state_length = header_buffer.read_le_64();
+
+    if state_length >= BYTE_LIMIT {
+        Err(IOError::new(
+            IOErrorKind::InvalidInput,
+            format!("Data length provided exceeded maximum {state_length} >= {BYTE_LIMIT}"),
+        ))?;
+    }
+
+    let mut hash_buffer = vec![0; hash_length as usize];
+    let mut state_buffer = vec![0; state_length as usize];
 
     stream.read_exact(&mut hash_buffer)?;
 
@@ -556,11 +578,7 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
 }
 
 fn link_filesystem(state: &FileSystemState, root: &str) {
-    state.files.par_iter().for_each(|file| {
-        if let FileType::Directory = file.1 .0 {
-            return;
-        }
-
+    state.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
         let path = &format!("{}{}", root, file.0);
 
         if let FileType::SymLink = file.1 .0 {
@@ -579,12 +597,8 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
     let (tx, rx) = mpsc::sync_channel(0);
     let tx_clone: mpsc::SyncSender<()> = tx.clone();
 
-    state_res.files.par_iter().for_each(|file| {
+    state_res.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
         let _ = tx_clone;
-
-        if let FileType::Directory = file.1 .0 {
-            return;
-        }
 
         if let None = state.files.get(file.0) {
             let path_str = &format!("{}{}", root, file.0);
