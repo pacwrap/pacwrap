@@ -58,13 +58,13 @@ fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<Strin
     return Input::with_theme(&theme).with_prompt(message).allow_empty(true).interact_text();
 }
 
-pub fn prompt_targets(targets: &Vec<&str>, ins_prompt: impl Into<String>, yn_prompt: bool) -> Result<(), ()> {
+pub fn prompt_targets(targets: &Vec<&str>, ins_prompt: &str, yn_prompt: bool) -> Result<(), ()> {
     eprintln!("{} {}Container{}{}\n", *BAR_RED, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for target in targets.iter() {
-        eprint!("{}{}{} ", *BOLD, target, *RESET);
+        eprint!("{} ", target);
     }
 
     eprintln!("\n");
-    prompt("::", ins_prompt, yn_prompt)
+    prompt("::", format!("{}{}", *BOLD, ins_prompt), yn_prompt)
 }

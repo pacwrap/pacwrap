@@ -77,9 +77,9 @@ fn delete_containers<'a>(
     let message = format!("Deleting existing container{}?", if delete.len() > 1 { "s" } else { "" });
 
     if flags.contains(TransactionFlags::NO_CONFIRM) {
-        println!("{} {}{}...{}", *BAR_GREEN, *BOLD, message, *RESET);
+        println!("{} {}{}...{}", *BAR_GREEN, *BOLD, &message, *RESET);
         delete_roots(cache, logger, delete, force)?;
-    } else if let Ok(_) = prompt_targets(&delete, message, false) {
+    } else if let Ok(_) = prompt_targets(&delete, &message, false) {
         delete_roots(cache, logger, delete, force)?;
     }
 
@@ -153,9 +153,8 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = args.next() {
         match arg {
-            Op::Short('t') | Op::Long("target") | Op::Long("from-config") => continue,
+            Op::Long("from-config") => continue,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
-            Op::Long("force") => force = true,
             Op::Long("reinitialize-all") =>
                 for instance in cache.registered() {
                     if let Some(handle) = cache.get_instance_option(instance) {
@@ -166,32 +165,43 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
                         compose.insert(instance, None);
                     }
                 },
+            Op::Short('f') | Op::Long("force") => force = true,
             Op::Short('r') | Op::Long("reinitialize") => reinitialize = true,
-            Op::ShortPos('t', target) | Op::LongPos("target", target) =>
-                if !reinitialize {
-                    current_target = Some(target);
-                } else {
+            Op::Short('t') | Op::Long("target") => match args.next() {
+                Some(arg) => match arg {
+                    Op::ShortPos('t', t) | Op::LongPos("target", t) => current_target = Some(t),
+                    _ => args.invalid_operand()?,
+                },
+                None => err!(TargetUnspecified)?,
+            },
+            Op::LongPos(_, config) | Op::ShortPos(_, config) | Op::Value(config) => {
+                let target = match current_target {
+                    Some(target) => target,
+                    None => match config.char_indices().filter(|a| a.1 == '.').last() {
+                        Some((index, ..)) => config.split_at(index).0,
+                        None => config,
+                    },
+                };
+                let config = if reinitialize {
                     let handle = cache.get_instance(target)?;
 
                     if Path::new(handle.vars().root()).exists() {
                         delete.push(target);
                     }
 
-                    compose.insert(target, None);
-                    reinitialize = false;
-                },
-            Op::LongPos(_, target) | Op::ShortPos(_, target) | Op::Value(target) => {
-                if !target.ends_with(".yml") {
-                    err!(ErrorKind::Message("Unsupported file extension."))?;
-                }
-
-                if let Some(cur_target) = current_target {
-                    compose.insert(cur_target, Some(target));
-                    current_target = None;
-                } else {
                     Path::new(target).try_exists().prepend_io(|| target.into())?;
-                    compose.insert(target.split_at(target.len() - 4).0, Some(target));
-                }
+
+                    match current_target {
+                        Some(_) => Some(config),
+                        None => None,
+                    }
+                } else {
+                    Some(config)
+                };
+
+                compose.insert(target, config);
+                current_target = None;
+                reinitialize = false;
             }
             _ => args.invalid_operand()?,
         }

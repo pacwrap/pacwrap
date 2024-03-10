@@ -358,7 +358,7 @@ fn create_placeholder(path: &str) -> Result<()> {
 fn cleanup() -> Result<()> {
     if Path::new(&*DBUS_SOCKET).exists() {
         remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
-    } 
+    }
 
     Ok(())
 }

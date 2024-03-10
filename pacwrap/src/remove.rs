@@ -26,7 +26,7 @@ use pacwrap_core::{
     log::Logger,
     sync::transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     utils::{
-        arguments::{Arguments, InvalidArgument, Operand as Op},
+        arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
     },
 };
@@ -62,7 +62,7 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
     let mut current_target = None;
 
     if let Op::Nothing = args.next().unwrap_or_default() {
-        err!(InvalidArgument::OperationUnspecified)?
+        err!(OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -72,18 +72,23 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
             | Op::Long("recursive")
             | Op::Short('R')
             | Op::Short('c')
-            | Op::Short('s')
-            | Op::Short('t') => continue,
+            | Op::Short('s') => continue,
             Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
             Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
             Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
             Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
-            Op::ShortPos('t', target) | Op::LongPos("target", target) => {
-                cache.get_instance(target)?;
-                current_target = Some(target);
-                targets.push(target);
-            }
+            Op::Short('t') | Op::Long("target") => match args.next() {
+                Some(arg) => match arg {
+                    Op::ShortPos('t', target) | Op::LongPos("target", target) => {
+                        cache.get_instance(target)?;
+                        current_target = Some(target);
+                        targets.push(target);
+                    }
+                    _ => args.invalid_operand()?,
+                },
+                None => err!(TargetUnspecified)?,
+            },
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(target) = current_target {
                     match queue.get_mut(target) {
@@ -98,7 +103,7 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
     }
 
     if let None = current_target {
-        err!(InvalidArgument::TargetUnspecified)?
+        err!(TargetUnspecified)?
     }
 
     Ok(TransactionAggregator::new(&cache, log, action_type)

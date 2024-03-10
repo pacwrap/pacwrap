@@ -36,7 +36,7 @@ use crate::{
     log::Logger,
     sync::{
         self,
-        filesystem::{invalid_fs_states, FileSystemStateSync},
+        filesystem::{validate_fs_states, FileSystemStateSync},
         transaction::{Transaction, TransactionFlags, TransactionHandle, TransactionMetadata, TransactionState, TransactionType},
         SyncError,
     },
@@ -106,7 +106,6 @@ impl<'a> TransactionAggregator<'a> {
             }
             TransactionType::Remove(..) => self.targets.is_some(),
         };
-
         let upstream = match self.targets.as_ref() {
             Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Base, ContainerType::Slice]),
             None => self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]),
@@ -117,7 +116,7 @@ impl<'a> TransactionAggregator<'a> {
         };
         let are_downstream = self.cache.count(vec![ContainerType::Aggregate]) > 0;
 
-        if invalid_fs_states(&upstream) && are_downstream {
+        if !validate_fs_states(&upstream) && are_downstream {
             let linker = self.fs_sync().unwrap();
 
             linker.refresh_state();

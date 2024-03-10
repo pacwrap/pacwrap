@@ -20,15 +20,17 @@
 use std::{
     fmt::{Display, Formatter},
     fs::remove_dir_all,
+    path::Path,
 };
 
 use pacwrap_core::{
     config::{cache, ContainerCache},
-    constants::{ARROW_GREEN, BOLD, RESET},
+    constants::{ARROW_GREEN, BOLD, DATA_DIR, RESET},
     err,
     impl_error,
     log::{Level::Info, Logger},
     process,
+    sync::filesystem::create_blank_state,
     utils::{arguments::Operand, prompt::prompt_targets, Arguments},
     Error,
     ErrorGeneric,
@@ -58,7 +60,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
     let mut targets = vec![];
     let mut no_confirm = false;
     let mut force = false;
-    let mut logger = Logger::new("pacwrap-utils");
+    let mut logger = Logger::new("pacwrap-utils").init()?;
 
     while let Some(arg) = args.next() {
         match arg {
@@ -103,8 +105,13 @@ pub fn delete_roots(cache: &ContainerCache<'_>, logger: &mut Logger, targets: &V
     for container in containers {
         let root = container.vars().root();
         let instance = container.vars().instance();
-
+        let state = &format!("{}/state/{instance}.dat", *DATA_DIR);
         remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}':"))?;
+
+        if Path::new(state).exists() {
+            create_blank_state(instance)?;
+        }
+
         eprintln!("{} Deleted container {}{}{} successfully.", *ARROW_GREEN, *BOLD, instance, *RESET);
         logger.log(Info, &format!("Deleted container {instance}"))?;
     }

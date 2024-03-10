@@ -22,7 +22,7 @@ use std::{
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
 };
 
-use crate::{config::ContainerCache, constants::CONTAINER_DIR, err, utils::print_warning, Error, ErrorKind};
+use crate::{config::ContainerCache, constants::CONTAINER_DIR, utils::print_warning, Error, ErrorGeneric};
 use indexmap::IndexMap;
 
 pub struct ProcessList {
@@ -95,18 +95,9 @@ impl Process {
     }
 
     pub fn exec(&self) -> &str {
-        let mut index = 0;
-
-        for char in self.cmd[0].char_indices().rev() {
-            if char.1 == '/' {
-                index = char.0 + 1;
-                break;
-            }
-        }
-
-        match index {
-            0 => &self.cmd[0],
-            _ => &self.cmd[0].split_at(index).1,
+        match self.cmd[0].char_indices().filter(|c| c.1 == '/').last() {
+            Some((index, ..)) => &self.cmd[0].split_at(index + 1).1,
+            None => &self.cmd[0],
         }
     }
 
@@ -157,10 +148,7 @@ impl ProcStat {
 
         Some(Self {
             thread_name: stat[1].into(),
-            parent: match stat[3].parse() {
-                Ok(val) => val,
-                Err(_) => 1,
-            },
+            parent: stat[3].parse().unwrap_or(1),
         })
     }
 
@@ -192,13 +180,10 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
         }
 
         let check = qualify_process(&cmdlist, stat.parent(), &map);
-        let check = match check {
+        let (ins, depth, fork) = match check {
             Some(instance) => instance,
             None => continue,
         };
-        let ins = check.0;
-        let depth = check.1;
-        let fork = check.2;
 
         match groups.get_mut(&ins) {
             Some(vec) => vec.push(pid),
@@ -218,21 +203,14 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
 }
 
 fn procfs() -> Result<Vec<i32>, Error> {
-    match read_dir("/proc/") {
-        Ok(dir) => Ok(dir
-            .filter_map(|s| match s {
-                Ok(f) => match f.file_name().to_str() {
-                    Some(str) => match str.parse() {
-                        Ok(i) => Some(i),
-                        Err(_) => None,
-                    },
-                    None => None,
-                },
-                Err(_) => None,
-            })
-            .collect()),
-        Err(error) => err!(ErrorKind::IOError("/proc/".into(), error.kind())),
-    }
+    Ok(read_dir("/proc/")
+        .prepend_io(|| "/proc/".into())?
+        .filter(|s| s.as_ref().is_ok_and(|s| s.metadata().is_ok_and(|m| m.is_dir())))
+        .filter_map(|e| match e.unwrap().file_name().to_str().unwrap().parse() {
+            Ok(val) => Some(val),
+            Err(_) => None,
+        })
+        .collect())
 }
 
 fn cmdlist(pid: i32) -> Option<Vec<String>> {
@@ -251,10 +229,7 @@ fn cmdlist(pid: i32) -> Option<Vec<String>> {
         }
 
         data.remove(len - 1);
-        cmdlist.push(match String::from_utf8(data) {
-            Ok(string) => string,
-            Err(_) => "".into(),
-        });
+        cmdlist.push(String::from_utf8(data).unwrap_or_default());
         index += len;
 
         match list.seek(SeekFrom::Start(index as u64)) {

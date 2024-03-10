@@ -117,12 +117,18 @@ fn acquire_depends<'a>(args: &mut Arguments<'a>) -> Result<IndexMap<&'a str, (Co
                 }
                 None => err!(TargetUnspecified)?,
             },
-            Op::ShortPos('t', target) | Op::LongPos("target", target) => match instype {
-                Some(instype) => {
-                    current_target = target;
-                    deps.insert(current_target, (instype, vec![]));
-                }
-                None => err!(ErrorKind::Message("Container type not specified."))?,
+            Op::Short('t') | Op::Long("target") => match args.next() {
+                Some(arg) => match arg {
+                    Op::ShortPos('t', target) | Op::LongPos("target", target) => match instype {
+                        Some(instype) => {
+                            current_target = target;
+                            deps.insert(current_target, (instype, vec![]));
+                        }
+                        None => err!(ErrorKind::Message("Container type not specified."))?,
+                    },
+                    _ => args.invalid_operand()?,
+                },
+                None => err!(TargetUnspecified)?,
             },
             _ => continue,
         }
@@ -224,14 +230,12 @@ fn engage_aggregator<'a>(
             Op::Short('a')
             | Op::Short('s')
             | Op::Short('d')
-            | Op::Short('t')
             | Op::Short('y')
             | Op::Short('u')
             | Op::Short('c')
             | Op::Long("aggregate")
             | Op::Long("slice")
             | Op::Long("dep")
-            | Op::Long("target")
             | Op::Long("refresh")
             | Op::Long("upgrade")
             | Op::Long("create")
@@ -243,16 +247,22 @@ fn engage_aggregator<'a>(
             Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
             Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
-            Op::ShortPos('t', target) | Op::LongPos("target", target) => {
-                cache.get_instance(target)?;
-                current_target = target;
-                targets.insert(target);
+            Op::Short('t') | Op::Long("target") => match args.next() {
+                Some(arg) => match arg {
+                    Op::ShortPos('t', target) | Op::LongPos("target", target) => {
+                        cache.get_instance(target)?;
+                        current_target = target;
+                        targets.insert(target);
 
-                if base {
-                    queue.insert(current_target.into(), vec!["base"]);
-                    base = false;
-                }
-            }
+                        if base {
+                            queue.insert(current_target.into(), vec!["base"]);
+                            base = false;
+                        }
+                    }
+                    _ => args.invalid_operand()?,
+                },
+                None => err!(TargetUnspecified)?,
+            },
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if current_target != "" {
                     if let Some(vec) = queue.get_mut(current_target) {
@@ -265,16 +275,16 @@ fn engage_aggregator<'a>(
         }
     }
 
-    if flags.contains(TransactionFlags::CREATE) {
-        for cache in cache.registered_handles().iter().filter(|a| a.is_creation()) {
-            targets.extend(cache.metadata().dependencies());
-        }
-    }
-
-    let targets: Option<Vec<&str>> = match flags.contains(TransactionFlags::TARGET_ONLY) {
+    let targets: Option<Vec<&str>> = match flags.intersects(TransactionFlags::TARGET_ONLY | TransactionFlags::CREATE) {
         true => {
             if current_target == "" && !flags.contains(TransactionFlags::FILESYSTEM_SYNC) {
                 err!(TargetUnspecified)?
+            }
+
+            if flags.contains(TransactionFlags::CREATE) {
+                for cache in cache.registered_handles().iter().filter(|a| a.is_creation()) {
+                    targets.extend(cache.metadata().dependencies());
+                }
             }
 
             match flags.contains(TransactionFlags::FILESYSTEM_SYNC) {

@@ -21,13 +21,14 @@ use std::{
     str::FromStr,
 };
 
+use indexmap::IndexMap;
 use nix::{
     sys::signal::{kill, Signal},
     unistd::Pid,
 };
 use pacwrap_core::{
     config::cache,
-    constants::{ARROW_GREEN, BOLD, RESET},
+    constants::{ARROW_GREEN, BOLD, DIM, RESET},
     err,
     impl_error,
     process::{self, Process},
@@ -243,6 +244,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
         err!(InvalidArgument::TargetUnspecified)?
     }
 
+    let mut instances = IndexMap::new();
     let cache = cache::populate()?;
     let list = process::list(&cache)?;
     let list = match all {
@@ -265,11 +267,18 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
         if process.fork() {
             fork_warn(process);
         }
+
+        match instances.get(process.instance()) {
+            Some(value) => instances.insert(process.instance(), value + 1),
+            None => instances.insert(process.instance(), 1),
+        };
     }
+
+    let instances: Vec<String> = instances.iter().map(|a| format!("{} ({}{}{})", a.0, *DIM, a.1, *RESET)).collect();
 
     if no_confirm {
         kill_processes(&list, sigint)
-    } else if let Ok(_) = prompt_targets(&list.iter().map(|a| a.instance()).collect(), "Kill processes?", false) {
+    } else if let Ok(_) = prompt_targets(&instances.iter().map(|a| a.as_ref()).collect(), "Kill container processes?", false) {
         kill_processes(&list, sigint)
     } else {
         Ok(())

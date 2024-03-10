@@ -424,6 +424,27 @@ impl SyncType {
     }
 }
 
+pub fn validate_fs_states<'a>(vec: &'a Vec<&'a str>) -> bool {
+    for instance in vec {
+        match check(instance) {
+            Ok(bool) =>
+                if bool {
+                    return false;
+                },
+            Err(err) => {
+                err.warn();
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+pub fn create_blank_state(container: &str) -> Result<(), Error> {
+    serialize(container.into(), FileSystemState::new())
+}
+
 fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T, Error> {
     match bincode::options()
         .with_fixint_encoding()
@@ -509,23 +530,6 @@ fn check(instance: &str) -> Result<bool, Error> {
     let version = header_buffer.read_le_32();
 
     Ok(magic != MAGIC_NUMBER || version != VERSION)
-}
-
-pub fn invalid_fs_states<'a>(vec: &'a Vec<&'a str>) -> bool {
-    for instance in vec {
-        match check(instance) {
-            Ok(bool) =>
-                if bool {
-                    return true;
-                },
-            Err(err) => {
-                err.warn();
-                return true;
-            }
-        }
-    }
-
-    false
 }
 
 fn previous_state(map: Vec<Option<FileSystemState>>) -> FileSystemState {
