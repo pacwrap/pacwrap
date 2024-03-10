@@ -51,7 +51,7 @@ If a feature you see here is not completed, feel free to submit a PR; or submit 
 | Conflict Resolution                | Not yet implemented                                                         | ❌            |
 | Package Installation               | Functional                                                                  | ✅            |
 | Package Removal                    | Functional                                                                  | ✅            |
-| Desktop Entry Creation             | ```pacwrap-utils``` at present provides this via ```pacwrap -Ud```          | ⚠            |
+| Desktop Entry Creation             | Functional                                                                  | ✅            |
 | Container Execution                | Functional                                                                  | ✅            |
 | Launch within existing namespace   | Not yet implemented                                                         | ❌            |
 | Container Configuration            | Functional                                                                  | ✅            |
