@@ -31,27 +31,35 @@ use pacwrap_core::{
     },
 };
 
+use crate::utils::delete::remove_containers;
+
 pub fn remove(mut args: &mut Arguments) -> Result<()> {
     check_root()?;
     init()?;
 
+    if args[0] == Op::Value("rm") || args[1] == Op::Short('m') || args[1] == Op::Long("delete") {
+        return remove_containers(args);
+    }
+
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
-    let action = {
-        let mut recursive = 0;
-        let mut cascade = false;
-
-        while let Some(arg) = args.next() {
-            match arg {
-                Op::Short('s') | Op::Long("recursive") => recursive += 1,
-                Op::Short('c') | Op::Long("cascade") => cascade = true,
-                _ => continue,
-            }
-        }
-
-        TransactionType::Remove(recursive > 0, cascade, recursive > 1)
-    };
+    let action = action(args);
 
     engage_aggregator(action, &mut args, &mut logger)
+}
+
+fn action(args: &mut Arguments) -> TransactionType {
+    let mut recursive = 0;
+    let mut cascade = false;
+
+    while let Some(arg) = args.next() {
+        match arg {
+            Op::Short('s') | Op::Long("recursive") => recursive += 1,
+            Op::Short('c') | Op::Long("cascade") => cascade = true,
+            _ => continue,
+        }
+    }
+
+    TransactionType::Remove(recursive > 0, cascade, recursive > 1)
 }
 
 fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, log: &'a mut Logger) -> Result<()> {

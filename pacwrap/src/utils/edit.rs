@@ -69,13 +69,16 @@ pub fn edit_file(args: &mut Arguments, edit: bool) -> Result<()> {
     }
 
     let temporary_file = &format!("/tmp/tmp.{}", random_string(10)?);
-    let file = &file.unwrap().to_string();
+    let file = &match file {
+        Some(file) => file.to_string(),
+        None => return args.invalid_operand(),
+    };
 
     copy(file, temporary_file).prepend_io(|| file.into())?;
     handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
 
-    if edit && hash_file(&file)? != hash_file(temporary_file)? {
-        copy(&temporary_file, &file).prepend_io(|| temporary_file.into())?;
+    if edit && hash_file(file)? != hash_file(temporary_file)? {
+        copy(temporary_file, file).prepend_io(|| temporary_file.into())?;
         println!("{} Changes written to file.", *ARROW_GREEN);
     } else {
         println!("{} No changes made.", *ARROW_CYAN);

@@ -63,7 +63,12 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = args.next() {
         match arg {
-            Operand::ShortPos('t', val) | Operand::LongPos("target", val) | Operand::Value(val) => targets.push(val),
+            Operand::Short('m') | Operand::Long("delete") => continue,
+            Operand::ShortPos('t', val)
+            | Operand::LongPos("target", val)
+            | Operand::LongPos("delete", val)
+            | Operand::ShortPos('m', val)
+            | Operand::Value(val) => targets.push(val),
             Operand::Long("noconfirm") => no_confirm = true,
             Operand::Long("force") => force = true,
             _ => args.invalid_operand()?,

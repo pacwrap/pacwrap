@@ -3,7 +3,6 @@ use std::process::Command;
 use pacwrap_core::{
     config,
     err,
-    exec::utils::handle_process,
     utils::{
         arguments::{InvalidArgument, Operand},
         Arguments,
@@ -24,16 +23,12 @@ pub fn engage_utility(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
         Operand::Short('v') | Operand::Long("view") | Operand::Value("view") => edit::edit_file(args, false),
         Operand::Short('e') | Operand::Long("edit") | Operand::Value("edit") => edit::edit_file(args, true),
-        Operand::Short('r') | Operand::Long("remove") | Operand::Value("rm") => delete::remove_containers(args),
+        Operand::Short('r') | Operand::Long("remove") | Operand::Value("remove") => delete::remove_containers(args),
         Operand::Short('d') | Operand::Long("desktop") | Operand::Value("desktop") => desktop::file(args),
         Operand::Short('l') | Operand::Long("list") | Operand::Value("ls") => list::list_containers(args),
         Operand::Short('o') | Operand::Long("open") | Operand::Value("open") => open(args),
-        _ => execute_utils(args),
+        _ => args.invalid_operand(),
     }
-}
-
-pub fn execute_utils(args: &mut Arguments) -> Result<()> {
-    handle_process("pacwrap-utils", Command::new("pacwrap-utils").args(args.inner()).spawn())
 }
 
 fn open(args: &mut Arguments) -> Result<()> {

@@ -53,9 +53,7 @@ fn action(args: &mut Arguments) -> (TransactionType, bool) {
     let (mut y, mut u, mut i) = (0, 0, false);
 
     if let Op::Value("init") = args[0] {
-        u = 1;
-        y = 1;
-        i = true;
+        (y, u, i) = (1, 1, true);
     }
 
     while let Some(arg) = args.next() {
