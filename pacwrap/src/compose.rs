@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashMap, fs::create_dir, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use pacwrap_core::{
     config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType},
@@ -25,7 +25,7 @@ use pacwrap_core::{
     err,
     log::{Level::Info, Logger},
     sync::{
-        schema,
+        instantiate_container,
         transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
@@ -47,26 +47,6 @@ pub fn compose(args: &mut Arguments) -> Result<()> {
     engage_aggregator(args)
 }
 
-fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> {
-    let instype = handle.metadata().container_type();
-    let root = handle.vars().root();
-    let home = handle.vars().home();
-
-    create_dir(root).prepend_io(|| root.into())?;
-
-    if let ContainerType::Aggregate | ContainerType::Base = instype {
-        if !Path::new(home).exists() {
-            create_dir(home).prepend_io(|| home.into())?;
-        }
-    }
-
-    if let ContainerType::Base = instype {
-        schema::extract(handle, &None)?;
-    }
-
-    handle.save()
-}
-
 fn delete_containers<'a>(
     cache: &'a ContainerCache<'a>,
     logger: &mut Logger,
@@ -86,20 +66,39 @@ fn delete_containers<'a>(
     Ok(())
 }
 
-fn compose_containers<'a>(
-    mut cache: ContainerCache<'a>,
-    logger: &mut Logger,
+fn compose_handles<'a>(
+    cache: &ContainerCache<'a>,
     compose: HashMap<&'a str, Option<&'a str>>,
-) -> Result<ContainerCache<'a>> {
-    println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if compose.len() > 1 { "s" } else { "" }, *RESET);
+) -> Result<HashMap<&'a str, ContainerHandle<'a>>> {
+    let mut composed = HashMap::new();
 
     for (instance, config) in compose {
         let handle = compose_handle(instance, config)?;
+
+        if let ContainerType::Base = handle.metadata().container_type() {
+            if handle.metadata().dependencies().len() > 0 {
+                err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
+            }
+        }
 
         for target in handle.metadata().dependencies() {
             cache.get_instance(target)?;
         }
 
+        composed.insert(instance, handle);
+    }
+
+    Ok(composed)
+}
+
+fn instantiate<'a>(
+    composed: HashMap<&'a str, ContainerHandle<'a>>,
+    mut cache: ContainerCache<'a>,
+    logger: &mut Logger,
+) -> Result<ContainerCache<'a>> {
+    println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if composed.len() > 1 { "s" } else { "" }, *RESET);
+
+    for (instance, handle) in composed {
         instantiate_container(&handle)?;
 
         match cache.get_instance_option(instance) {
@@ -215,7 +214,7 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
         delete_containers(&cache, &mut logger, &delete, &flags, force)?;
     }
 
-    cache = compose_containers(cache, &mut logger, compose)?;
+    cache = instantiate(compose_handles(&cache, compose)?, cache, &mut logger)?;
     acquire_targets(&cache, &mut targets, &mut queue)?;
     Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
         .flag(flags)

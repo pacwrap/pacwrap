@@ -19,7 +19,7 @@
 
 use std::{
     fmt::{Display, Formatter},
-    fs::remove_dir_all,
+    fs::{remove_dir_all, remove_file},
     path::Path,
 };
 
@@ -30,7 +30,6 @@ use pacwrap_core::{
     impl_error,
     log::{Level::Info, Logger},
     process,
-    sync::filesystem::create_blank_state,
     utils::{arguments::Operand, prompt::prompt_targets, Arguments},
     Error,
     ErrorGeneric,
@@ -105,11 +104,12 @@ pub fn delete_roots(cache: &ContainerCache<'_>, logger: &mut Logger, targets: &V
     for container in containers {
         let root = container.vars().root();
         let instance = container.vars().instance();
-        let state = &format!("{}/state/{instance}.dat", *DATA_DIR);
+        let state = format!("{}/state/{instance}.dat", *DATA_DIR);
+
         remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}':"))?;
 
-        if Path::new(state).exists() {
-            create_blank_state(instance)?;
+        if Path::new(&state).exists() {
+            remove_file(&state).prepend_io(|| state)?;
         }
 
         eprintln!("{} Deleted container {}{}{} successfully.", *ARROW_GREEN, *BOLD, instance, *RESET);

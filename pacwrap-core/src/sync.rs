@@ -18,21 +18,23 @@
  */
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
+    fs::create_dir,
     path::Path,
     process::exit,
 };
 
 use alpm::{Alpm, SigLevel, Usage};
 use lazy_static::lazy_static;
-use pacmanconf;
+use pacmanconf::{self, Config};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{cache::ContainerCache, global::ProgressKind, ContainerHandle, ContainerVariables, Global, CONFIG},
+    config::{cache::ContainerCache, global::ProgressKind, ContainerHandle, ContainerType, ContainerVariables, Global, CONFIG},
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET},
     err,
     error,
     exec::pacwrap_key,
+    impl_error,
     sync::{
         event::download::{self, DownloadEvent},
         filesystem::create_hard_link,
@@ -43,6 +45,8 @@ use crate::{
     ErrorTrait,
     Result,
 };
+
+use self::filesystem::create_blank_state;
 
 pub mod event;
 pub mod filesystem;
@@ -110,11 +114,7 @@ impl Display for SyncError {
     }
 }
 
-impl ErrorTrait for SyncError {
-    fn code(&self) -> i32 {
-        1
-    }
-}
+impl_error!(SyncError);
 
 impl From<Error> for SyncError {
     fn from(error: Error) -> SyncError {
@@ -178,6 +178,30 @@ fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConf
     handle.set_disable_dl_timeout(CONFIG.alpm().download_timeout());
     handle = register_remote(handle, remotes);
     handle
+}
+
+pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> {
+    let instype = handle.metadata().container_type();
+    let root = handle.vars().root();
+    let home = handle.vars().home();
+
+    create_dir(root).prepend_io(|| root.into())?;
+
+    if let ContainerType::Aggregate | ContainerType::Base = instype {
+        if !Path::new(home).exists() {
+            create_dir(home).prepend_io(|| home.into())?;
+        }
+    }
+
+    if let ContainerType::Base | ContainerType::Slice = instype {
+        create_blank_state(handle.vars().instance())?;
+    }
+
+    if let ContainerType::Base = instype {
+        schema::extract(handle, &None)?;
+    }
+
+    handle.save()
 }
 
 pub fn instantiate_trust() -> Result<()> {
@@ -249,43 +273,40 @@ fn synchronize_database(cache: &ContainerCache, force: bool) -> Result<()> {
 }
 
 fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
-    if sigs.len() > 0 {
-        let mut sig = SigLevel::empty();
-
-        for level in sigs {
-            sig = sig
-                | if level == "Required" || level == "PackageRequired" {
-                    SigLevel::PACKAGE
-                } else if level == "DatabaseRequired" || level == "DatabaseTrustedOnly" {
-                    SigLevel::DATABASE
-                } else if level == "PackageOptional" {
-                    SigLevel::PACKAGE_OPTIONAL
-                } else if level == "PackageTrustAll" {
-                    SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK
-                } else if level == "DatabaseOptional" {
-                    SigLevel::DATABASE_OPTIONAL
-                } else if level == "DatabaseTrustAll" {
-                    SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK
-                } else {
-                    SigLevel::empty()
-                }
-        }
-
-        sig
-    } else {
-        default
+    if sigs.is_empty() {
+        return default;
     }
+
+    let mut sig = SigLevel::empty();
+
+    for level in sigs {
+        sig = sig
+            | match level.as_ref() {
+                "DatabaseTrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK,
+                "PackageTrustAll" => SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK,
+                "DatabaseRequired" | "DatabaseTrustedOnly" => SigLevel::DATABASE,
+                "PackageRequired" | "Required" => SigLevel::PACKAGE,
+                "PackageOptional" => SigLevel::PACKAGE_OPTIONAL,
+                "DatabaseOptional" => SigLevel::DATABASE_OPTIONAL,
+                _ => SigLevel::empty(),
+            }
+    }
+
+    sig
 }
 
-fn load_repositories() -> pacmanconf::Config {
+fn default_signature() -> SigLevel {
+    signature(&CONFIG.alpm().sig_level(), SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL)
+}
+
+fn load_repositories() -> Config {
     let path = format!("{}/repositories.conf", *CONFIG_DIR);
 
-    match pacmanconf::Config::from_file(&path) {
+    match Config::from_file(&path) {
         Ok(config) => config,
         Err(error) => {
             //The following code is ugly, precisely because, the pacman_conf library does not
-            //provide ergonomic error strings. At some point perhaps, pacman_conf should be
-            //eliminated as an upstream dependency or otherwise forked.
+            //provide ergonomic error strings. At some point perhaps, we should fork pacman_conf?
 
             let error = error.to_string();
             let error = error.split("error: ").collect::<Vec<_>>()[1].split("\n").collect::<Vec<&str>>()[0];
@@ -294,8 +315,4 @@ fn load_repositories() -> pacmanconf::Config {
             exit(error.error());
         }
     }
-}
-
-fn default_signature() -> SigLevel {
-    signature(&CONFIG.alpm().sig_level(), SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL)
 }

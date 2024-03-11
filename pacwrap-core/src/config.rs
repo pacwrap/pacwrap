@@ -74,7 +74,7 @@ impl Display for ConfigError {
             Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
             Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
             Self::AlreadyExists(ins) => write!(fmter, "Container {}{ins}{} already exists.", *BOLD, *RESET),
-            Self::ConfigNotFound(ins) => write!(fmter, "Configuration for '{}{ins}{}' not found.", *BOLD, *RESET),
+            Self::ConfigNotFound(path) => write!(fmter, "'{path}': Configuration not found."),
         }
     }
 }
@@ -116,7 +116,7 @@ pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: V
         }
         Err(err) => {
             if let Ok(err) = err.downcast::<ConfigError>() {
-                if let ConfigError::ConfigNotFound(_) = err {
+                if let ConfigError::ConfigNotFound(..) = err {
                     let cfg = Container::new(instype, deps, vec![]);
                     let vars = ContainerVariables::new(instance);
 
@@ -151,23 +151,15 @@ fn handle<'a>(vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
             Ok(ContainerHandle::new(config, vars))
         }
         Err(error) => match error.kind() {
-            NotFound => err!(ConfigError::ConfigNotFound(vars.instance().into()))?,
+            NotFound => err!(ConfigError::ConfigNotFound(vars.config_path().into()))?,
             _ => err!(ErrorKind::IOError(vars.config_path().into(), error.kind()))?,
         },
     }
 }
 
 fn config() -> Result<Global> {
-    use std::io::ErrorKind::*;
-
-    match File::open(*CONFIG_FILE) {
-        Ok(file) => match serde_yaml::from_reader(&file) {
-            Ok(file) => Ok(file),
-            Err(error) => err!(ConfigError::Load(CONFIG_FILE.to_string(), error.to_string()))?,
-        },
-        Err(error) => match error.kind() {
-            NotFound => err!(ConfigError::ConfigNotFound(CONFIG_FILE.to_string()))?,
-            _ => err!(ErrorKind::IOError(CONFIG_FILE.to_string(), error.kind()))?,
-        },
+    match serde_yaml::from_reader(File::open(*CONFIG_FILE).prepend_io(|| CONFIG_FILE.to_string())?) {
+        Ok(file) => Ok(file),
+        Err(error) => err!(ConfigError::Load(CONFIG_FILE.to_string(), error.to_string()))?,
     }
 }
