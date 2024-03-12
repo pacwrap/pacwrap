@@ -20,6 +20,7 @@
 use std::{
     borrow::Cow,
     fmt::{Debug, Display, Formatter},
+    result::Result as StdResult,
     vec::Vec,
 };
 
@@ -37,12 +38,36 @@ use crate::{
     Result,
 };
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(try_from = "ContainerShadow")]
 pub struct Container<'a> {
     #[serde(flatten)]
     metadata: ContainerMetadata<'a>,
     #[serde(flatten)]
     runtime: ContainerRuntime,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct ContainerShadow<'a> {
+    #[serde(flatten)]
+    metadata: ContainerMetadata<'a>,
+    #[serde(flatten)]
+    runtime: ContainerRuntime,
+}
+
+impl<'a> TryFrom<ContainerShadow<'a>> for Container<'a> {
+    type Error = &'static str;
+
+    fn try_from(value: ContainerShadow<'a>) -> StdResult<Self, Self::Error> {
+        if value.metadata.container_type == ContainerType::Base && value.metadata.dependencies.len() > 0 {
+            Err("Dependencies cannot be specified for Base type containers.")?;
+        }
+
+        Ok(Self {
+            metadata: value.metadata,
+            runtime: value.runtime,
+        })
+    }
 }
 
 impl<'a> Container<'a> {
