@@ -113,7 +113,7 @@ fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
     let mut output = File::create(&desktop_file).prepend_io(|| desktop_file.into())?;
 
     write!(output, "{}", contents).prepend_io(|| desktop_file.into())?;
-    println!("{} Created {}", *ARROW_GREEN, file_name);
+    eprintln!("{} Created '{}'.", *ARROW_GREEN, file_name);
     Ok(())
 }
 
@@ -146,6 +146,6 @@ fn remove_desktop_entry(args: &mut Arguments) -> Result<()> {
     let desktop_file = &format!("{}/.local/share/applications/{}", *HOME, file_name);
 
     remove_file(&desktop_file).prepend_io(|| desktop_file.into())?;
-    println!("{} Removed {file_name}.", *ARROW_GREEN);
+    eprintln!("{} Removed '{file_name}'.", *ARROW_GREEN);
     Ok(())
 }

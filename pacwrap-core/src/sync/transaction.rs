@@ -473,7 +473,7 @@ impl<'a> TransactionHandle<'a> {
         if pkgs != explicit_packages || create {
             let mut instance = instance.clone();
 
-            instance.metadata_mut().set(depends, pkgs);
+            instance.metadata_mut().set_metadata(depends, pkgs);
             instance.save()?;
             drop(instance);
         }

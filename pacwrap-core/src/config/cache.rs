@@ -86,10 +86,6 @@ impl<'a> ContainerCache<'a> {
     }
 
     fn register(&mut self, ins: &'a str, handle: ContainerHandle<'a>) {
-        if let ContainerType::Symbolic = handle.metadata().container_type() {
-            return;
-        }
-
         self.instances.insert(ins, handle);
     }
 

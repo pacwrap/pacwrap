@@ -73,7 +73,7 @@ impl Display for ConfigError {
             Self::Permission(module, err) => write!(fmter, "Failed to register permission '{}': {} ", module, err),
             Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
             Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
-            Self::AlreadyExists(ins) => write!(fmter, "Container {}{ins}{} already exists.", *BOLD, *RESET),
+            Self::AlreadyExists(ins) => write!(fmter, "Container '{}{ins}{}' already exists.", *BOLD, *RESET),
             Self::ConfigNotFound(path) => write!(fmter, "'{path}': Configuration not found."),
         }
     }
@@ -111,7 +111,7 @@ pub fn compose_handle<'a>(instance: &'a str, path: Option<&'a str>) -> Result<Co
 pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<ContainerHandle<'a>> {
     match handle(ContainerVariables::new(instance)) {
         Ok(mut handle) => {
-            handle.metadata_mut().set(deps, vec![]);
+            handle.metadata_mut().set_metadata(deps, vec![]);
             Ok(handle.create())
         }
         Err(err) => {

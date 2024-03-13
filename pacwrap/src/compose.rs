@@ -130,9 +130,9 @@ fn acquire_targets<'a>(
 }
 
 fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
-    let mut cache = match args.into_iter().filter(|a| *a == Op::Long("from-config")).count() > 0 {
-        true => cache::populate_config(),
-        false => cache::populate(),
+    let mut cache = match args.into_iter().find(|a| *a == Op::Long("from-config")) {
+        Some(_) => cache::populate_config(),
+        None => cache::populate(),
     }?;
     let mut flags = TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;
     let mut logger = Logger::new("pacwrap-compose").init()?;

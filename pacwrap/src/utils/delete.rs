@@ -117,7 +117,7 @@ pub fn delete_roots(cache: &ContainerCache<'_>, logger: &mut Logger, targets: &V
             remove_file(&state).prepend_io(|| state)?;
         }
 
-        eprintln!("{} Deleted container {}{}{} successfully.", *ARROW_GREEN, *BOLD, instance, *RESET);
+        eprintln!("{} Deleted container '{}{}{}' successfully.", *ARROW_GREEN, *BOLD, instance, *RESET);
         logger.log(Info, &format!("Deleted container {instance}"))?;
     }
 

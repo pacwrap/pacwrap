@@ -79,9 +79,9 @@ pub fn edit_file(args: &mut Arguments, edit: bool) -> Result<()> {
 
     if edit && hash_file(file)? != hash_file(temporary_file)? {
         copy(temporary_file, file).prepend_io(|| temporary_file.into())?;
-        println!("{} Changes written to file.", *ARROW_GREEN);
+        eprintln!("{} Changes written to file.", *ARROW_GREEN);
     } else {
-        println!("{} No changes made.", *ARROW_CYAN);
+        eprintln!("{} No changes made.", *ARROW_CYAN);
     }
 
     remove_file(temporary_file).prepend_io(|| temporary_file.into())

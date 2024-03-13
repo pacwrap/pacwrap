@@ -126,17 +126,24 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
 
     let mut table = Table::new().header(&table_header).spacing(4);
 
-    for col in 2 .. table_type.len() - 1 {
+    for col in 2 .. if table_type.contains(&Summary(None)) {
+        table_type.len() - 1
+    } else {
+        table_type.len()
+    } {
         table = table.col_attribute(col, ColumnAttribute::AlignRight);
     }
 
     //TODO: More advanced sorting options
+    handles.sort_by_key(|f| *f.metadata().container_type() == ContainerType::Base);
+    handles.sort_by_key(|f| *f.metadata().container_type() == ContainerType::Slice);
     handles.sort_by_key(|f| *f.metadata().container_type() == ContainerType::Aggregate);
+    handles.sort_by_key(|f| *f.metadata().container_type() == ContainerType::Symbolic);
 
     for container in handles.iter() {
         let instance = container.vars().instance();
         let container_path = &format!("{}/{}", *CONTAINER_DIR, instance);
-        let (len, organic, total) = if measure_disk {
+        let (len, organic, total) = if measure_disk && container.metadata().container_type() != &ContainerType::Symbolic {
             directory_size(container_path)?
         } else {
             (0, 0, 0)

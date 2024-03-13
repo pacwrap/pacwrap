@@ -95,6 +95,14 @@ impl<'a> ContainerHandle<'a> {
         }
     }
 
+    pub fn from(container: &ContainerHandle<'a>, container_vars: ContainerVariables) -> Self {
+        Self {
+            inner: container.inner.clone(),
+            meta: container_vars,
+            creation: false,
+        }
+    }
+
     pub fn create(mut self) -> Self {
         self.creation = true;
         self
@@ -220,7 +228,7 @@ pub enum ContainerType {
 impl ContainerType {
     fn as_str<'a>(&self) -> &'a str {
         match self {
-            Self::Symbolic => "Sumbolic",
+            Self::Symbolic => "Symbolic",
             Self::Base => "Base",
             Self::Slice => "Slice",
             Self::Aggregate => "Aggregate",
@@ -262,9 +270,14 @@ impl<'a> ContainerMetadata<'a> {
         }
     }
 
-    pub fn set(&mut self, deps: Vec<&'a str>, pkgs: Vec<&'a str>) {
+    pub fn set_metadata(&mut self, deps: Vec<&'a str>, pkgs: Vec<&'a str>) {
         self.dependencies = deps.iter().map(|a| (*a).into()).collect();
         self.explicit_packages = pkgs.iter().map(|a| (*a).into()).collect();
+        self.meta_version = *UNIX_TIMESTAMP;
+    }
+
+    pub fn set_type(&mut self, ctype: ContainerType) {
+        self.container_type = ctype;
         self.meta_version = *UNIX_TIMESTAMP;
     }
 

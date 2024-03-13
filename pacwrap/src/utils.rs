@@ -16,6 +16,7 @@ pub mod delete;
 pub mod desktop;
 mod edit;
 pub mod list;
+mod symlink;
 
 const GIO: &'static str = "gio";
 
@@ -25,8 +26,9 @@ pub fn engage_utility(args: &mut Arguments) -> Result<()> {
         Operand::Short('e') | Operand::Long("edit") | Operand::Value("edit") => edit::edit_file(args, true),
         Operand::Short('r') | Operand::Long("remove") | Operand::Value("remove") => delete::remove_containers(args),
         Operand::Short('d') | Operand::Long("desktop") | Operand::Value("desktop") => desktop::file(args),
-        Operand::Short('l') | Operand::Long("list") | Operand::Value("ls") => list::list_containers(args),
+        Operand::Short('l') | Operand::Long("list") | Operand::Value("list") => list::list_containers(args),
         Operand::Short('o') | Operand::Long("open") | Operand::Value("open") => open(args),
+        Operand::Short('s') | Operand::Long("symlink") | Operand::Value("symlink") => symlink::link(args),
         _ => args.invalid_operand(),
     }
 }
