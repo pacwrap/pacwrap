@@ -26,8 +26,8 @@ use crate::utils::prompt::prompt;
 pub fn callback(question: AnyQuestion, _: &mut ()) {
     match question.question() {
         Conflict(mut x) => {
-            let pkg_a = x.conflict().package1();
-            let pkg_b = x.conflict().package2();
+            let pkg_a = x.conflict().package1().name();
+            let pkg_b = x.conflict().package2().name();
             let prompt_string = format!("Conflict between {pkg_a} and {pkg_b}; Remove {pkg_b}?");
 
             if let Ok(_) = prompt("->", prompt_string, false) {
@@ -54,11 +54,9 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             }
         }
         ImportKey(mut x) => {
-            let key = x.key();
-            let fingerprint = key.fingerprint();
-            let email = key.email();
-            let name = key.name();
-            let prompt_string = format!("Import key {fingerprint},\"{name} <{email}>\" to keyring?");
+            let fingerprint = x.fingerprint();
+            let name = x.uid();
+            let prompt_string = format!("Import key {fingerprint},\"{name}\" to keyring?");
 
             if let Ok(_) = prompt("->", prompt_string, true) {
                 x.set_import(true);

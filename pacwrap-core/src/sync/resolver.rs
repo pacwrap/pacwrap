@@ -29,7 +29,7 @@ use crate::{
 
 pub struct DependencyResolver<'a> {
     resolved: HashSet<&'a str>,
-    packages: Vec<Package<'a>>,
+    packages: Vec<&'a Package>,
     keys: Vec<&'a str>,
     ignored: &'a HashSet<String>,
     handle: &'a Alpm,
@@ -57,7 +57,7 @@ impl<'a> DependencyResolver<'a> {
         Ok(())
     }
 
-    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<Package<'a>>), Error> {
+    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<&'a Package>), Error> {
         let mut synchronize: Vec<&'a str> = Vec::new();
 
         for pkg in packages {
