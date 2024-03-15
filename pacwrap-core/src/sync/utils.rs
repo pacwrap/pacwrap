@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use alpm::{Alpm, CommitResult, FileConflictType, Package, PrepareResult};
+use alpm::{Alpm, CommitData, CommitError, Package, PrepareData, PrepareError};
 
 use crate::{
     constants::{BOLD, BOLD_WHITE, RESET},
@@ -29,37 +29,31 @@ use crate::{
 };
 
 pub trait AlpmUtils {
-    fn get_local_package(&self, pkg: &str) -> Option<Package<'_>>;
-    fn get_package(&self, pkg: &str) -> Option<Package<'_>>;
+    fn get_local_package(&self, pkg: &str) -> Option<&Package>;
+    fn get_package(&self, pkg: &str) -> Option<&Package>;
 }
 
 impl AlpmUtils for Alpm {
-    fn get_local_package<'a>(&self, pkg: &'a str) -> Option<Package<'_>> {
+    fn get_local_package<'a>(&self, pkg: &'a str) -> Option<&Package> {
         if let Ok(pkg) = self.localdb().pkg(pkg) {
             return Some(pkg);
         } else {
-            self.localdb().pkgs().iter().find_map(|f| {
-                if f.provides().iter().filter(|d| pkg == d.name()).count() > 0 {
-                    Some(f)
-                } else {
-                    None
-                }
-            })
+            self.localdb()
+                .pkgs()
+                .iter()
+                .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).and_then(|_| Some(f)))
         }
     }
 
-    fn get_package(&self, pkg: &str) -> Option<Package<'_>> {
+    fn get_package(&self, pkg: &str) -> Option<&Package> {
         for sync in self.syncdbs() {
             if let Ok(pkg) = sync.pkg(pkg) {
                 return Some(pkg);
             } else {
-                let package = sync.pkgs().iter().find_map(|f| {
-                    if f.provides().iter().filter(|d| pkg == d.name()).count() > 0 {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                });
+                let package = sync
+                    .pkgs()
+                    .iter()
+                    .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).and_then(|_| Some(f)));
 
                 if let None = package {
                     continue;
@@ -73,57 +67,47 @@ impl AlpmUtils for Alpm {
     }
 }
 
-pub fn erroneous_transaction<'a>(error: (CommitResult<'a>, alpm::Error)) -> Result<()> {
-    match error.0 {
-        CommitResult::FileConflict(file) => {
+pub fn erroneous_transaction<'a>(error: CommitError) -> Result<()> {
+    match error.data() {
+        CommitData::FileConflict(file) => {
             for conflict in file {
-                match conflict.conflict_type() {
-                    FileConflictType::Filesystem => {
-                        let file = conflict.file();
-                        let target = conflict.target();
-                        print_warning(&format!("{}: '{}' already exists.", target, file));
-                    }
-                    FileConflictType::Target => {
-                        let file = conflict.file();
-                        let target = format!("{}{}{}", *BOLD_WHITE, conflict.target(), *RESET);
-                        if let Some(conflicting) = conflict.conflicting_target() {
-                            let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
-                            print_warning(&format!("{conflicting}: '{target}' is owned by {file}"));
-                        } else {
-                            print_warning(&format!("{target}: '{file}' is owned by foreign target"));
-                        }
-                    }
-                }
+                let reason = conflict.reason();
+                let package1 = conflict.package1().name();
+                let package2 = conflict.package2().name();
+
+                print_warning(&format!(
+                    "Conflict between {}{}{} and {}{}{}: {}",
+                    *BOLD, package1, *RESET, *BOLD, package2, *RESET, reason
+                ));
             }
 
             err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
         }
-        CommitResult::PkgInvalid(p) =>
+        CommitData::PkgInvalid(p) =>
             for pkg in p.iter() {
                 let pkg = format!("{}{pkg}{}", *BOLD_WHITE, *RESET);
                 print_error(&format!("Invalid package: {}", pkg));
             },
-        _ => (),
     }
 
-    err!(SyncError::TransactionFailure(error.1.to_string()))
+    err!(SyncError::TransactionFailure(error.to_string()))
 }
 
-pub fn erroneous_preparation<'a>(error: (PrepareResult<'a>, alpm::Error)) -> Result<()> {
-    match error.0 {
-        PrepareResult::PkgInvalidArch(list) =>
+pub fn erroneous_preparation<'a>(error: PrepareError) -> Result<()> {
+    match error.data() {
+        PrepareData::PkgInvalidArch(list) =>
             for package in list.iter() {
                 print_error(&format!(
                     "Invalid architecture {}{}{} for {}{}{}",
                     *BOLD,
-                    package.arch().unwrap(),
+                    package.arch().unwrap_or("UNKNOWN"),
                     *RESET,
                     *BOLD,
                     package.name(),
                     *RESET
                 ));
             },
-        PrepareResult::UnsatisfiedDeps(list) =>
+        PrepareData::UnsatisfiedDeps(list) =>
             for missing in list.iter() {
                 print_error(&format!(
                     "Unsatisifed dependency {}{}{} for target {}{}{}",
@@ -135,21 +119,20 @@ pub fn erroneous_preparation<'a>(error: (PrepareResult<'a>, alpm::Error)) -> Res
                     *RESET
                 ));
             },
-        PrepareResult::ConflictingDeps(list) =>
+        PrepareData::ConflictingDeps(list) =>
             for conflict in list.iter() {
                 print_error(&format!(
                     "Conflict between {}{}{} and {}{}{}: {}",
                     *BOLD,
-                    conflict.package1(),
+                    conflict.package1().name(),
                     *RESET,
                     *BOLD,
-                    conflict.package2(),
+                    conflict.package2().name(),
                     *RESET,
                     conflict.reason()
                 ));
             },
-        _ => (),
     }
 
-    err!(SyncError::PreparationFailure(error.1.to_string()))
+    err!(SyncError::PreparationFailure(error.to_string()))
 }

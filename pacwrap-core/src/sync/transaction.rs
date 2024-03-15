@@ -398,7 +398,7 @@ impl<'a> TransactionHandle<'a> {
                     .iter()
                     .filter(|a| !self.meta.held_pkgs.contains(a.name()))
                     .map(|a| *a)
-                    .collect::<Vec<Package<'_>>>()
+                    .collect::<Vec<&Package>>()
                 {
                     if !self.agent && !ignored.contains(pkg.name()) && config.alpm().held().contains(&pkg.name()) {
                         if let Err(_) =
@@ -429,7 +429,7 @@ impl<'a> TransactionHandle<'a> {
                             Some(*a)
                         }
                     })
-                    .collect::<Vec<Package<'_>>>()
+                    .collect::<Vec<&Package>>()
                 {
                     if !self.agent && config.alpm().ignored().contains(&pkg.name()) {
                         if let Err(_) = prompt(
@@ -495,7 +495,7 @@ impl<'a> TransactionHandle<'a> {
 
     pub fn mark_depends(&mut self) {
         if let Some(deps) = self.deps.as_ref() {
-            for mut pkg in deps.iter().filter_map(|a| self.alpm().get_local_package(a)) {
+            for pkg in deps.iter().filter_map(|a| self.alpm().get_local_package(a)) {
                 pkg.set_reason(PackageReason::Depend).unwrap();
             }
         }

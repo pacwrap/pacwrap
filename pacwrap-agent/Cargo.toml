@@ -18,4 +18,4 @@ serde = { version = "1.0", features = ["derive"] }
 bincode = "1.3.3"
 
 # Packaging
-alpm = { version = "2.2.2", features = ["checkver"] }
+alpm = { version = "3.0.5", features = ["checkver"] }
