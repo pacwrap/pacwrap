@@ -88,7 +88,7 @@ fn instantiate<'a>(
     for (container, (container_type, deps)) in targets.iter() {
         if let (ContainerType::Base, true) = (container_type, deps.len() > 0) {
             err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
-        } else if deps.is_empty() {
+        } else if let (ContainerType::Aggregate | ContainerType::Slice, true) = (container_type, deps.is_empty()) {
             err!(ErrorKind::Message("Dependencies not specified."))?
         } else if let Some(_) = cache.get_instance_option(container) {
             err!(AlreadyExists(container.to_string()))?;
