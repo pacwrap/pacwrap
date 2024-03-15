@@ -24,7 +24,7 @@ signal-hook = "0.3.15"
 os_pipe = "1.1.4"
 
 # Packaging
-alpm = { version = "2.2.2", features = ["checkver"] }
+alpm = { git = "https://github.com/archlinux/alpm.rs.git", version = "3.0.4", features = ["checkver"] }
 sha2 = "0.10.8"
 regex = "1.10.3"
 
