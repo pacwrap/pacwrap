@@ -6,12 +6,12 @@ license ="GPL-3.0-only"
 readme = "README.md"
 edition = "2021"
 
-description = "Core library providing the core functionality for pacwrap"
+description = "Library providing core functionality for pacwrap"
 homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://github.com/pacwrap/pacwrap"
 
 [dependencies]
-bitflags = "2.4.0"
+bitflags = "2.4.2"
 lazy_static = "1.4.0"
 nix = "0.22.3, <= 0.22.3"
 time = { version = "0.3.28", features = ["formatting", "macros", "local-offset", "parsing"] }
