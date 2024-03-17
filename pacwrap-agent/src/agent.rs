@@ -26,9 +26,7 @@ use std::{
 use serde::Deserialize;
 
 use pacwrap_core::{
-    config::Global,
-    err,
-    sync::{
+    config::Global, err, sync::{
         self,
         event::{
             download::{self, DownloadEvent},
@@ -39,10 +37,7 @@ use pacwrap_core::{
         utils::{erroneous_preparation, erroneous_transaction},
         AlpmConfigData,
         SyncError,
-    },
-    utils::{bytebuffer::ByteBuffer, print_warning},
-    Error,
-    Result,
+    }, utils::{bytebuffer::ByteBuffer, print_warning}, Error, ErrorGeneric, Result
 };
 
 use crate::error::AgentError;
@@ -64,10 +59,7 @@ pub fn transact() -> Result<()> {
         }
     };
 
-    if let Err(error) = file.read_exact_at(header.as_slice_mut(), 0) {
-        err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
-    }
-
+    file.read_exact_at(header.as_slice_mut(), 0).prepend_io(|| AGENT_PARAMS.into())?;
     decode_header(&mut header)?;
 
     let params: TransactionParameters = deserialize(&mut file)?;
@@ -77,7 +69,12 @@ pub fn transact() -> Result<()> {
     let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes);
     let mut handle = TransactionHandle::new(&mut metadata).alpm_handle(alpm).config(&config).agent();
 
-    conduct_transaction(&config, &mut handle, params)
+    if let Err(err) = conduct_transaction(&config, &mut handle, params) {
+        handle.release();
+        return Err(err);
+    }
+
+    Ok(())
 }
 
 fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {

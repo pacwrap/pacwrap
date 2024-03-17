@@ -501,7 +501,11 @@ impl<'a> TransactionHandle<'a> {
         }
     }
 
-    pub fn release(self) {
+    pub fn release(mut self) {
+        if let Some(alpm) = self.alpm.as_mut() {
+            alpm.trans_release().ok();
+        }
+
         drop(self);
     }
 
