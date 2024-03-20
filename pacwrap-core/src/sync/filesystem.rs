@@ -189,12 +189,14 @@ impl<'a> FileSystemStateSync<'a> {
             }
 
             let inshandle = self.cache.get_instance(ins)?;
+            let ins_type = inshandle.metadata().container_type();
+            let ins_deps = inshandle.metadata().dependencies();
 
-            write_chan = self.link(&inshandle.metadata().dependencies(), write_chan)?;
+            write_chan = self.link(&ins_deps, write_chan)?;
 
-            if let Aggregate = inshandle.metadata().container_type() {
+            if let Aggregate = ins_type {
                 self.link_instance(inshandle, tx.clone())?;
-            } else {
+            } else if let Base | Slice = ins_type {
                 self.obtain_slice(inshandle, tx.clone())?;
             }
 
