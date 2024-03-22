@@ -65,9 +65,11 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
         match arg {
             Operand::Short('m') | Operand::Long("delete") => continue,
             Operand::ShortPos('t', val)
+            | Operand::ShortPos('m', val)
+            | Operand::ShortPos('r', val)
             | Operand::LongPos("target", val)
             | Operand::LongPos("delete", val)
-            | Operand::ShortPos('m', val)
+            | Operand::LongPos("remove", val)
             | Operand::Value(val) => targets.push(val),
             Operand::Long("noconfirm") => no_confirm = true,
             Operand::Long("force") => force = true,
@@ -75,7 +77,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
         }
     }
 
-    let cache = cache::populate()?;
+    let cache = cache::populate_config()?;
     let instances = cache.filter_target(&targets, vec![]);
 
     if instances.len() != targets.len() {
@@ -86,9 +88,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
         }
     }
 
-    if no_confirm {
-        delete_roots(&cache, &mut logger, &instances, force)
-    } else if let Ok(_) = prompt_targets(&instances, "Delete containers?", false) {
+    if let (true, _) | (_, Ok(_)) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
         delete_roots(&cache, &mut logger, &instances, force)
     } else {
         Ok(())

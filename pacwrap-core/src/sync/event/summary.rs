@@ -57,6 +57,7 @@ pub struct Summary {
 enum TableColumns {
     OldNewNetDownload,
     NewNetDownload,
+    OldNewNet,
     OldNet,
     NewNet,
     Version,
@@ -176,6 +177,10 @@ impl Summary {
                 .new_line()
                 .col_attribute(2, ColumnAttribute::AlignRight)
                 .col_attribute(3, ColumnAttribute::AlignRight),
+            TableColumns::OldNewNet => Table::new()
+                .header(&table_header)
+                .new_line()
+                .col_attribute(3, ColumnAttribute::AlignRight),
             TableColumns::OldNet | TableColumns::NewNet => Table::new()
                 .header(&table_header)
                 .new_line()
@@ -193,6 +198,7 @@ impl Summary {
             table.insert(match table_columns {
                 TableColumns::OldNewNetDownload => vec![name, old, new, net, dnl],
                 TableColumns::NewNetDownload => vec![name, new, net, dnl],
+                TableColumns::OldNewNet => vec![name, old, new, net],
                 TableColumns::OldNet => vec![name, old, net],
                 TableColumns::NewNet => vec![name, new, net],
                 TableColumns::Version => vec![name, new],
@@ -274,6 +280,7 @@ impl TableColumns {
         match self {
             Self::OldNewNetDownload => vec![preface, "Old Version", "New Version", "Net Change", "Download Size"],
             Self::NewNetDownload => vec![preface, "New Version", "Net Change", "Download Size"],
+            Self::OldNewNet => vec![preface, "Old Version", "New Version", "Net Change"],
             Self::OldNet => vec![preface, "Old Version", "Net Change"],
             Self::NewNet => vec![preface, "New Version", "Net Change"],
             Self::Version => vec![preface, "Version"],
@@ -283,10 +290,13 @@ impl TableColumns {
 
 impl From<&Summary> for TableColumns {
     fn from(sum: &Summary) -> Self {
+        println!("{:?} ", sum.columns());
+
         match sum.columns() {
             //Grr, don't try to figure out _how_ this works, just know that it does..
             (false, false, false, false, false) => Self::OldNet,
             (true, true, _, true, true) => Self::OldNewNetDownload,
+            (true, true, _, true, false) => Self::OldNewNet,
             (.., true, false, true) => Self::NewNetDownload,
             (.., true, false, false) => Self::NewNet,
             _ => Self::Version,

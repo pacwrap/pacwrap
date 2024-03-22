@@ -32,7 +32,6 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
 pub struct ProgressEvent {
     current: Option<String>,
     condensed: Option<ProgressBar>,

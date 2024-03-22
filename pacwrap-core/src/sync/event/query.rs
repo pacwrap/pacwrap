@@ -56,7 +56,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
         ImportKey(mut x) => {
             let fingerprint = x.fingerprint();
             let name = x.uid();
-            let prompt_string = format!("Import key {fingerprint},\"{name}\" to keyring?");
+            let prompt_string = format!("Import key {fingerprint}, \"{name}\" to keyring?");
 
             if let Ok(_) = prompt("->", prompt_string, true) {
                 x.set_import(true);

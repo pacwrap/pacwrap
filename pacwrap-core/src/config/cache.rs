@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fs::read_dir;
+use std::{fs::read_dir, path::Path};
 
 use indexmap::IndexMap;
 
@@ -134,10 +134,10 @@ impl<'a> ContainerCache<'a> {
     }
 
     pub fn obtain_base_handle(&self) -> Option<&ContainerHandle> {
-        match self.filter(vec![ContainerType::Base]).get(0) {
-            Some(instance) => self.instances.get(instance),
-            None => None,
-        }
+        self.filter_handle(vec![ContainerType::Base])
+            .iter()
+            .find(|a| Path::new(a.vars().root()).exists())
+            .copied()
     }
 
     pub fn get_instance(&self, ins: &str) -> Result<&ContainerHandle> {
@@ -162,7 +162,7 @@ pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
     Ok(cache)
 }
 
-pub fn populate_nonexistant_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
+pub fn populate_config_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
     let mut cache = ContainerCache::new();
 
     for name in vec {
@@ -186,7 +186,7 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
 }
 
 pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
-    populate_nonexistant_from(
+    populate_config_from(
         &read_dir(&format!("{}/container", *CONFIG_DIR))
             .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
             .filter(|e| e.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_file() && !m.is_symlink())))

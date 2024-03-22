@@ -41,7 +41,6 @@ lazy_static! {
         .tick_strings(&[" ", "✓"]);
 }
 
-#[derive(Clone)]
 pub struct DownloadEvent {
     total: usize,
     position: usize,

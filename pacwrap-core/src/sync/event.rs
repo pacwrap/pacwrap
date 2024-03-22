@@ -17,15 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::utils;
-
 pub mod download;
 pub mod progress;
 pub mod query;
 pub mod summary;
 
 fn whitespace(total: usize, current: usize) -> String {
-    utils::whitespace(log10(total) - log10(current))
+    " ".repeat(log10(total) - log10(current))
 }
 
 fn log10(mut value: usize) -> usize {

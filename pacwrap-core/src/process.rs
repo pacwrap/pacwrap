@@ -261,7 +261,7 @@ fn qualify_process<'a>(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32
         return Some((some.instance().into(), some.depth + 1, some.fork()));
     } else if cmdlist[0] == "pacwrap" {
         for idx in 0 .. cmdlist.len() {
-            if !cmdlist[idx].contains("-E") && !cmdlist[idx].contains("run") {
+            if !cmdlist[idx].contains("-E") && !cmdlist[idx].contains("run") && !cmdlist[idx].contains("shell") {
                 continue;
             }
 

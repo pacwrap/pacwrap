@@ -51,22 +51,23 @@ pub fn print_error(message: &str) {
     eprintln!("{}error:{} {}", *BOLD_RED, *RESET, message);
 }
 
+pub fn check_socket(socket: &String) -> bool {
+    UnixStream::connect(&Path::new(socket)).is_ok()
+}
+
+pub fn unix_time_as_seconds() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+}
+
+pub fn whitespace(amt: usize) -> String {
+    " ".repeat(amt)
+}
+
 pub fn env_var(env: &'static str) -> Result<String> {
     match var(env) {
         Ok(var) => Ok(var),
         Err(_) => err!(ErrorKind::EnvVarUnset(env)),
     }
-}
-
-pub fn check_socket(socket: &String) -> bool {
-    match UnixStream::connect(&Path::new(socket)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
-}
-
-pub fn unix_time_as_seconds() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
 
 pub fn check_root() -> Result<()> {
@@ -75,14 +76,4 @@ pub fn check_root() -> Result<()> {
     }
 
     Ok(())
-}
-
-pub fn whitespace(amt: usize) -> String {
-    let mut vec = Vec::new();
-
-    for _ in 0 .. amt {
-        vec.push(' ');
-    }
-
-    String::from_iter(vec.iter())
 }
