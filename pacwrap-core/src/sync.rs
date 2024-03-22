@@ -18,7 +18,7 @@
  */
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
-    fs::create_dir,
+    fs::{create_dir, create_dir_all},
     path::Path,
     process::exit,
 };
@@ -41,7 +41,6 @@ use crate::{
     },
     Error,
     ErrorGeneric,
-    ErrorKind,
     ErrorTrait,
     Result,
 };
@@ -68,6 +67,7 @@ pub enum SyncError {
     ParameterAcquisitionFailure,
     DeserializationFailure,
     InvalidMagicNumber,
+    SignalInterrupt,
     AgentVersionMismatch,
     NothingToDo(bool),
     DependentContainerMissing(String),
@@ -104,20 +104,25 @@ impl Display for SyncError {
             Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
             Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
+            Self::SignalInterrupt => write!(fmter, "Signal interrupt was triggered."),
             Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
             Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
             Self::NothingToDo(_) => write!(fmter, "Nothing to do."),
             _ => Ok(()),
         }?;
 
-        write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
+        if let Self::SignalInterrupt = self {
+            write!(fmter, "\n{} Transaction aborted.", *ARROW_RED)
+        } else {
+            write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
+        }
     }
 }
 
 impl_error!(SyncError);
 
-impl From<Error> for SyncError {
-    fn from(error: Error) -> SyncError {
+impl From<&Error> for SyncError {
+    fn from(error: &Error) -> SyncError {
         Self::InternalError(error.kind().to_string())
     }
 }
@@ -167,8 +172,7 @@ pub fn instantiate_alpm(inshandle: &ContainerHandle) -> Alpm {
 }
 
 fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConfigData) -> Alpm {
-    let root = insvars.root();
-    let mut handle = Alpm::new(root, &db_path).unwrap();
+    let mut handle = Alpm::new(insvars.root(), &db_path).unwrap();
 
     handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
     handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).unwrap();
@@ -217,10 +221,7 @@ pub fn instantiate_trust() -> Result<()> {
         err!(SyncError::UnableToLocateKeyrings)?
     }
 
-    if let Err(error) = std::fs::create_dir_all(path) {
-        err!(ErrorKind::IOError(path.into(), error.kind()))?
-    }
-
+    create_dir_all(path).prepend_io(|| path.into())?;
     pacwrap_key(vec!["--init"])?;
     pacwrap_key(vec!["--populate"])
 }
@@ -282,6 +283,7 @@ fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
     for level in sigs {
         sig = sig
             | match level.as_ref() {
+                "TrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_UNKNOWN_OK,
                 "DatabaseTrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK,
                 "PackageTrustAll" => SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK,
                 "DatabaseRequired" | "DatabaseTrustedOnly" => SigLevel::DATABASE,

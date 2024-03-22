@@ -290,8 +290,6 @@ impl TableColumns {
 
 impl From<&Summary> for TableColumns {
     fn from(sum: &Summary) -> Self {
-        println!("{:?} ", sum.columns());
-
         match sum.columns() {
             //Grr, don't try to figure out _how_ this works, just know that it does..
             (false, false, false, false, false) => Self::OldNet,

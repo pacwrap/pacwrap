@@ -19,29 +19,28 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fs,
-    path::Path,
     process::exit,
-    thread,
 };
 
-use signal_hook::{consts::*, iterator::Signals};
+use alpm::Alpm;
+use signal_hook::iterator::Signals;
 
 use crate::{
     config::{cache::ContainerCache, ContainerHandle, ContainerType},
-    constants::{ARROW_GREEN, ARROW_RED, DATA_DIR, UNIX_TIMESTAMP},
+    constants::{ARROW_GREEN, SIGNAL_LIST, UNIX_TIMESTAMP},
     err,
-    error::*,
+    error,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
     log::Logger,
     sync::{
         self,
-        filesystem::{validate_fs_states, FileSystemStateSync},
+        filesystem::{validate_fs_states, FilesystemSync},
         transaction::{Transaction, TransactionFlags, TransactionHandle, TransactionMetadata, TransactionState, TransactionType},
         SyncError,
     },
     utils::arguments::InvalidArgument,
-    ErrorKind,
+    Error,
+    Result,
 };
 
 pub struct TransactionAggregator<'a> {
@@ -49,27 +48,27 @@ pub struct TransactionAggregator<'a> {
     updated: HashSet<&'a str>,
     pkg_queue: HashMap<&'a str, Vec<&'a str>>,
     action: TransactionType,
-    filesystem_state: Option<FileSystemStateSync<'a>>,
     cache: &'a ContainerCache<'a>,
     keyring: bool,
     logger: &'a mut Logger,
     flags: TransactionFlags,
     targets: Option<Vec<&'a str>>,
+    signals: Signals,
 }
 
 impl<'a> TransactionAggregator<'a> {
     pub fn new(inscache: &'a ContainerCache, log: &'a mut Logger, action_type: TransactionType) -> Self {
         Self {
+            targets: None,
             queried: HashSet::new(),
             updated: HashSet::new(),
             pkg_queue: HashMap::new(),
-            filesystem_state: Some(FileSystemStateSync::new(inscache)),
             action: action_type,
             cache: inscache,
             keyring: false,
             logger: log,
             flags: TransactionFlags::NONE,
-            targets: None,
+            signals: Signals::new(SIGNAL_LIST).unwrap(),
         }
     }
 
@@ -89,8 +88,6 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn aggregate(mut self) -> Result<()> {
-        signal_trap(self.cache);
-
         let _timestamp = *UNIX_TIMESTAMP;
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
@@ -106,6 +103,7 @@ impl<'a> TransactionAggregator<'a> {
             }
             TransactionType::Remove(..) => self.targets.is_some(),
         };
+        let mut linker = FilesystemSync::new(self.cache);
         let upstream = match self.targets.as_ref() {
             Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Base, ContainerType::Slice]),
             None => self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]),
@@ -117,8 +115,6 @@ impl<'a> TransactionAggregator<'a> {
         let are_downstream = self.cache.count(vec![ContainerType::Aggregate]) > 0;
 
         if !validate_fs_states(&upstream) && are_downstream {
-            let linker = self.fs_sync().unwrap();
-
             linker.refresh_state();
             linker.prepare(upstream.len());
             linker.engage(&upstream)?;
@@ -131,16 +127,13 @@ impl<'a> TransactionAggregator<'a> {
 
         if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
             if are_downstream {
-                let file = self.cache.registered();
-                let linker = self.fs_sync().unwrap();
-
                 linker.filesystem_state();
-                linker.prepare(file.len());
-                linker.engage(&file)?;
+                linker.prepare(self.cache.registered().len());
+                linker.engage(&self.cache.registered())?;
                 linker.finish();
             }
 
-            self.filesystem_state = self.filesystem_state.unwrap().release();
+            linker.release();
         }
 
         if upgrade {
@@ -162,6 +155,7 @@ impl<'a> TransactionAggregator<'a> {
                 None => continue,
             };
 
+            self.signal(&mut None)?;
             self.queried.insert(ins);
             self.transaction(
                 &inshandle
@@ -188,11 +182,14 @@ impl<'a> TransactionAggregator<'a> {
         let mut handle = TransactionHandle::new(&mut meta).alpm_handle(alpm);
         let mut act: Box<dyn Transaction> = TransactionState::Prepare.from(self);
 
-        self.action.begin_message(&inshandle);
+        self.signal(&mut handle.alpm)?;
+        self.action().begin_message(inshandle);
 
         loop {
-            let result = match act.engage(self, &mut handle, inshandle) {
+            act = match act.engage(self, &mut handle, inshandle) {
                 Ok(result) => {
+                    self.signal(&mut handle.alpm)?;
+
                     if let TransactionState::Complete(updated) = result {
                         if updated {
                             self.updated.insert(inshandle.vars().instance());
@@ -208,21 +205,14 @@ impl<'a> TransactionAggregator<'a> {
                 }
                 Err(err) => {
                     handle.release();
-                    return match err.downcast::<SyncError>() {
-                        Ok(error) => match error {
-                            SyncError::TransactionFailureAgent => exit(err.kind().code()),
-                            SyncError::NothingToDo(bool) => match bool {
-                                false => Ok(()),
-                                true => Err(err),
-                            },
-                            _ => Err(err),
-                        },
-                        Err(_) => err!(SyncError::from(err)),
+                    return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
+                        SyncError::TransactionFailureAgent => exit(err.kind().code()),
+                        SyncError::NothingToDo(bool) => bool.then(|| Err(err)).unwrap_or_else(|| Ok(())),
+                        _ => Err(err),
                     };
                 }
-            };
-
-            act = result.from(self);
+            }
+            .from(self);
         }
     }
 
@@ -256,35 +246,16 @@ impl<'a> TransactionAggregator<'a> {
         &mut self.logger
     }
 
-    pub fn fs_sync(&mut self) -> Result<&mut FileSystemStateSync<'a>> {
-        match self.filesystem_state.as_mut() {
-            Some(linker) => Ok(linker),
-            None => err!(ErrorKind::LinkerUninitialized),
-        }
-    }
-}
+    pub fn signal(&mut self, handle: &mut Option<Alpm>) -> Result<()> {
+        for _ in self.signals.pending() {
+            if let Some(handle) = handle {
+                handle.trans_interrupt().ok();
+            }
 
-fn signal_trap(cache: &ContainerCache<'_>) {
-    let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
-    let mut paths = vec![format!("{}/pacman/db.lck", *DATA_DIR)];
-    let container_vars: Vec<&ContainerHandle> = cache.registered_handles();
-    for container in container_vars {
-        paths.push(format!("{}/var/lib/pacman/db.lck", container.vars().root()));
-    }
-
-    thread::spawn(move || {
-        for s in signals.forever() {
-            unlock_databases(paths);
-            println!("\n{} Transaction interrupted by signal interrupt.", *ARROW_RED);
-            exit(128 + s);
+            println!();
+            err!(SyncError::SignalInterrupt)?;
         }
-    });
-}
 
-fn unlock_databases(db_paths: Vec<String>) {
-    for path in db_paths {
-        if Path::new(&path).exists() {
-            fs::remove_file(&path).ok();
-        }
+        Ok(())
     }
 }

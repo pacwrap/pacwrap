@@ -20,7 +20,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Error as FmtError, Formatter},
-    fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, File, Metadata},
+    fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename, File, Metadata},
     io::{copy, BufReader, Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
@@ -37,14 +37,16 @@ use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use rayon::{prelude::*, ThreadPool, ThreadPoolBuilder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use signal_hook::iterator::Signals;
 use walkdir::WalkDir;
 use zstd::{Decoder, Encoder};
 
 use crate::{
     config::{ContainerCache, ContainerHandle, ContainerType::*},
-    constants::{BAR_GREEN, BOLD, DATA_DIR, RESET},
+    constants::{BAR_GREEN, BOLD, DATA_DIR, RESET, SIGNAL_LIST},
     err,
     impl_error,
+    sync::SyncError,
     utils::bytebuffer::ByteBuffer,
     Error,
     ErrorGeneric,
@@ -68,7 +70,7 @@ impl FileSystemState {
 }
 
 #[derive(Debug, Clone)]
-pub enum FilesystemStateError {
+pub enum FilesystemSyncError {
     MagicMismatch(String, u32),
     ChecksumMismatch(String),
     UnsupportedVersion(String, u32),
@@ -76,9 +78,9 @@ pub enum FilesystemStateError {
     SerializationFailure(String, String),
 }
 
-impl_error!(FilesystemStateError);
+impl_error!(FilesystemSyncError);
 
-impl Display for FilesystemStateError {
+impl Display for FilesystemSyncError {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), FmtError> {
         match self {
             Self::SerializationFailure(file, err) => write!(fmter, "Serialization failure occurred with '{file}': {err}"),
@@ -133,7 +135,7 @@ enum SyncMessage {
     SaveState(Arc<str>, FileSystemState),
 }
 
-pub struct FileSystemStateSync<'a> {
+pub struct FilesystemSync<'a> {
     state_map: HashMap<Arc<str>, FileSystemState>,
     state_map_prev: HashMap<Arc<str>, Option<FileSystemState>>,
     linked: HashSet<Arc<str>>,
@@ -143,9 +145,10 @@ pub struct FileSystemStateSync<'a> {
     pool: Option<ThreadPool>,
     max_chars: u16,
     sync_type: SyncType,
+    signals: Signals,
 }
 
-impl<'a> FileSystemStateSync<'a> {
+impl<'a> FilesystemSync<'a> {
     pub fn new(inscache: &'a ContainerCache) -> Self {
         Self {
             pool: None,
@@ -157,6 +160,7 @@ impl<'a> FileSystemStateSync<'a> {
             cache: inscache,
             max_chars: 0,
             sync_type: SyncType::Filesystem,
+            signals: Signals::new(SIGNAL_LIST).unwrap(),
         }
     }
 
@@ -173,7 +177,8 @@ impl<'a> FileSystemStateSync<'a> {
 
         drop(tx);
         while let Ok(()) = rx.recv() {}
-        Ok(())
+        self.signal()?;
+        self.place_state()  
     }
 
     fn link(
@@ -205,6 +210,7 @@ impl<'a> FileSystemStateSync<'a> {
 
         drop(tx);
         self.wait(self.queued.clone(), rx, &write_chan);
+        self.signal()?;
         Ok(write_chan)
     }
 
@@ -269,11 +275,11 @@ impl<'a> FileSystemStateSync<'a> {
         let version = header.read_le_32();
 
         if magic != MAGIC_NUMBER {
-            err!(FilesystemStateError::MagicMismatch(path.into(), magic))?
+            err!(FilesystemSyncError::MagicMismatch(path.into(), magic))?
         } else if version != VERSION {
             let state = match version {
                 1 => deserialize::<File, FileSystemState>(&instance, file)?,
-                _ => err!(FilesystemStateError::UnsupportedVersion(path.into(), version))?,
+                _ => err!(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
             };
 
             self.state_map_prev.insert(instance.clone(), Some(state.clone()));
@@ -282,7 +288,7 @@ impl<'a> FileSystemStateSync<'a> {
             let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path.into())?;
 
             if !checksum_valid {
-                err!(FilesystemStateError::ChecksumMismatch(path.into()))?
+                err!(FilesystemSyncError::ChecksumMismatch(path.into()))?
             }
 
             let buf_reader = BufReader::new(state_buffer.as_slice());
@@ -362,6 +368,29 @@ impl<'a> FileSystemStateSync<'a> {
         }
     }
 
+    fn signal(&mut self) -> Result<(), Error> {
+        for _ in self.signals.pending() {
+            for (data, ..) in &self.state_map {
+                remove_file(&format!("{}/state/{data}.dat.new", *DATA_DIR)).ok();
+            }
+
+            err!(SyncError::SignalInterrupt)?;
+        }
+
+        Ok(())
+    }
+
+    fn place_state(&mut self) -> Result<(), Error> {
+        for (state, ..) in &self.state_map {
+            let path_old = format!("{}/state/{state}.dat", *DATA_DIR);
+            let path_new = format!("{}/state/{state}.dat.new", *DATA_DIR);
+
+            rename(&path_new, &path_old).prepend_io(|| path_new)?;
+        }
+
+        Ok(())
+    }
+
     pub fn prepare(&mut self, length: usize) {
         let size = Term::size(&Term::stdout());
         let column_half = size.1 / 2;
@@ -397,9 +426,8 @@ impl<'a> FileSystemStateSync<'a> {
         self.max_chars = 0;
     }
 
-    pub fn release(self) -> Option<FileSystemStateSync<'a>> {
+    pub fn release(self) {
         drop(self);
-        None
     }
 }
 
@@ -455,13 +483,13 @@ fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R)
         .deserialize_from::<R, T>(reader)
     {
         Ok(state) => Ok(state),
-        Err(err) => err!(FilesystemStateError::DeserializationFailure(instance.into(), err.to_string())),
+        Err(err) => err!(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string())),
     }
 }
 
 fn serialize(dep: Arc<str>, ds: FileSystemState) -> Result<(), Error> {
-    let error_path = &format!("'{}{}{}.dat'", *BOLD, dep, *RESET);
-    let path = &format!("{}/state/{}.dat", *DATA_DIR, dep);
+    let error_path = &format!("'{}{}{}.dat.new'", *BOLD, dep, *RESET);
+    let path = &format!("{}/state/{}.dat.new", *DATA_DIR, dep);
     let mut hasher = Sha256::new();
     let mut state_data = Vec::new();
 
@@ -471,7 +499,7 @@ fn serialize(dep: Arc<str>, ds: FileSystemState) -> Result<(), Error> {
         .with_limit(BYTE_LIMIT)
         .serialize_into(&mut state_data, &ds)
     {
-        err!(FilesystemStateError::SerializationFailure(error_path.into(), err.as_ref().to_string()))?
+        err!(FilesystemSyncError::SerializationFailure(error_path.into(), err.as_ref().to_string()))?
     }
 
     copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| error_path.into())?;

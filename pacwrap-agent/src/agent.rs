@@ -26,7 +26,9 @@ use std::{
 use serde::Deserialize;
 
 use pacwrap_core::{
-    config::Global, err, sync::{
+    config::Global,
+    err,
+    sync::{
         self,
         event::{
             download::{self, DownloadEvent},
@@ -37,7 +39,11 @@ use pacwrap_core::{
         utils::{erroneous_preparation, erroneous_transaction},
         AlpmConfigData,
         SyncError,
-    }, utils::{bytebuffer::ByteBuffer, print_warning}, Error, ErrorGeneric, Result
+    },
+    utils::{bytebuffer::ByteBuffer, print_warning},
+    Error,
+    ErrorGeneric,
+    Result,
 };
 
 use crate::error::AgentError;

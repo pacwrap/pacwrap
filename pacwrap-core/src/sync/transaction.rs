@@ -529,7 +529,7 @@ impl<'a> TransactionHandle<'a> {
         self.alpm = alpm;
     }
 
-    pub fn set_flags(&mut self, flags: &TransactionFlags, flags_alpm: TransFlag) {
+    pub fn set_flags(&mut self, flags: &TransactionFlags, flags_alpm: &TransFlag) {
         self.meta.flags = (flags.bits(), flags_alpm.bits());
     }
 

@@ -17,7 +17,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use alpm::{Alpm, CommitData, CommitError, Package, PrepareData, PrepareError};
+use alpm::{
+    Alpm,
+    CommitData,
+    CommitError,
+    Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps},
+    Package,
+    PrepareData,
+    PrepareError,
+};
 
 use crate::{
     constants::{BOLD, BOLD_WHITE, RESET},
@@ -35,13 +43,13 @@ pub trait AlpmUtils {
 
 impl AlpmUtils for Alpm {
     fn get_local_package<'a>(&self, pkg: &'a str) -> Option<&Package> {
-        if let Ok(pkg) = self.localdb().pkg(pkg) {
-            return Some(pkg);
-        } else {
-            self.localdb()
+        match self.localdb().pkg(pkg) {
+            Ok(pkg) => Some(pkg),
+            Err(_) => self
+                .localdb()
                 .pkgs()
                 .iter()
-                .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).and_then(|_| Some(f)))
+                .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).and_then(|_| Some(f))),
         }
     }
 
@@ -68,70 +76,109 @@ impl AlpmUtils for Alpm {
 }
 
 pub fn erroneous_transaction<'a>(error: CommitError) -> Result<()> {
-    match error.data() {
-        CommitData::FileConflict(file) => {
-            for conflict in file {
-                let reason = conflict.reason();
-                let package1 = conflict.package1().name();
-                let package2 = conflict.package2().name();
+    /*
+     * Qualify error type to ensure no segfault for error conditions of which are
+     * unhandled by the upstream data function provided by the CommitError impl.
+     *
+     * TODO: Possibly submit PR upstream to provide Option encapsulate with None
+     * instead of hint::unreachable_unchecked?
+     *
+     * Then the following block of code could be structured like:
+     *
+     * ```
+     * if let Some(data) = error.data() {
+     *  match data {
+     *      _ => ()
+     *  }
+     * }
+     * ```
+     */
+    if let PkgInvalid | PkgInvalidSig | PkgInvalidChecksum | FileConflicts = error.error() {
+        match error.data() {
+            CommitData::FileConflict(file) => {
+                for conflict in file {
+                    print_warning(&format!(
+                        "Conflict between {}{}{} and {}{}{}: {}",
+                        *BOLD,
+                        conflict.package1().name(),
+                        *RESET,
+                        *BOLD,
+                        conflict.package2().name(),
+                        *RESET,
+                        conflict.reason()
+                    ));
+                }
 
-                print_warning(&format!(
-                    "Conflict between {}{}{} and {}{}{}: {}",
-                    *BOLD, package1, *RESET, *BOLD, package2, *RESET, reason
-                ));
+                err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
             }
-
-            err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
+            CommitData::PkgInvalid(p) =>
+                for pkg in p.iter() {
+                    print_error(&format!("Invalid package: {}{}{}", *BOLD_WHITE, pkg, *RESET));
+                },
         }
-        CommitData::PkgInvalid(p) =>
-            for pkg in p.iter() {
-                let pkg = format!("{}{pkg}{}", *BOLD_WHITE, *RESET);
-                print_error(&format!("Invalid package: {}", pkg));
-            },
     }
 
     err!(SyncError::TransactionFailure(error.to_string()))
 }
 
 pub fn erroneous_preparation<'a>(error: PrepareError) -> Result<()> {
-    match error.data() {
-        PrepareData::PkgInvalidArch(list) =>
-            for package in list.iter() {
-                print_error(&format!(
-                    "Invalid architecture {}{}{} for {}{}{}",
-                    *BOLD,
-                    package.arch().unwrap_or("UNKNOWN"),
-                    *RESET,
-                    *BOLD,
-                    package.name(),
-                    *RESET
-                ));
-            },
-        PrepareData::UnsatisfiedDeps(list) =>
-            for missing in list.iter() {
-                print_error(&format!(
-                    "Unsatisifed dependency {}{}{} for target {}{}{}",
-                    *BOLD,
-                    missing.depend(),
-                    *RESET,
-                    *BOLD,
-                    missing.target(),
-                    *RESET
-                ));
-            },
-        PrepareData::ConflictingDeps(list) =>
-            for conflict in list.iter() {
-                print_error(&format!(
-                    "Conflict between {}{}{} and {}{}{}: {}",
-                    *BOLD,
-                    conflict.package1().name(),
-                    *RESET,
-                    *BOLD,
-                    conflict.package2().name(),
-                    *RESET,
-                    conflict.reason()
-                ));
-            },
+    /*
+     * Qualify error type to ensure no segfault for error conditions of which are
+     * unhandled by the upstream data function provided by the PrepareError impl.
+     *
+     * TODO: Possibly submit PR upstream to provide Option encapsulate with None
+     * instead of hint::unreachable_unchecked?
+     *
+     * Then the following block of code could be structured like:
+     *
+     * ```
+     * if let Some(data) = error.data() {
+     *  match data {
+     *      _ => ()
+     *  }
+     * }
+     * ```
+     */
+    if let PkgInvalidArch | UnsatisfiedDeps | ConflictingDeps = error.error() {
+        match error.data() {
+            PrepareData::PkgInvalidArch(list) =>
+                for package in list.iter() {
+                    print_error(&format!(
+                        "Invalid architecture {}{}{} for {}{}{}",
+                        *BOLD,
+                        package.arch().unwrap_or("UNKNOWN"),
+                        *RESET,
+                        *BOLD,
+                        package.name(),
+                        *RESET
+                    ));
+                },
+            PrepareData::UnsatisfiedDeps(list) =>
+                for missing in list.iter() {
+                    print_error(&format!(
+                        "Unsatisifed dependency {}{}{} for target {}{}{}",
+                        *BOLD,
+                        missing.depend(),
+                        *RESET,
+                        *BOLD,
+                        missing.target(),
+                        *RESET
+                    ));
+                },
+            PrepareData::ConflictingDeps(list) =>
+                for conflict in list.iter() {
+                    print_error(&format!(
+                        "Conflict between {}{}{} and {}{}{}: {}",
+                        *BOLD,
+                        conflict.package1().name(),
+                        *RESET,
+                        *BOLD,
+                        conflict.package2().name(),
+                        *RESET,
+                        conflict.reason()
+                    ));
+                },
+        }
     }
 
     err!(SyncError::PreparationFailure(error.to_string()))

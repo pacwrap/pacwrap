@@ -21,6 +21,7 @@ use std::{env::var, process::id, time::Duration};
 
 use lazy_static::lazy_static;
 use nix::unistd::{getegid, geteuid};
+use signal_hook::consts::*;
 
 use crate::{
     error,
@@ -36,6 +37,7 @@ pub const DEFAULT_PATH: &str = "/usr/local/bin:/bin:/usr/bin/";
 pub const PACMAN_KEY_SCRIPT: &str = "pacwrap-key";
 pub const RUNTIME_DIRECTORY: &str = "/usr/share/pacwrap/runtime";
 pub const RUNTIME_TLS_STORE: &str = "/etc/ca-certificates/extracted/tls-ca-bundle.pem";
+pub const SIGNAL_LIST: &[i32; 4] = &[SIGHUP, SIGINT, SIGQUIT, SIGTERM];
 
 const PACWRAP_CONFIG_DIR: &str = "/.config/pacwrap";
 const PACWRAP_DATA_DIR: &str = "/.local/share/pacwrap";
