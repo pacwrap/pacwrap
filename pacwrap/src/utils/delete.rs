@@ -28,6 +28,7 @@ use pacwrap_core::{
     constants::{ARROW_GREEN, BOLD, DATA_DIR, RESET},
     err,
     impl_error,
+    lock::Lock,
     log::{Level::Info, Logger},
     process,
     utils::{arguments::Operand, prompt::prompt_targets, Arguments},
@@ -88,8 +89,11 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
         }
     }
 
+    let lock = Lock::new().lock()?;
+
     if let (true, _) | (_, Ok(_)) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
-        delete_roots(&cache, &mut logger, &instances, force)
+        delete_roots(&cache, &mut logger, &instances, force)?;
+        lock.unlock()
     } else {
         Ok(())
     }

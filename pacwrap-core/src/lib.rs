@@ -25,6 +25,7 @@ pub mod config;
 pub mod constants;
 pub mod error;
 pub mod exec;
+pub mod lock;
 pub mod log;
 pub mod process;
 pub mod sync;

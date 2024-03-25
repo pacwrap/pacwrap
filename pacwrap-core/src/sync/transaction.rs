@@ -75,7 +75,7 @@ pub enum TransactionMode {
     Local,
 }
 
-pub enum SyncReqResult {
+pub enum SyncState {
     Required,
     NotRequired,
 }
@@ -226,6 +226,14 @@ impl<'a> TransactionMetadata<'a> {
             flags: (0, 0),
         }
     }
+
+    pub fn set_flags(&mut self, flags: &TransactionFlags, flags_alpm: &TransFlag) {
+        self.flags = (flags.bits(), flags_alpm.bits());
+    }
+
+    pub fn retrieve_flags(&self) -> (Option<TransactionFlags>, Option<TransFlag>) {
+        (TransactionFlags::from_bits(self.flags.0), TransFlag::from_bits(self.flags.1))
+    }
 }
 
 impl<'a> TransactionHandle<'a> {
@@ -255,7 +263,7 @@ impl<'a> TransactionHandle<'a> {
         self
     }
 
-    fn is_sync_req(&self, mode: TransactionMode) -> SyncReqResult {
+    fn is_sync_req(&self, mode: TransactionMode) -> SyncState {
         let alpm = self.alpm();
         let ignored = match mode {
             TransactionMode::Foreign => &self.meta.resident_pkgs,
@@ -268,11 +276,11 @@ impl<'a> TransactionHandle<'a> {
             }
 
             if let Some(_) = pkg.sync_new_version(alpm.syncdbs()) {
-                return SyncReqResult::Required;
+                return SyncState::Required;
             }
         }
 
-        SyncReqResult::NotRequired
+        SyncState::NotRequired
     }
 
     fn enumerate_package_lists(&mut self, dep_handle: &Alpm) {
@@ -529,15 +537,7 @@ impl<'a> TransactionHandle<'a> {
         self.alpm = alpm;
     }
 
-    pub fn set_flags(&mut self, flags: &TransactionFlags, flags_alpm: &TransFlag) {
-        self.meta.flags = (flags.bits(), flags_alpm.bits());
-    }
-
-    pub fn retrieve_flags(&self) -> (Option<TransactionFlags>, Option<TransFlag>) {
-        (TransactionFlags::from_bits(self.meta.flags.0), TransFlag::from_bits(self.meta.flags.1))
-    }
-
-    fn metadata(&self) -> &TransactionMetadata {
+    pub fn metadata(&self) -> &TransactionMetadata {
         &self.meta
     }
 }

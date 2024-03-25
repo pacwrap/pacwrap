@@ -27,18 +27,29 @@ use std::{
 use pacwrap_core::{
     constants::{ARROW_CYAN, ARROW_GREEN, CONFIG_DIR, DATA_DIR, EDITOR, HOME},
     exec::utils::handle_process,
+    lock::Lock,
     utils::{arguments::Operand, Arguments},
     ErrorGeneric,
     Result,
 };
 use sha2::{Digest, Sha256};
 
+#[derive(Clone, Copy)]
 enum FileType<'a> {
     ContainerConfig(&'a str),
     DesktopFile(&'a str),
     Config,
     LogFile,
     Repo,
+}
+
+impl<'a> FileType<'a> {
+    fn can_edit(&self, edit: bool) -> bool {
+        match self {
+            Self::LogFile => false,
+            _ => edit,
+        }
+    }
 }
 
 impl<'a> Display for FileType<'a> {
@@ -68,23 +79,41 @@ pub fn edit_file(args: &mut Arguments, edit: bool) -> Result<()> {
         });
     }
 
-    let temporary_file = &format!("/tmp/tmp.{}", random_string(10)?);
-    let file = &match file {
-        Some(file) => file.to_string(),
+    let (file, temporary_file, lock, edit) = &match file {
+        Some(file) => {
+            let edit = file.can_edit(edit);
+            let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
+                Some(Lock::new().lock()?)
+            } else {
+                None
+            };
+
+            (file.to_string(), format!("/tmp/tmp.{}", random_string(10)?), lock, edit)
+        }
         None => return args.invalid_operand(),
     };
 
     copy(file, temporary_file).prepend_io(|| file.into())?;
     handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
 
-    if edit && hash_file(file)? != hash_file(temporary_file)? {
+    if *edit && hash_file(file)? != hash_file(temporary_file)? {
+        if let Some(lock) = lock {
+            lock.assert()?;
+        }
+
         copy(temporary_file, file).prepend_io(|| temporary_file.into())?;
         eprintln!("{} Changes written to file.", *ARROW_GREEN);
-    } else {
+    } else if *edit {
         eprintln!("{} No changes made.", *ARROW_CYAN);
     }
 
-    remove_file(temporary_file).prepend_io(|| temporary_file.into())
+    remove_file(temporary_file).prepend_io(|| temporary_file.into())?;
+
+    if let Some(lock) = lock {
+        lock.unlock()?;
+    }
+
+    Ok(())
 }
 
 fn hash_file(file_path: &str) -> Result<Vec<u8>> {

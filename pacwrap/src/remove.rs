@@ -23,6 +23,7 @@ use pacwrap_core::{
     config::{cache, init::init},
     err,
     error::*,
+    lock::Lock,
     log::Logger,
     sync::transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     utils::{
@@ -115,6 +116,7 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
     }
 
     Ok(TransactionAggregator::new(&cache, log, action_type)
+        .assert_lock(&Lock::new().lock()?)?
         .flag(flags)
         .queue(queue)
         .target(Some(targets))

@@ -89,11 +89,11 @@ impl Transaction for Commit {
         };
 
         handle.set_alpm(None);
-
+        ag.lock()?.assert()?;
         wait_on_agent(transaction_agent(
             inshandle,
             TransactionParameters::new(*ag.action(), *handle.get_mode(), result),
-            handle.metadata(),
+            handle.meta,
         )?)?;
 
         if self.keyring {

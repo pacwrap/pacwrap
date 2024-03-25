@@ -80,7 +80,7 @@ impl Transaction for Stage {
         ag.action().action_message(self.mode);
         handle.set_mode(self.mode);
         handle.ignore();
-        handle.set_flags(ag.flags(), &self.flags);
+        handle.meta.set_flags(ag.flags(), &self.flags);
 
         match ag.action() {
             Upgrade(upgrade, downgrade, _) => {

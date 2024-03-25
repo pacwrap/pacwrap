@@ -19,7 +19,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{Display, Error as FmtError, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename, File, Metadata},
     io::{copy, BufReader, Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
     os::unix::{fs::symlink, prelude::MetadataExt},
@@ -46,12 +46,14 @@ use crate::{
     constants::{BAR_GREEN, BOLD, DATA_DIR, RESET, SIGNAL_LIST},
     err,
     impl_error,
+    lock::{Lock, LockError},
     sync::SyncError,
     utils::bytebuffer::ByteBuffer,
     Error,
     ErrorGeneric,
     ErrorKind,
     ErrorTrait,
+    Result,
 };
 
 const VERSION: u32 = 2;
@@ -81,7 +83,7 @@ pub enum FilesystemSyncError {
 impl_error!(FilesystemSyncError);
 
 impl Display for FilesystemSyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::SerializationFailure(file, err) => write!(fmter, "Serialization failure occurred with '{file}': {err}"),
             Self::UnsupportedVersion(file, ver) =>
@@ -145,6 +147,7 @@ pub struct FilesystemSync<'a> {
     pool: Option<ThreadPool>,
     max_chars: u16,
     sync_type: SyncType,
+    lock: Option<&'a Lock>,
     signals: Signals,
 }
 
@@ -160,6 +163,7 @@ impl<'a> FilesystemSync<'a> {
             cache: inscache,
             max_chars: 0,
             sync_type: SyncType::Filesystem,
+            lock: None,
             signals: Signals::new(SIGNAL_LIST).unwrap(),
         }
     }
@@ -172,20 +176,27 @@ impl<'a> FilesystemSync<'a> {
         self.sync_type = SyncType::Filesystem;
     }
 
-    pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<(), Error> {
+    pub fn assert_lock(mut self, lock: Option<&'a Lock>) -> Self {
+        self.lock = lock;
+        self
+    }
+
+    pub fn engage(&mut self, containers: &Vec<&'a str>) -> Result<()> {
+        self.lock()?.assert()?;
+
         let (tx, rx) = self.link(containers, mpsc::channel())?;
 
         drop(tx);
         while let Ok(()) = rx.recv() {}
         self.signal()?;
-        self.place_state()  
+        self.place_state()
     }
 
     fn link(
         &mut self,
         containers: &Vec<&'a str>,
         mut write_chan: (Sender<()>, Receiver<()>),
-    ) -> Result<(Sender<()>, Receiver<()>), Error> {
+    ) -> Result<(Sender<()>, Receiver<()>)> {
         let (tx, rx): (Sender<SyncMessage>, Receiver<SyncMessage>) = mpsc::channel();
 
         for ins in containers {
@@ -226,8 +237,8 @@ impl<'a> FilesystemSync<'a> {
                     queue.remove(ins.as_ref());
                     self.linked.insert(ins);
                 }
-                SyncMessage::SaveState(dep, fs_state) => {
-                    if let Some(_) = self.state_map.get(&dep) {
+                SyncMessage::SaveState(container, fs_state) => {
+                    if let Some(_) = self.state_map.get(&container) {
                         continue;
                     }
 
@@ -236,13 +247,13 @@ impl<'a> FilesystemSync<'a> {
                     }
 
                     if let SyncType::Filesystem = self.sync_type {
-                        self.state_map.insert(dep.clone(), fs_state.clone());
+                        self.state_map.insert(container.clone(), fs_state.clone());
                     }
 
                     let tx = write_chan.0.clone();
 
                     self.pool().unwrap().spawn(move || {
-                        if let Err(err) = serialize(dep, fs_state) {
+                        if let Err(err) = serialize(&format!("{}/state/{}.dat.new", *DATA_DIR, container), fs_state) {
                             err.warn();
                             drop(tx);
                         }
@@ -252,7 +263,7 @@ impl<'a> FilesystemSync<'a> {
         }
     }
 
-    fn previous_state(&mut self, instance: &Arc<str>) -> Result<Option<FileSystemState>, Error> {
+    fn previous_state(&mut self, instance: &Arc<str>) -> Result<Option<FileSystemState>> {
         if let Some(st) = self.state_map_prev.get(instance) {
             return Ok(st.clone());
         }
@@ -304,7 +315,7 @@ impl<'a> FilesystemSync<'a> {
         None
     }
 
-    fn obtain_slice(&mut self, inshandle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
+    fn obtain_slice(&mut self, inshandle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<()> {
         let instance: Arc<str> = inshandle.vars().instance().into();
         let root = inshandle.vars().root().into();
 
@@ -323,19 +334,16 @@ impl<'a> FilesystemSync<'a> {
         }))
     }
 
-    fn link_instance(&mut self, inshandle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<(), Error> {
+    fn link_instance(&mut self, handle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<()> {
         let mut map = Vec::new();
         let mut prev = Vec::new();
-        let instance: Arc<str> = inshandle.vars().instance().into();
-        let root: Arc<str> = inshandle.vars().root().into();
+        let instance: Arc<str> = handle.vars().instance().into();
+        let root: Arc<str> = handle.vars().root().into();
         let state = FileSystemState::new();
 
-        for dep in inshandle.metadata().dependencies() {
+        for dep in handle.metadata().dependencies() {
             let dephandle = self.cache.get_instance(dep).unwrap();
-            let state = match self.state_map.get(dep) {
-                Some(state) => state.clone(),
-                None => FileSystemState::new(),
-            };
+            let state = self.state_map.get(dep).map_or_else(|| FileSystemState::new(), |s| s.clone());
             let dep = &Arc::from(dep.as_ref());
             let prev_state = match self.previous_state(dep) {
                 Ok(state) => state,
@@ -361,26 +369,38 @@ impl<'a> FilesystemSync<'a> {
         }))
     }
 
-    fn pool(&self) -> Result<&ThreadPool, Error> {
-        match self.pool.as_ref() {
-            Some(pool) => Ok(pool),
-            None => err!(ErrorKind::ThreadPoolUninitialized),
-        }
+    fn pool(&self) -> Result<&ThreadPool> {
+        self.pool.as_ref().map_or_else(|| err!(ErrorKind::ThreadPoolUninitialized), |p| Ok(p))
     }
 
-    fn signal(&mut self) -> Result<(), Error> {
-        for _ in self.signals.pending() {
-            for (data, ..) in &self.state_map {
-                remove_file(&format!("{}/state/{data}.dat.new", *DATA_DIR)).ok();
-            }
+    fn lock(&self) -> Result<&Lock> {
+        self.lock.map_or_else(|| err!(LockError::NotAcquired), |f| Ok(f))
+    }
 
+    fn signal(&mut self) -> Result<()> {
+        if let Err(err) = self.lock.unwrap().assert() {
+            self.discard_state()?;
+            err!(SyncError::from(&err))?;
+        }
+
+        for _ in self.signals.pending() {
+            self.discard_state()?;
             err!(SyncError::SignalInterrupt)?;
         }
 
         Ok(())
     }
 
-    fn place_state(&mut self) -> Result<(), Error> {
+    fn discard_state(&mut self) -> Result<()> {
+        for (data, ..) in &self.state_map {
+            remove_file(&format!("{}/state/{data}.dat.new", *DATA_DIR)).ok();
+        }
+
+        self.lock.unwrap().unlock()?;
+        Ok(())
+    }
+
+    fn place_state(&mut self) -> Result<()> {
         for (state, ..) in &self.state_map {
             let path_old = format!("{}/state/{state}.dat", *DATA_DIR);
             let path_new = format!("{}/state/{state}.dat.new", *DATA_DIR);
@@ -471,11 +491,11 @@ pub fn validate_fs_states<'a>(vec: &'a Vec<&'a str>) -> bool {
     true
 }
 
-pub fn create_blank_state(container: &str) -> Result<(), Error> {
-    serialize(container.into(), FileSystemState::new())
+pub fn create_blank_state(container: &str) -> Result<()> {
+    serialize(&format!("{}/state/{}.dat", *DATA_DIR, container), FileSystemState::new())
 }
 
-fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T, Error> {
+fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T> {
     match bincode::options()
         .with_fixint_encoding()
         .allow_trailing_bytes()
@@ -487,9 +507,7 @@ fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R)
     }
 }
 
-fn serialize(dep: Arc<str>, ds: FileSystemState) -> Result<(), Error> {
-    let error_path = &format!("'{}{}{}.dat.new'", *BOLD, dep, *RESET);
-    let path = &format!("{}/state/{}.dat.new", *DATA_DIR, dep);
+fn serialize(path: &str, ds: FileSystemState) -> Result<()> {
     let mut hasher = Sha256::new();
     let mut state_data = Vec::new();
 
@@ -499,11 +517,11 @@ fn serialize(dep: Arc<str>, ds: FileSystemState) -> Result<(), Error> {
         .with_limit(BYTE_LIMIT)
         .serialize_into(&mut state_data, &ds)
     {
-        err!(FilesystemSyncError::SerializationFailure(error_path.into(), err.as_ref().to_string()))?
+        err!(FilesystemSyncError::SerializationFailure(path.into(), err.as_ref().to_string()))?
     }
 
-    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| error_path.into())?;
-    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| error_path.into())?;
+    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| path.into())?;
+    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| path.into())?;
     Ok(())
 }
 
@@ -549,7 +567,7 @@ fn encode_state(path: &str, state_data: Vec<u8>, hash: Vec<u8>) -> IOResult<u64>
     copy(&mut state_data.as_slice(), &mut Encoder::new(output, 3)?.auto_finish())
 }
 
-fn check(instance: &str) -> Result<bool, Error> {
+fn check(instance: &str) -> Result<bool> {
     let path = &format!("{}/state/{}.dat", *DATA_DIR, instance);
     let mut header_buffer = ByteBuffer::with_capacity(8).read();
     let mut file = File::open(path).prepend_io(|| path.into())?;

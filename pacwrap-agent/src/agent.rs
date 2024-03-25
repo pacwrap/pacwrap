@@ -48,7 +48,7 @@ use pacwrap_core::{
 
 use crate::error::AgentError;
 
-static AGENT_PARAMS: &'static str = "/mnt/agent_params";
+const AGENT_PARAMS: &'static str = "/mnt/agent_params";
 
 pub fn transact() -> Result<()> {
     let mut header = ByteBuffer::with_capacity(7).read();
@@ -84,7 +84,7 @@ pub fn transact() -> Result<()> {
 }
 
 fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
-    let flags = handle.retrieve_flags();
+    let flags = handle.metadata().retrieve_flags();
     let mode = agent.mode();
     let action = agent.action();
     let config = config.config();

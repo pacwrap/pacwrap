@@ -25,6 +25,7 @@ use pacwrap_core::{
     constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
     err,
     error::*,
+    lock::Lock,
     log::{Level::Info, Logger},
     sync::{
         instantiate_container,
@@ -228,6 +229,8 @@ fn engage_aggregator<'a>(
         }
     }
 
+    let lock = Lock::new().lock()?;
+
     if create_targets.len() > 0 || init {
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;
         instantiate_trust()?;
@@ -235,6 +238,7 @@ fn engage_aggregator<'a>(
     }
 
     Ok(TransactionAggregator::new(cache, log, action_type)
+        .assert_lock(&lock)?
         .target(acquire_targets(cache, &flags, targets)?)
         .queue(queue)
         .flag(flags)

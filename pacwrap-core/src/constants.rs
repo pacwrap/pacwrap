@@ -17,7 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{env::var, process::id, time::Duration};
+use std::{
+    env::var,
+    process::{exit, id},
+    time::Duration,
+};
 
 use lazy_static::lazy_static;
 use nix::unistd::{getegid, geteuid};
@@ -73,6 +77,7 @@ lazy_static! {
     pub static ref EDITOR: &'static str = env_default("EDITOR", "vi");
     pub static ref X11_DISPLAY: &'static str = env_opt("DISPLAY");
     pub static ref XAUTHORITY: &'static str = env_opt("XAUTHORITY");
+    pub static ref LOCK_FILE: &'static str = format_str!("{}/pacwrap.lck", *DATA_DIR);
     pub static ref CONTAINER_DIR: &'static str = format_str!("{}/root/", *DATA_DIR);
     pub static ref CACHE_DIR: &'static str = env_default_dir("PACWRAP_CACHE_DIR", PACWRAP_CACHE_DIR);
     pub static ref CONFIG_DIR: &'static str = env_default_dir("PACWRAP_CONFIG_DIR", PACWRAP_CONFIG_DIR);
@@ -104,32 +109,17 @@ lazy_static! {
 }
 
 fn env(env: &'static str) -> &'static str {
-    match var(env) {
-        Ok(var) => var.leak(),
-        Err(_) => {
-            error!(ErrorKind::EnvVarUnset(env)).handle();
-            ""
-        }
-    }
+    var(env).map_or_else(|_| exit(error!(ErrorKind::EnvVarUnset(env)).error()), |var| var.leak())
 }
 
 fn env_opt(env: &str) -> &'static str {
-    match var(env) {
-        Ok(var) => var.leak(),
-        Err(_) => "",
-    }
+    var(env).map_or_else(|_| "", |var| var.leak())
 }
 
 fn env_default(env: &str, default: &'static str) -> &'static str {
-    match var(env) {
-        Ok(var) => var.leak(),
-        Err(_) => default,
-    }
+    var(env).map_or_else(|_| default, |var| var.leak())
 }
 
 fn env_default_dir(env: &str, default: &str) -> &'static str {
-    match var(env) {
-        Ok(var) => var.leak(),
-        Err(_) => format_str!("{}{}", *HOME, default),
-    }
+    var(env).map_or_else(|_| format_str!("{}{}", *HOME, default), |var| var.leak())
 }

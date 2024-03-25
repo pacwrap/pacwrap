@@ -33,7 +33,7 @@ use nix::{
     sys::signal::{kill, Signal},
     unistd::Pid,
 };
-use signal_hook::{consts::*, iterator::Signals};
+use signal_hook::iterator::Signals;
 
 use pacwrap_core::{
     config::{
@@ -43,7 +43,15 @@ use pacwrap_core::{
         ContainerType::Slice,
         Dbus,
     },
-    constants::{BWRAP_EXECUTABLE, DBUS_PROXY_EXECUTABLE, DBUS_SOCKET, DEFAULT_PATH, IS_COLOR_TERMINAL, XDG_RUNTIME_DIR},
+    constants::{
+        BWRAP_EXECUTABLE,
+        DBUS_PROXY_EXECUTABLE,
+        DBUS_SOCKET,
+        DEFAULT_PATH,
+        IS_COLOR_TERMINAL,
+        SIGNAL_LIST,
+        XDG_RUNTIME_DIR,
+    },
     err,
     error,
     exec::{
@@ -282,18 +290,21 @@ fn execute_fakeroot(ins: &ContainerHandle, arguments: Option<Vec<&str>>, verbosi
 }
 
 fn signal_trap(bwrap_pid: i32) {
-    let mut signals = Signals::new(&[SIGHUP, SIGINT, SIGQUIT, SIGTERM]).unwrap();
+    let mut signals = Signals::new(*SIGNAL_LIST).unwrap();
 
-    thread::spawn(move || {
-        let proc: &str = &format!("/proc/{}/", bwrap_pid);
-        let proc = Path::new(proc);
+    thread::Builder::new()
+        .name(format!("pacwrap-signal"))
+        .spawn(move || {
+            let proc: &str = &format!("/proc/{}/", bwrap_pid);
+            let proc = Path::new(proc);
 
-        for _ in signals.forever() {
-            if proc.exists() {
-                kill(Pid::from_raw(bwrap_pid), Signal::SIGKILL).unwrap();
+            for _ in signals.forever() {
+                if proc.exists() {
+                    kill(Pid::from_raw(bwrap_pid), Signal::SIGKILL).unwrap();
+                }
             }
-        }
-    });
+        })
+        .unwrap();
 }
 
 fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<Child> {

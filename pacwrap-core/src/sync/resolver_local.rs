@@ -79,16 +79,7 @@ impl<'a> LocalDependencyResolver<'a> {
                         continue;
                     }
 
-                    if pkg
-                        .required_by()
-                        .iter()
-                        .filter_map(|p| match self.resolved.get(p) {
-                            None => Some(()),
-                            Some(_) => None,
-                        })
-                        .count()
-                        > 0
-                    {
+                    if let Some(_) = pkg.required_by().iter().find(|p| self.resolved.get(p).is_none()) {
                         continue;
                     }
                 }
@@ -107,7 +98,7 @@ impl<'a> LocalDependencyResolver<'a> {
                 }
 
                 for package in self.handle.localdb().pkgs() {
-                    if package.depends().iter().filter_map(|d| self.resolved.get(d.name())).count() > 0 {
+                    if let Some(_) = package.depends().iter().find_map(|d| self.resolved.get(d.name())) {
                         synchronize.push(package.name());
                     }
                 }

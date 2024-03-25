@@ -23,6 +23,7 @@ use pacwrap_core::{
     config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType},
     constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
     err,
+    lock::Lock,
     log::{Level::Info, Logger},
     sync::{
         instantiate_container,
@@ -210,6 +211,8 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
         err!(ErrorKind::Message("Composition targets not specified."))?
     }
 
+    let lock = Lock::new().lock()?;
+
     if delete.len() > 0 {
         delete_containers(&cache, &mut logger, &delete, &flags, force)?;
     }
@@ -217,6 +220,7 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
     cache = instantiate(compose_handles(&cache, compose)?, cache, &mut logger)?;
     acquire_targets(&cache, &mut targets, &mut queue)?;
     Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
+        .assert_lock(&lock)?
         .flag(flags)
         .target(Some(targets))
         .queue(queue)

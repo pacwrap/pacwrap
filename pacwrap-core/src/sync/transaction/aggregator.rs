@@ -20,6 +20,7 @@
 use std::{
     collections::{HashMap, HashSet},
     process::exit,
+    thread,
 };
 
 use alpm::Alpm;
@@ -31,6 +32,7 @@ use crate::{
     err,
     error,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
+    lock::{Lock, LockError},
     log::Logger,
     sync::{
         self,
@@ -53,6 +55,7 @@ pub struct TransactionAggregator<'a> {
     logger: &'a mut Logger,
     flags: TransactionFlags,
     targets: Option<Vec<&'a str>>,
+    lock: Option<&'a Lock>,
     signals: Signals,
 }
 
@@ -68,6 +71,7 @@ impl<'a> TransactionAggregator<'a> {
             keyring: false,
             logger: log,
             flags: TransactionFlags::NONE,
+            lock: None,
             signals: Signals::new(SIGNAL_LIST).unwrap(),
         }
     }
@@ -87,7 +91,16 @@ impl<'a> TransactionAggregator<'a> {
         self
     }
 
+    pub fn assert_lock(mut self, lock: &'a Lock) -> Result<Self> {
+        lock.assert()?;
+        self.lock = Some(lock);
+        Ok(self)
+    }
+
     pub fn aggregate(mut self) -> Result<()> {
+        self.lock()?;
+        signal_trap();
+
         let _timestamp = *UNIX_TIMESTAMP;
         let upgrade = match self.action {
             TransactionType::Upgrade(upgrade, refresh, force) => {
@@ -103,7 +116,7 @@ impl<'a> TransactionAggregator<'a> {
             }
             TransactionType::Remove(..) => self.targets.is_some(),
         };
-        let mut linker = FilesystemSync::new(self.cache);
+        let mut linker = FilesystemSync::new(self.cache).assert_lock(self.lock);
         let upstream = match self.targets.as_ref() {
             Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Base, ContainerType::Slice]),
             None => self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]),
@@ -125,8 +138,8 @@ impl<'a> TransactionAggregator<'a> {
             self.transaction(&upstream)?;
         }
 
-        if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
-            if are_downstream {
+        if are_downstream {
+            if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
                 linker.filesystem_state();
                 linker.prepare(self.cache.registered().len());
                 linker.engage(&self.cache.registered())?;
@@ -141,7 +154,7 @@ impl<'a> TransactionAggregator<'a> {
         }
 
         println!("{} Transaction complete.", *ARROW_GREEN);
-        Ok(())
+        self.lock()?.unlock()
     }
 
     pub fn transaction(&mut self, containers: &Vec<&'a str>) -> Result<()> {
@@ -173,6 +186,10 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn transact(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
+        if let Err(err) = self.lock()?.assert() {
+            err!(SyncError::from(&err))?
+        }
+
         let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
             Some(some) => some.clone(),
             None => Vec::new(),
@@ -204,6 +221,10 @@ impl<'a> TransactionAggregator<'a> {
                     result
                 }
                 Err(err) => {
+                    if let Err(err) = self.lock()?.unlock() {
+                        err.error();
+                    }
+
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
                         SyncError::TransactionFailureAgent => exit(err.kind().code()),
@@ -220,6 +241,10 @@ impl<'a> TransactionAggregator<'a> {
         fakeroot_container(NonInteractive, None, inshandle, vec!["/usr/bin/pacwrap-key", "--populate", "archlinux"])?;
         self.keyring = true;
         Ok(())
+    }
+
+    pub fn lock(&mut self) -> Result<&Lock> {
+        self.lock.map_or_else(|| err!(LockError::NotAcquired), |f| Ok(f))
     }
 
     pub fn cache(&self) -> &ContainerCache {
@@ -252,10 +277,29 @@ impl<'a> TransactionAggregator<'a> {
                 handle.trans_interrupt().ok();
             }
 
-            println!();
+            self.lock()?.unlock()?;
             err!(SyncError::SignalInterrupt)?;
         }
 
         Ok(())
     }
+}
+
+fn signal_trap() {
+    let mut signals = Signals::new(*SIGNAL_LIST).unwrap();
+    let mut count = 0;
+
+    thread::Builder::new()
+        .name(format!("pacwrap-signal"))
+        .spawn(move || {
+            for _ in signals.forever() {
+                count += 1;
+                println!();
+
+                if count == 3 {
+                    exit(error!(SyncError::SignalInterrupt).error());
+                }
+            }
+        })
+        .unwrap();
 }

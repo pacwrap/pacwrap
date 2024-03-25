@@ -24,7 +24,7 @@ use crate::{
         self,
         schema::{self, *},
         transaction::{
-            SyncReqResult::*,
+            SyncState::*,
             Transaction,
             TransactionAggregator,
             TransactionFlags,
@@ -84,14 +84,14 @@ impl Transaction for Prepare {
                 }
 
                 if let Upgrade(upgrade, ..) = action {
-                    if !upgrade && handle.metadata().queue.is_empty() {
+                    if !upgrade && handle.meta.queue.is_empty() {
                         err!(SyncError::NothingToDo(true))?
                     }
-                } else if handle.metadata().queue.is_empty() {
+                } else if handle.meta.queue.is_empty() {
                     err!(SyncError::NothingToDo(true))?
                 }
 
-                if handle.metadata().queue.len() == 0 {
+                if handle.meta.queue.is_empty() {
                     if let NotRequired = handle.is_sync_req(TransactionMode::Local) {
                         return Ok(UpToDate);
                     }
