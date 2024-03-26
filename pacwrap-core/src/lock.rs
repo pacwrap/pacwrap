@@ -49,7 +49,6 @@ impl Display for LockError {
 
 impl_error!(LockError);
 
-#[derive(Clone)]
 pub struct Lock {
     lock: &'static str,
     time: i64,

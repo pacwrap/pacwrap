@@ -396,7 +396,7 @@ impl<'a> FilesystemSync<'a> {
             remove_file(&format!("{}/state/{data}.dat.new", *DATA_DIR)).ok();
         }
 
-        self.lock.unwrap().unlock()?;
+        self.lock()?.unlock()?;
         Ok(())
     }
 

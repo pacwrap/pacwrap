@@ -168,7 +168,6 @@ impl<'a> Table<'a> {
                     },
                     None => Entry::new(""),
                 };
-
                 let margin = match self.margins.get(col) {
                     Some(margin) => *margin,
                     None => {
