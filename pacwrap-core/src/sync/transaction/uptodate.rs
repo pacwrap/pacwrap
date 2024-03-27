@@ -17,14 +17,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use super::{
+use crate::{
+    config::ContainerHandle,
+    constants::ARROW_GREEN,
+    sync::transaction::{
+        aggregator::BAR_GREEN_STYLE,
+        Transaction,
+        TransactionAggregator,
+        TransactionHandle,
+        TransactionState::{self, Complete},
+    },
     Result,
-    Transaction,
-    TransactionAggregator,
-    TransactionHandle,
-    TransactionState::{self, Complete},
 };
-use crate::{config::ContainerHandle, constants::ARROW_GREEN};
 
 pub struct UpToDate;
 
@@ -35,12 +39,19 @@ impl Transaction for UpToDate {
 
     fn engage(
         &self,
-        _: &mut TransactionAggregator,
+        ag: &mut TransactionAggregator,
         _: &mut TransactionHandle,
-        inshandle: &ContainerHandle,
+        handle: &ContainerHandle,
     ) -> Result<TransactionState> {
-        let instance = inshandle.vars().instance();
-        println!("{} {instance} is up-to-date!", *ARROW_GREEN);
+        match ag.progress_bar() {
+            Some(progress) =>
+                if progress.position() == progress.length().unwrap_or(0) {
+                    progress.set_style(BAR_GREEN_STYLE.clone());
+                    progress.finish();
+                },
+            None => println!("{} {} is up-to-date!", *ARROW_GREEN, handle.vars().instance()),
+        }
+
         Ok(Complete(false))
     }
 }

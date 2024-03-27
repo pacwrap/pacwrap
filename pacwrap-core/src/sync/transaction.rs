@@ -21,8 +21,10 @@ use std::{borrow::Cow, collections::HashSet};
 
 use alpm::{Alpm, Package, PackageReason, TransFlag};
 use bitflags::bitflags;
+use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 
+use self::{SyncState::*, TransactionMode::*, TransactionType::*};
 use crate::{
     config::{ContainerHandle, Global, CONFIG},
     constants::{ARROW_CYAN, BAR_CYAN, BOLD, BOLD_GREEN, BOLD_YELLOW, RESET},
@@ -188,19 +190,19 @@ impl TransactionType {
     fn action_message(&self, state: TransactionMode) {
         let message = match self {
             Self::Upgrade(..) => match state {
-                TransactionMode::Foreign => "Synchronizing foreign database...",
-                TransactionMode::Local => "Synchronizing resident container...",
+                Foreign => "Synchronizing foreign database...",
+                Local => "Synchronizing resident container...",
             },
             Self::Remove(..) => match state {
-                TransactionMode::Foreign => "Preparing foreign package removal...",
-                TransactionMode::Local => "Preparing package removal...",
+                Foreign => "Preparing foreign package removal...",
+                Local => "Preparing package removal...",
             },
         };
 
         println!("{} {}", *ARROW_CYAN, message);
     }
 
-    fn begin_message(&self, inshandle: &ContainerHandle) {
+    fn begin_message(&self, inshandle: &ContainerHandle, progress: Option<&ProgressBar>) {
         let instance = inshandle.vars().instance();
         let message = match self {
             Self::Upgrade(upgrade, ..) => match upgrade {
@@ -210,7 +212,13 @@ impl TransactionType {
             Self::Remove(..) => format!("Transacting {instance}..."),
         };
 
-        println!("{} {}{message}{}", *BAR_CYAN, *BOLD, *RESET);
+        if let Some(progress) = progress {
+            progress.inc(1);
+            progress.set_message(format!("{}{}{} ", *BOLD, message, *RESET));
+            progress.tick();
+        } else {
+            println!("{} {}{}{}", *BAR_CYAN, *BOLD, message, *RESET);
+        }
     }
 }
 
@@ -221,7 +229,7 @@ impl<'a> TransactionMetadata<'a> {
             resident_pkgs: HashSet::new(),
             held_pkgs: HashSet::new(),
             ignored_pkgs: HashSet::new(),
-            mode: TransactionMode::Local,
+            mode: Local,
             queue: queue.iter().map(|q| (*q).into()).collect::<Vec<_>>(),
             flags: (0, 0),
         }
@@ -266,8 +274,8 @@ impl<'a> TransactionHandle<'a> {
     fn is_sync_req(&self, mode: TransactionMode) -> SyncState {
         let alpm = self.alpm();
         let ignored = match mode {
-            TransactionMode::Foreign => &self.meta.resident_pkgs,
-            TransactionMode::Local => &self.meta.foreign_pkgs,
+            Foreign => &self.meta.resident_pkgs,
+            Local => &self.meta.foreign_pkgs,
         };
 
         for pkg in alpm.localdb().pkgs() {
@@ -276,11 +284,11 @@ impl<'a> TransactionHandle<'a> {
             }
 
             if let Some(_) = pkg.sync_new_version(alpm.syncdbs()) {
-                return SyncState::Required;
+                return Required;
             }
         }
 
-        SyncState::NotRequired
+        NotRequired
     }
 
     fn enumerate_package_lists(&mut self, dep_handle: &Alpm) {
@@ -318,14 +326,13 @@ impl<'a> TransactionHandle<'a> {
             Some(config) => config,
             None => &*CONFIG,
         };
-
         let ignore = match self.meta.mode {
-            TransactionMode::Foreign => &self.meta.resident_pkgs,
-            TransactionMode::Local => &self.meta.foreign_pkgs,
+            Foreign => &self.meta.resident_pkgs,
+            Local => &self.meta.foreign_pkgs,
         };
         let unignore = match self.meta.mode {
-            TransactionMode::Local => &self.meta.resident_pkgs,
-            TransactionMode::Foreign => &self.meta.foreign_pkgs,
+            Local => &self.meta.resident_pkgs,
+            Foreign => &self.meta.foreign_pkgs,
         };
 
         for pkg in unignore {
@@ -373,8 +380,8 @@ impl<'a> TransactionHandle<'a> {
     pub fn prepare(&mut self, trans_type: &TransactionType, flags: &TransactionFlags) -> Result<()> {
         let alpm = self.alpm.as_mut().unwrap();
         let ignored = match self.meta.mode {
-            TransactionMode::Foreign => &self.meta.resident_pkgs,
-            TransactionMode::Local => &self.meta.foreign_pkgs,
+            Foreign => &self.meta.resident_pkgs,
+            Local => &self.meta.foreign_pkgs,
         };
         let queue = self.meta.queue.iter().map(|i| i.as_ref()).collect::<Vec<_>>();
         let config = match self.config {
@@ -382,7 +389,7 @@ impl<'a> TransactionHandle<'a> {
             None => &*CONFIG,
         };
 
-        if let TransactionMode::Local = self.meta.mode {
+        if let Local = self.meta.mode {
             let upstream = queue.iter().map(|a| *a).find(|a| ignored.contains(*a));
             let forced = flags.contains(TransactionFlags::FORCE_DATABASE);
 
@@ -392,7 +399,7 @@ impl<'a> TransactionHandle<'a> {
         }
 
         match trans_type {
-            TransactionType::Remove(..) => {
+            Remove(..) => {
                 if let Some(not_installed) = queue
                     .iter()
                     .map(|a| *a)
@@ -420,7 +427,7 @@ impl<'a> TransactionHandle<'a> {
                     alpm.trans_remove_pkg(pkg).unwrap();
                 }
             }
-            TransactionType::Upgrade(..) => {
+            Upgrade(..) => {
                 if let Some(not_available) = queue.iter().map(|a| *a).find(|a| alpm.get_package(a).is_none()) {
                     err!(SyncError::TargetNotAvailable(not_available.into()))?
                 }
@@ -431,7 +438,7 @@ impl<'a> TransactionHandle<'a> {
                     .iter()
                     .filter(|a| !self.meta.ignored_pkgs.contains(a.name()))
                     .filter_map(|a| {
-                        if let (None, TransactionMode::Foreign) = (self.meta.foreign_pkgs.get(a.name()), self.meta.mode) {
+                        if let (None, Foreign) = (self.meta.foreign_pkgs.get(a.name()), self.meta.mode) {
                             None
                         } else {
                             Some(*a)
@@ -491,8 +498,8 @@ impl<'a> TransactionHandle<'a> {
 
     pub fn trans_ready(&mut self, trans_type: &TransactionType) -> Result<()> {
         if match trans_type {
-            TransactionType::Upgrade(..) => self.alpm().trans_add().len(),
-            TransactionType::Remove(..) => self.alpm().trans_remove().len(),
+            Upgrade(..) => self.alpm().trans_add().len(),
+            Remove(..) => self.alpm().trans_remove().len(),
         } > 0
         {
             Ok(())

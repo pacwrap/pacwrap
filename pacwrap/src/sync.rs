@@ -242,5 +242,6 @@ fn engage_aggregator<'a>(
         .target(acquire_targets(cache, &flags, targets)?)
         .queue(queue)
         .flag(flags)
+        .progress()
         .aggregate()?)
 }

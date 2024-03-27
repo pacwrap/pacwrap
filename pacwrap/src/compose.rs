@@ -221,6 +221,7 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
     acquire_targets(&cache, &mut targets, &mut queue)?;
     Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
         .assert_lock(&lock)?
+        .progress()
         .flag(flags)
         .target(Some(targets))
         .queue(queue)

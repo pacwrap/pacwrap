@@ -47,7 +47,10 @@ use crate::{
     err,
     impl_error,
     lock::{Lock, LockError},
-    sync::SyncError,
+    sync::{
+        transaction::aggregator::{BAR_CYAN_STYLE, BAR_GREEN_STYLE},
+        SyncError,
+    },
     utils::bytebuffer::ByteBuffer,
     Error,
     ErrorGeneric,
@@ -104,6 +107,7 @@ enum FileType {
     Invalid(i8),
 }
 
+#[derive(Clone, Copy)]
 pub enum SyncType {
     Filesystem,
     RefreshState,
@@ -411,7 +415,11 @@ impl<'a> FilesystemSync<'a> {
         Ok(())
     }
 
-    pub fn prepare(&mut self, length: usize) {
+    pub fn sync_type(&self) -> SyncType {
+        self.sync_type
+    }
+
+    pub fn prepare(&mut self, length: usize, primary: Option<&ProgressBar>) {
         let size = Term::size(&Term::stdout());
         let column_half = size.1 / 2;
         let style = ProgressStyle::with_template(
@@ -422,7 +430,13 @@ impl<'a> FilesystemSync<'a> {
         .tick_strings(&[">", "✓"]);
         let progress = ProgressBar::new(0).with_style(style);
 
-        println!("{} {}{}...{} ", *BAR_GREEN, *BOLD, self.sync_type.prepare(), *RESET);
+        if let Some(progress) = primary {
+            progress.set_style(BAR_GREEN_STYLE.clone());
+            progress.set_message(format!("{}{}{}", *BOLD, self.sync_type.prepare(), *RESET));
+        } else {
+            println!("{} {}{}...{} ", *BAR_GREEN, *BOLD, self.sync_type.prepare(), *RESET);
+        }
+
         progress.set_draw_target(ProgressDrawTarget::stdout());
         progress.set_message(self.sync_type.progress());
         progress.set_position(0);
@@ -433,7 +447,13 @@ impl<'a> FilesystemSync<'a> {
         self.max_chars = column_half - 20;
     }
 
-    pub fn finish(&mut self) {
+    pub fn finish(&mut self, primary: Option<&ProgressBar>) {
+        if let Some(progress) = primary {
+            progress.set_style(BAR_CYAN_STYLE.clone());
+            progress.tick();
+            progress.set_draw_target(ProgressDrawTarget::stderr());
+        }
+
         if let Some(progress) = &self.progress {
             progress.set_message(self.sync_type.finish());
             progress.finish();
@@ -452,21 +472,21 @@ impl<'a> FilesystemSync<'a> {
 }
 
 impl SyncType {
-    fn prepare(&self) -> &str {
+    pub fn prepare(&self) -> &str {
         match self {
             Self::Filesystem => "Synchronizing container filesystems",
             Self::RefreshState => "Refreshing filesystem state data",
         }
     }
 
-    fn progress(&self) -> &'static str {
+    pub fn progress(&self) -> &'static str {
         match self {
             Self::Filesystem => "Synchronizing filesystems..",
             Self::RefreshState => "Refreshing state..",
         }
     }
 
-    fn finish(&self) -> &'static str {
+    pub fn finish(&self) -> &'static str {
         match self {
             Self::Filesystem => "Synchronization complete.",
             Self::RefreshState => "Refresh complete.",

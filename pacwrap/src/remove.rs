@@ -117,6 +117,7 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
 
     Ok(TransactionAggregator::new(&cache, log, action_type)
         .assert_lock(&Lock::new().lock()?)?
+        .progress()
         .flag(flags)
         .queue(queue)
         .target(Some(targets))

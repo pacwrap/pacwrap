@@ -19,16 +19,18 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    env,
     process::exit,
-    thread,
 };
 
 use alpm::Alpm;
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use lazy_static::lazy_static;
 use signal_hook::iterator::Signals;
 
 use crate::{
-    config::{cache::ContainerCache, ContainerHandle, ContainerType},
-    constants::{ARROW_GREEN, SIGNAL_LIST, UNIX_TIMESTAMP},
+    config::{cache::ContainerCache, ContainerHandle, ContainerType::*},
+    constants::{ARROW_GREEN, IS_COLOR_TERMINAL, SIGNAL_LIST, UNIX_TIMESTAMP},
     err,
     error,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
@@ -37,13 +39,30 @@ use crate::{
     sync::{
         self,
         filesystem::{validate_fs_states, FilesystemSync},
-        transaction::{Transaction, TransactionFlags, TransactionHandle, TransactionMetadata, TransactionState, TransactionType},
+        transaction::{
+            Transaction,
+            TransactionFlags,
+            TransactionHandle,
+            TransactionMetadata,
+            TransactionState::*,
+            TransactionType::{self, *},
+        },
+        utils::signal_trap,
         SyncError,
     },
     utils::arguments::InvalidArgument,
     Error,
     Result,
 };
+
+lazy_static! {
+    pub static ref BAR_CYAN_STYLE: ProgressStyle = ProgressStyle::with_template(&("{spinner:.bold.cyan} {msg}"))
+        .unwrap()
+        .tick_strings(&["::", ":.", ".:", "::"]);
+    pub static ref BAR_GREEN_STYLE: ProgressStyle = ProgressStyle::with_template(&("{spinner:.bold.green} {msg}"))
+        .unwrap()
+        .tick_strings(&["::", ":.", ".:", "::"]);
+}
 
 pub struct TransactionAggregator<'a> {
     queried: HashSet<&'a str>,
@@ -56,6 +75,7 @@ pub struct TransactionAggregator<'a> {
     flags: TransactionFlags,
     targets: Option<Vec<&'a str>>,
     lock: Option<&'a Lock>,
+    progress: Option<ProgressBar>,
     signals: Signals,
 }
 
@@ -72,8 +92,20 @@ impl<'a> TransactionAggregator<'a> {
             logger: log,
             flags: TransactionFlags::NONE,
             lock: None,
+            progress: None,
             signals: Signals::new(SIGNAL_LIST).unwrap(),
         }
+    }
+
+    pub fn progress(mut self) -> Self {
+        if let (.., Remove(..)) | (.., Upgrade(false, true, ..)) | (false, ..) =
+            (*IS_COLOR_TERMINAL && !env::var("PACWRAP_VERBOSE").is_ok_and(|v| v == "1"), self.action)
+        {
+            return self;
+        }
+
+        self.progress = Some(ProgressBar::new_spinner().with_style(BAR_CYAN_STYLE.clone()));
+        self
     }
 
     pub fn flag(mut self, flags: TransactionFlags) -> Self {
@@ -102,8 +134,9 @@ impl<'a> TransactionAggregator<'a> {
         signal_trap();
 
         let _timestamp = *UNIX_TIMESTAMP;
+        let filesystem_sync = self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE);
         let upgrade = match self.action {
-            TransactionType::Upgrade(upgrade, refresh, force) => {
+            Upgrade(upgrade, refresh, force) => {
                 if !upgrade && !refresh && !self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
                     err!(InvalidArgument::OperationUnspecified)?
                 }
@@ -114,24 +147,30 @@ impl<'a> TransactionAggregator<'a> {
 
                 upgrade
             }
-            TransactionType::Remove(..) => self.targets.is_some(),
+            Remove(..) => self.targets.is_some(),
         };
-        let mut linker = FilesystemSync::new(self.cache).assert_lock(self.lock);
         let upstream = match self.targets.as_ref() {
-            Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Base, ContainerType::Slice]),
-            None => self.cache.filter(vec![ContainerType::Base, ContainerType::Slice]),
+            Some(targets) => self.cache.filter_target(targets, vec![Base, Slice]),
+            None => self.cache.filter(vec![Base, Slice]),
         };
         let downstream = match self.targets.as_ref() {
-            Some(targets) => self.cache.filter_target(targets, vec![ContainerType::Aggregate]),
-            None => self.cache.filter(vec![ContainerType::Aggregate]),
+            Some(targets) => self.cache.filter_target(targets, vec![Aggregate]),
+            None => self.cache.filter(vec![Aggregate]),
         };
-        let are_downstream = self.cache.count(vec![ContainerType::Aggregate]) > 0;
+        let are_downstream = self.cache.count(vec![Aggregate]) > 0;
+        let target_amount = (downstream.len() + upstream.len()) as u64;
+        let mut linker = FilesystemSync::new(self.cache).assert_lock(self.lock);
+
+        if let Some(progress) = self.progress.as_ref() {
+            progress.set_draw_target(ProgressDrawTarget::stderr());
+            progress.set_length(target_amount);
+        }
 
         if !validate_fs_states(&upstream) && are_downstream {
             linker.refresh_state();
-            linker.prepare(upstream.len());
+            linker.prepare(upstream.len(), self.progress.as_ref());
             linker.engage(&upstream)?;
-            linker.finish();
+            linker.finish(self.progress.as_ref());
         }
 
         if upgrade {
@@ -139,11 +178,11 @@ impl<'a> TransactionAggregator<'a> {
         }
 
         if are_downstream {
-            if self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE) || self.updated.len() > 0 {
+            if filesystem_sync || self.updated.len() > 0 {
                 linker.filesystem_state();
-                linker.prepare(self.cache.registered().len());
+                linker.prepare(self.cache.registered().len(), self.progress.as_ref());
                 linker.engage(&self.cache.registered())?;
-                linker.finish();
+                linker.finish(self.progress.as_ref());
             }
 
             linker.release();
@@ -153,7 +192,7 @@ impl<'a> TransactionAggregator<'a> {
             self.transaction(&downstream)?;
         }
 
-        println!("{} Transaction complete.", *ARROW_GREEN);
+        self.print_complete(filesystem_sync, target_amount, upstream.last().or_else(|| downstream.last()));
         self.lock()?.unlock()
     }
 
@@ -185,7 +224,7 @@ impl<'a> TransactionAggregator<'a> {
         Ok(())
     }
 
-    pub fn transact(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
+    fn transact(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
         if let Err(err) = self.lock()?.assert() {
             err!(SyncError::from(&err))?
         }
@@ -197,30 +236,38 @@ impl<'a> TransactionAggregator<'a> {
         let alpm = sync::instantiate_alpm(&inshandle);
         let mut meta = TransactionMetadata::new(queue);
         let mut handle = TransactionHandle::new(&mut meta).alpm_handle(alpm);
-        let mut act: Box<dyn Transaction> = TransactionState::Prepare.from(self);
+        let mut act: Box<dyn Transaction> = Prepare.from(self);
 
         self.signal(&mut handle.alpm)?;
-        self.action().begin_message(inshandle);
+        self.action().begin_message(inshandle, self.progress.as_ref());
 
         loop {
             act = match act.engage(self, &mut handle, inshandle) {
                 Ok(result) => {
                     self.signal(&mut handle.alpm)?;
 
-                    if let TransactionState::Complete(updated) = result {
+                    if let Complete(updated) = result {
                         if updated {
                             self.updated.insert(inshandle.vars().instance());
+
+                            if let Some(_) = &self.progress {
+                                println!();
+                            }
                         }
 
                         handle.release();
                         return Ok(());
-                    } else if let TransactionState::Prepare = result {
+                    } else if let Prepare = result {
                         self.updated.insert(inshandle.vars().instance());
                     }
 
                     result
                 }
                 Err(err) => {
+                    if let Some(progress) = &self.progress {
+                        progress.finish_and_clear();
+                    }
+
                     if let Err(err) = self.lock()?.unlock() {
                         err.error();
                     }
@@ -235,6 +282,46 @@ impl<'a> TransactionAggregator<'a> {
             }
             .from(self);
         }
+    }
+
+    fn print_complete(&mut self, filesystem_sync: bool, target_amount: u64, target: Option<&&str>) {
+        if let Some(_) = &self.progress {
+            let are_multiple = target_amount > 1;
+            let container = if filesystem_sync && self.queried.is_empty() {
+                None
+            } else if are_multiple {
+                Some("Containers")
+            } else if let Some(target) = target {
+                Some(*target)
+            } else {
+                None
+            };
+            let message = if self.updated.is_empty() {
+                container.map_or_else(
+                    || format!("Transaction complete."),
+                    |c| format!("{} {} up-to-date.", c, if are_multiple { "are" } else { "is" }),
+                )
+            } else {
+                format!("Transaction complete.")
+            };
+
+            println!("{} {}", *ARROW_GREEN, message);
+        } else {
+            println!("{} Transaction complete.", *ARROW_GREEN);
+        }
+    }
+
+    fn signal(&mut self, handle: &mut Option<Alpm>) -> Result<()> {
+        for _ in self.signals.pending() {
+            if let Some(handle) = handle {
+                handle.trans_interrupt().ok();
+            }
+
+            self.lock()?.unlock()?;
+            err!(SyncError::SignalInterrupt)?;
+        }
+
+        Ok(())
     }
 
     pub fn keyring_update(&mut self, inshandle: &ContainerHandle) -> Result<()> {
@@ -255,6 +342,10 @@ impl<'a> TransactionAggregator<'a> {
         &self.action
     }
 
+    pub fn progress_bar(&self) -> Option<&ProgressBar> {
+        self.progress.as_ref()
+    }
+
     pub fn updated(&self, inshandle: &ContainerHandle<'a>) -> bool {
         self.updated.contains(&inshandle.vars().instance())
     }
@@ -270,36 +361,4 @@ impl<'a> TransactionAggregator<'a> {
     pub fn logger(&mut self) -> &mut Logger {
         &mut self.logger
     }
-
-    pub fn signal(&mut self, handle: &mut Option<Alpm>) -> Result<()> {
-        for _ in self.signals.pending() {
-            if let Some(handle) = handle {
-                handle.trans_interrupt().ok();
-            }
-
-            self.lock()?.unlock()?;
-            err!(SyncError::SignalInterrupt)?;
-        }
-
-        Ok(())
-    }
-}
-
-fn signal_trap() {
-    let mut signals = Signals::new(*SIGNAL_LIST).unwrap();
-    let mut count = 0;
-
-    thread::Builder::new()
-        .name(format!("pacwrap-signal"))
-        .spawn(move || {
-            for _ in signals.forever() {
-                count += 1;
-                println!();
-
-                if count == 3 {
-                    exit(error!(SyncError::SignalInterrupt).error());
-                }
-            }
-        })
-        .unwrap();
 }

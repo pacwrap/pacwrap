@@ -17,6 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use std::{process::exit, thread::Builder};
+
 use alpm::{
     Alpm,
     CommitData,
@@ -26,10 +28,12 @@ use alpm::{
     PrepareData,
     PrepareError,
 };
+use signal_hook::iterator::Signals;
 
 use crate::{
-    constants::{BOLD, BOLD_WHITE, RESET},
+    constants::{BOLD, BOLD_WHITE, RESET, SIGNAL_LIST},
     err,
+    error,
     sync::SyncError,
     utils::{print_error, print_warning},
     Error,
@@ -182,4 +186,23 @@ pub fn erroneous_preparation<'a>(error: PrepareError) -> Result<()> {
     }
 
     err!(SyncError::PreparationFailure(error.to_string()))
+}
+
+pub fn signal_trap() {
+    let mut signals = Signals::new(*SIGNAL_LIST).unwrap();
+    let mut count = 0;
+
+    Builder::new()
+        .name(format!("pacwrap-signal"))
+        .spawn(move || {
+            for _ in signals.forever() {
+                count += 1;
+                println!();
+
+                if count == 3 {
+                    exit(error!(SyncError::SignalInterrupt).error());
+                }
+            }
+        })
+        .unwrap();
 }
