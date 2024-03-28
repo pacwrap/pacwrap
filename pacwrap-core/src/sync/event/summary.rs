@@ -205,7 +205,7 @@ impl Summary {
             });
         }
 
-        write!(fmt, "\n{}\n", table.build().unwrap())?;
+        write!(fmt, "\n{}", table.build().unwrap())?;
         self.footer(fmt)
     }
 
@@ -233,11 +233,15 @@ impl Summary {
             pkglist.push_str(&format!("{}-{}{}{} ", pkg.0, *DIM, ver, *RESET));
         }
 
-        write!(fmt, "{}\n\n", pkglist)?;
+        write!(fmt, "{}\n", pkglist)?;
         self.footer(fmt)
     }
 
     fn footer(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
+        if self.installed != 0 || self.removed != 0 || self.download_size != 0 || self.net_installed != 0 {
+            writeln!(fmt)?;
+        }
+
         if self.installed != 0 {
             writeln!(fmt, "{}Total Installed Size{}: {}", *BOLD, *RESET, self.installed.to_byteunit(IEC))?;
         }
@@ -293,8 +297,8 @@ impl From<&Summary> for TableColumns {
         match sum.columns() {
             //Grr, don't try to figure out _how_ this works, just know that it does..
             (false, false, false, false, false) => Self::OldNet,
-            (true, true, _, true, true) => Self::OldNewNetDownload,
-            (true, true, _, true, false) => Self::OldNewNet,
+            (true, true, _, _, true) => Self::OldNewNetDownload,
+            (true, true, _, _, false) => Self::OldNewNet,
             (.., true, false, true) => Self::NewNetDownload,
             (.., true, false, false) => Self::NewNet,
             _ => Self::Version,
