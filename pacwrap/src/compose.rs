@@ -45,7 +45,15 @@ use crate::utils::delete::delete_roots;
 pub fn compose(args: &mut Arguments) -> Result<()> {
     check_root()?;
     init()?;
-    engage_aggregator(args)
+
+    let lock = Lock::new().lock()?;
+    let result = engage_aggregator(args, &lock);
+
+    if let Err(error) = lock.unlock() {
+        error.error();
+    }
+
+    result
 }
 
 fn delete_containers<'a>(
@@ -130,7 +138,7 @@ fn acquire_targets<'a>(
     Ok(())
 }
 
-fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
+fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
     let mut cache = match args.into_iter().find(|a| *a == Op::Long("from-config")) {
         Some(_) => cache::populate_config(),
         None => cache::populate(),
@@ -211,8 +219,6 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
         err!(ErrorKind::Message("Composition targets not specified."))?
     }
 
-    let lock = Lock::new().lock()?;
-
     if delete.len() > 0 {
         delete_containers(&cache, &mut logger, &delete, &flags, force)?;
     }
@@ -220,10 +226,10 @@ fn engage_aggregator<'a>(args: &mut Arguments) -> Result<()> {
     cache = instantiate(compose_handles(&cache, compose)?, cache, &mut logger)?;
     acquire_targets(&cache, &mut targets, &mut queue)?;
     Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
-        .assert_lock(&lock)?
-        .progress()
-        .flag(flags)
+        .assert_lock(lock)?
         .target(Some(targets))
+        .flag(flags)
         .queue(queue)
+        .progress()
         .aggregate()?)
 }

@@ -19,7 +19,7 @@
 
 use std::collections::HashMap;
 
-use alpm::{AnyDownloadEvent, DownloadEvent as Event};
+use alpm::{AnyDownloadEvent, DownloadEvent as Event, DownloadResult};
 use dialoguer::console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use lazy_static::lazy_static;
@@ -35,6 +35,10 @@ use super::whitespace;
 
 lazy_static! {
     static ref INIT: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg}").unwrap();
+    static ref FAILED: ProgressStyle = ProgressStyle::with_template(" {spinner:.red.bold} {msg} failed to download.")
+        .unwrap()
+        .progress_chars("#-")
+        .tick_strings(&[" ", "X"]);
     static ref UP_TO_DATE: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg} is up-to-date!")
         .unwrap()
         .progress_chars("#-")
@@ -193,14 +197,16 @@ pub fn event(file: &str, download: AnyDownloadEvent, this: &mut DownloadEvent) {
             },
         Event::Completed(progress) =>
             if let Some(pb) = this.bars.remove(file) {
-                if pb.length().unwrap() == 0 {
+                if let DownloadResult::UpToDate = progress.result {
                     pb.set_style(UP_TO_DATE.clone());
+                } else if let DownloadResult::Failed = progress.result {
+                    pb.set_style(FAILED.clone());
                 }
 
                 pb.finish();
                 this.increment(progress.total.unsigned_abs());
 
-                if this.condensed {
+                if let (DownloadResult::Success, true) = (progress.result, this.condensed) {
                     pb.set_draw_target(ProgressDrawTarget::hidden());
                 }
             },

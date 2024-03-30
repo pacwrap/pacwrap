@@ -35,6 +35,7 @@ use crate::{
     error,
     exec::pacwrap_key,
     impl_error,
+    lock::Lock,
     sync::{
         event::download::{self, DownloadEvent},
         filesystem::create_hard_link,
@@ -240,12 +241,13 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     handle
 }
 
-fn synchronize_database(cache: &ContainerCache, force: bool) -> Result<()> {
+fn synchronize_database(cache: &ContainerCache, force: bool, lock: &Lock) -> Result<()> {
     match cache.obtain_base_handle() {
         Some(ins) => {
             let db_path = format!("{}/pacman/", *DATA_DIR);
             let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
+            lock.assert()?;
             println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
             handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
 

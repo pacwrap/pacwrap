@@ -46,8 +46,14 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let mut cache = cache::populate()?;
     let (action, create) = action(args);
+    let lock = Lock::new().lock()?;
+    let result = engage_aggregator(&mut cache, &mut logger, args, &lock, action, create);
 
-    engage_aggregator(&mut cache, &mut logger, args, action, create)
+    if let Err(error) = lock.unlock() {
+        error.error();
+    }
+
+    result
 }
 
 fn action(args: &mut Arguments) -> (TransactionType, bool) {
@@ -139,6 +145,7 @@ fn engage_aggregator<'a>(
     mut cache: &mut ContainerCache<'a>,
     log: &'a mut Logger,
     args: &'a mut Arguments,
+    lock: &'a Lock,
     action_type: TransactionType,
     init: bool,
 ) -> Result<()> {
@@ -229,8 +236,6 @@ fn engage_aggregator<'a>(
         }
     }
 
-    let lock = Lock::new().lock()?;
-
     if create_targets.len() > 0 || init {
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;
         instantiate_trust()?;
@@ -238,7 +243,7 @@ fn engage_aggregator<'a>(
     }
 
     Ok(TransactionAggregator::new(cache, log, action_type)
-        .assert_lock(&lock)?
+        .assert_lock(lock)?
         .target(acquire_targets(cache, &flags, targets)?)
         .queue(queue)
         .flag(flags)

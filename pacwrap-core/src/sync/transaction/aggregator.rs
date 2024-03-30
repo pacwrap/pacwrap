@@ -142,7 +142,7 @@ impl<'a> TransactionAggregator<'a> {
                 }
 
                 if refresh {
-                    sync::synchronize_database(self.cache, force)?;
+                    sync::synchronize_database(self.cache, force, self.lock()?)?;
                 }
 
                 upgrade
@@ -268,10 +268,6 @@ impl<'a> TransactionAggregator<'a> {
                         progress.finish_and_clear();
                     }
 
-                    if let Err(err) = self.lock()?.unlock() {
-                        err.error();
-                    }
-
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
                         SyncError::TransactionFailureAgent => exit(err.kind().code()),
@@ -317,7 +313,6 @@ impl<'a> TransactionAggregator<'a> {
                 handle.trans_interrupt().ok();
             }
 
-            self.lock()?.unlock()?;
             err!(SyncError::SignalInterrupt)?;
         }
 

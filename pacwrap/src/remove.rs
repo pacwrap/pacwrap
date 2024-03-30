@@ -44,8 +44,14 @@ pub fn remove(mut args: &mut Arguments) -> Result<()> {
 
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let action = action(args);
+    let lock = Lock::new().lock()?;
+    let result = engage_aggregator(action, &mut args, &mut logger, &lock);
 
-    engage_aggregator(action, &mut args, &mut logger)
+    if let Err(error) = lock.unlock() {
+        error.error();
+    }
+
+    result
 }
 
 fn action(args: &mut Arguments) -> TransactionType {
@@ -63,7 +69,12 @@ fn action(args: &mut Arguments) -> TransactionType {
     TransactionType::Remove(recursive > 0, cascade, recursive > 1)
 }
 
-fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, log: &'a mut Logger) -> Result<()> {
+fn engage_aggregator<'a>(
+    action_type: TransactionType,
+    args: &'a mut Arguments,
+    log: &'a mut Logger,
+    lock: &'a Lock,
+) -> Result<()> {
     let cache = cache::populate()?;
     let mut flags = TransactionFlags::NONE;
     let mut targets = Vec::new();
@@ -116,10 +127,10 @@ fn engage_aggregator<'a>(action_type: TransactionType, args: &'a mut Arguments, 
     }
 
     Ok(TransactionAggregator::new(&cache, log, action_type)
-        .assert_lock(&Lock::new().lock()?)?
-        .progress()
+        .assert_lock(lock)?
+        .target(Some(targets))
         .flag(flags)
         .queue(queue)
-        .target(Some(targets))
+        .progress()
         .aggregate()?)
 }
