@@ -193,7 +193,7 @@ impl<'a> TransactionAggregator<'a> {
         }
 
         self.print_complete(filesystem_sync, target_amount, upstream.last().or_else(|| downstream.last()));
-        self.lock()?.unlock()
+        Ok(())
     }
 
     pub fn transaction(&mut self, containers: &Vec<&'a str>) -> Result<()> {
