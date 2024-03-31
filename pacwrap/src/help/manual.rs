@@ -90,7 +90,7 @@ pub fn default(buf: &mut String, layout: &HelpLayout) -> FmtResult {
 {sub_bold}-U, --utils{reset_bold}
 {tab}{tab}Invoke miscellaneous utilities to manage containers.
 
-{sub_bold}-h, --help=<MODULE>{reset_bold}
+{sub_bold}-h, --help=MODULE{reset_bold}
 {tab}{tab}Invoke a printout of this manual to {bold}STDOUT{reset_bold}.
 
 {sub_bold}-V, --version{reset_bold}
@@ -160,7 +160,7 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> FmtResult {
 {tab}{tab}Synchronize remote package databases. Specify up to 2 times to force a refresh.
 
 {sub_bold}-u, --upgrade{reset_bold}
-{tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}-t, --target=<TARGET>{reset_bold} followed by
+{tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}-t, --target=TARGET{reset_bold} followed by
 {tab}{tab}a list of packages to specify package targets. Packages applicable to a target {bold}must{reset_bold} only be specified 
 {tab}{tab}after the target operand.
 
@@ -490,7 +490,7 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> FmtResult {
 {sub_bold}-t, --target=CONTAINER{reset_bold}
 {tab}{tab}Target container to perform the operation.
 
-{sub_sect}LIST{reset}
+{sub_sect}LIST{reset_bold}
 {sub_para}These options are associated with the {bold}--list{reset_bold} utility command module.
 
 {sub_bold}-t, --total{reset_bold}

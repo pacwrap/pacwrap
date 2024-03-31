@@ -1,11 +1,11 @@
 # pacwrap
 
+<img align="left" src="./assets/logo.svg">
+
 [![pacwrap](https://shields.io/aur/version/pacwrap?style=for-the-badge&color=599ffb&logo=archlinux&label=pacwrap)](https://aur.archlinux.org/packages/pacwrap/)
 [![pacwrap-git](https://shields.io/aur/version/pacwrap-git?style=for-the-badge&color=599ffb&logo=archlinux&label=pacwrap-git)](https://aur.archlinux.org/packages/pacwrap-git/)
-[![License](https://shields.io/crates/l/pacwrap/0.7.2?style=for-the-badge&color=6dfb59)](https://spdx.org/licenses/GPL-3.0-only.html)
-![MSRV](https://shields.io/crates/msrv/pacwrap/0.8.0?style=for-the-badge&color=fba759)
-
-<img align="left" src="./assets/logo.svg">
+[![License](https://shields.io/crates/l/pacwrap/0.7.2?style=for-the-badge&color=6dfb59&logo=gnu)](https://spdx.org/licenses/GPL-3.0-only.html)
+![MSRV](https://shields.io/crates/msrv/pacwrap/0.8.0?style=for-the-badge&color=fba759&logo=rust)
 
 A package management front-end which utilises libalpm to facilitate the creation of unprivileged, userspace containers with parallelised, filesystem-agnostic deduplication. These containers are constructed via bubblewrap to execute package transactions and launch applications.
 
@@ -56,7 +56,7 @@ If a feature you see here is not completed, feel free to submit a PR; or submit 
 | Transaction Agent                  | Transact within a sandboxed runtime environment                             | ✅            |
 | Transaction CLI                    | Functional                                                                  | ✅            |
 | Global Configuration               | Functional                                                                  | ✅            |
-| Package Dependency Resolution      | Utilizes a recursive first-depth search algorithm; resilient to cycling     | ✅            |
+| Package Dependency Resolution      | Utilizes a recursive depth-first search algorithm; resilient to cycling     | ✅            |
 | Foreign Database Resolution        | Populates foreign package database in aggregate containers                  | ✅            |
 | Foreign Database Resolution (Lazy) | Not yet implemented                                                         | ❌            |
 | Conflict Resolution                | Not yet implemented                                                         | ❌            |
