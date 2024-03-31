@@ -1,16 +1,17 @@
 .nh
-.TH pacwrap 1 "17/02/2024" "pacwrap version_string_placeholder" "User Manual"
+.TH pacwrap 1 "30/03/2024" "pacwrap version_string_placeholder" "User Manual"
 
 .SH
-NAME
+NAME\fR
 pacwrap
 
 .SH
-SYNOPSIS
-pacwrap [\fPOPERATION\fP] [\fPARGUMENTS\fP] [\fPTARGETS\fP]	
+SYNOPSIS\fR
+pacwrap [\fBOPERATION\fR | \fBCOMMAND MODULE\fR] [\fBARGUMENTS\fR] [\fBTARGETS\fR]	
 
 .SH
-DESCRIPTION
+DESCRIPTION\fR
+.PP
 A package management front-end which utilises libalpm to facilitate the creation of unprivileged, 
 namespace containers with parallelised, filesystem-agnostic deduplication. These containers
 are constructed with bubblewrap to execute package transactions and launch applications.
@@ -21,76 +22,94 @@ containerised environments for general-purpose use. CLI and GUI applications are
 Once a container environment is configured, it can be re-established or replicated on any system. 
 
 .SH
-OPERATIONS
+OPERATIONS\fR
 .TP
-\fB-S, --sync\fP
+\fB-S, --sync\fR
 Synchronize package databases and update packages in target containers. 
 
 .TP
-\fB-U, --utils\fP
-Invoke miscellaneous utilities to manage containers.
+\fB-R, --remove\fR
+Remove packages from target containers.
 
 .TP
-\fB-P, --process\fP
+\fB-Q, --query\fR
+Query package information from target container.
+
+.TP
+\fB-C, --compose\fR
+Compose a container from configuration.
+
+.TP
+\fB-P, --process\fR
 Manage and show status of running container processes.
 
 .TP
-\fB-E, --execute\fP
+\fB-E, --execute\fR
 Executes application in target container using bubblewrap.
 
 .TP
-\fB-h, --help=OPTION\fP
-Invoke a printout of this manual to \fPSTDOUT\fP.
+\fB-L, --list\fR
+List of available containers managed by pacwrap.
 
 .TP
-\fB-V, --version\fP
-Display version and copyright information in \fPSTDOUT\fP.
+\fB-U, --utils\fR
+Invoke miscellaneous utilities to manage containers.
+
+.TP
+\fB-h, --help=<MODULE>\fR
+Invoke a printout of this manual to \fBSTDOUT\fR.
+
+.TP
+\fB-V, --version\fR
+Display version and copyright information in \fBSTDOUT\fR.
 
 .SH
-EXECUTE
+EXECUTE\fR
 .TP
-\fB-r, --root\fP
+\fB-r, --root\fR
 Execute operation with fakeroot and fakechroot. Facilitates a command with faked privileges.
 	
 .TP
-\fB-s, --shell\fP
+\fB-s, --shell\fR
 Invoke a bash shell
 
 .SH
-SYNCHRONIZATION
+SYNCHRONIZATION\fR
+.PP
+Provides the facilities required to be able to synchronize and create containers in aggregate. 
+
 .TP
-\fB-y, --refresh\fP
+\fB-y, --refresh\fR
 Synchronize remote package databases. Specify up to 2 times to force a refresh.
 
 .TP
-\fB-u, --upgrade\fP
-Execute aggregate upgrade routine on all or specified containers. Use \fP-t, --target=TARGET\fP to limit
-package synchronization operations to the specified target containers. Packages applicable to 
-a target \fPmust\fP be specified only after the target operand. 
-e.g. '-t electron element-desktop -t mozilla firefox thunderbird'
+\fB-u, --upgrade\fR
+Execute aggregate upgrade routine on all or specified containers. Use \fB-t, --target=<TARGET>\fR followed by
+a list of packages to specify package targets. Packages applicable to a target \fBmust\fR only be specified 
+after the target operand.
 
 .TP
-\fB-f, --filesystem\fP
-Force execution of filesystem synchronization target on all or specified containers. In combination
-with \fP-o/--target-only\fP, in addition to no other specified targets, filesystem slices will be
-synchronized without package synchronization on all applicable containers.
+\fB-f, --filesystem\fR
+Force execution of filesystem synchronization target on all or specified containers. In combination 
+with \fB-o/--target-only\fR, in addition to no other specified targets, filesystem slices will be synchronized 
+without package synhcronization on on all applicable containers. This operation is useful for propagation 
+of manual filesystem changes to all aggregate containers.
 
 .TP
-\fB-c, --create\fP
+\fB-c, --create\fR
 Create a container with the first specified target. A container type argument is also required.
 
 .TP
-\fB-b, --base\fP
-Base container type. Specify alongside \fP-c, --create\fP to assign this container type during creation.
+\fB-b, --base\fR
+Base container type. Specify alongside \fB-c, --create\fR to assign this container type during creation.
 
 This container type is used as the base layer for all downstream containers. Only one base container 
 dependency per slice or aggregate is supported. Filesystem and package deduplication via slices and 
-aggregate containers are recommended, but optional.
+aggregate containers are recommended, but optional. This container type is not dependant.
 
 .TP
-\fB-s, --slice\fP
-Slice container type. Specify alongside \fP-c, --create\fP to assign this container type during creation.
-
+\fB-s, --slice\fR
+Slice container type. Specify alongside \fB-c, --create\fR to assign this container type during creation.
 Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
 packages and influence ordering of downstream synchronization target(s). Container slicing provides
 the ability to install packages in a lightweight, sliced filesytem, which aid in the deduplication 
@@ -99,114 +118,457 @@ of common downstream package and filesystem dependencies.
 Useful for graphics drivers, graphical toolkits, fonts, etc.; these are not meant for applications.
 
 .TP
-\fB-a, --aggegrate\fP
-Aggregate container type. Specify alongside \fP-c, --create\fP to this assign container type during creation.
+\fB-a, --aggegrate\fR
+Aggregate container type. Specify alongside \fB-c, --create\fR to this assign container type during creation.
 
 Requires a base dependency, and optionally one or more sliced dependencies, in order to acertain foreign
 packages and amalgamate the target. These containers are ideal for installing software with the aid of
 filesystem and package deduplication. 
 
-Useful for all general purpose applications, browsers, e-mail clients, and even terminal user interface 
+Useful for all general purpose applications, browsers, e-mail clients, or even terminal user interface 
 applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
 
 .TP
-\fB-t, --target=TARGET\fP
+\fB-t, --target=TARGET\fR
 Specify a target container for the specified operation.
 
 .TP
-\fB-d, --dep=DEPEND\fP
+\fB-d, --dep=DEPEND\fR
 Specify a dependent container for the specified operation.
 
 .TP
-\fB-o, --target-only\fP
-Apply specified operation on the specified target only.
+\fB-p, --preview\fR
+Perform a dryrun operation on existing containers to preview changes applicable or otherwise specified.
+Only applicable to 
 
 .TP
-\fB--force-foreign\fP
+\fB-o, --target-only\fR
+Apply specified operation on the specified target(s) only.
+
+.TP
+\fB--force-foreign\fR
 Force synchronization of foreign packages on resident container. Useful for when installing 
 a new package in an aggregate container without all the prerequisite foreign dependencies
 synchronized to this container's package database.
 
 .TP
-\fB--dbonly\fP
+\fB--dbonly\fR
 Transact on resident containers with a database-only transaction.
 
 .TP
-\fB--noconfirm\fP
+\fB--noconfirm\fR
 Override confirmation prompts and confirm all operations.
 
+.SS
+EXAMPLES\fR
+.TP
+`$ pacwrap -Syucbt base`
+Create a base container named base with no additional packages
+
+.TP
+`$ pacwrap -Syucbt firefox firefox --dep=base,common,nvidia`
+Create aggregate container named firefox with firefox installed.
+
+.TP
+`$ pacwrap -Syut electron element-desktop -t mozilla firefox thunderbird`
+Synchronize package databases and upgrade all containers, as well as install element-desktop 
+in the target electron, and install firefox and thunderbird in the target mozilla.
+
+.TP
+`$ pacwrap -Syucst common gtk3 qt6-base --dep=base -cst nvidia nvidia-utils --dep=base,common`
+Create two sliced containers, one named common with the packages gtk3, qt6-base, and another 
+named nvidia with the package nvidia-utils.
+
+.TP
+`$ pacwrap -Sof`
+Synchronize filesystem state of all associated containers present in the data directory.
+
 .SH
-PROCESS
-.TP
-\fB-s, --summary\fP
-Enumerate a process summary of containers being executed by pacwrap.
+REMOVE\fR
+.PP
+Remove packages from specified containers.
 
 .TP
-\fB-k, --kill\fP
-Kill target containers and their associated processes.
+\fB-s, --recursive\fR
+Recursively remove all target packages with the associated target container. This does
+not apply to packages upstream of a downstream container.
 
 .TP
-\fB-a, --all\fP
-Enumerate all processes associated with running containers.
+\fB-c, --cascade\fR
+Remove all target packages with the associated target container, including all their 
+associated dependencies, provided they are not required by other packages, and are not
+marked as being upstream of the target container.
 
 .TP
-\fB-d, --depth\fP
-Enumerate all processes at the specified depth associated with running containers.
+\fB-t, --target=TARGET\fR
+Specify a target container for the specified operation. At least one container target is 
+is required for package removal operations.
 
 .TP
-\fB-t, --target=TARGET\fP
+\fB--force-foreign\fR
+Force the removal of foreign packages on target container. Useful for cleaning up
+the package database of foreign, upstream dependencies synchronized to the target
+container's package database.
+
+.TP
+\fB-m, --delete\fR
+Delete root filesystem(s) of specified targets. Shortcout to \fB-Ur\fR.
+
+.TP
+\fB-p, --preview\fR
+Preview operation and perform no transaction.
+
+.TP
+\fB--dbonly\fR
+Transact on resident containers with a database-only transaction.
+
+.TP
+\fB--noconfirm\fR
+Override confirmation prompts and confirm all operations.
+
+.SS
+EXAMPLES\fR
+.TP
+`$ pacwrap -Rt firefox firefox`
+Remove the target package firefox from target container firefox.
+
+.TP
+`$ pacwrap rm firefox`
+Delete the root filesystem for the firefox container.
+
+
+.SH
+COMPOSE\fR
+Compose containers from container configuration files. This functionality provides a way
+to deterministically compose containers from an established configuration.
+
+.TP
+\fB<FILE_PATH>\fR
+Compose a container from the specified configuration file on disk. Unless a target is
+otherwise specified, the container will be initialized with a name derived from the
+filename provided.
+
+.TP
+\fB-r, --reinitialize\fR
+Compose an available, existing container for composition. The pre-existing container root
+will be deleted and the container will be composited from the configuration data enumerated.
+
+Reinitialize container 
+
+.TP
+\fB-t, --target=TARGET\fR
 Specify a target container for the specified operation.
 
 .TP
-\fB--noconfirm\fP
+\fB-f, --force\fR
+Disable sanity checks and force removal of container filesystem(s).
+
+.TP
+\fB--reinitialize-all\fR
+Queues all available, existing containers for composition. All pre-existing container roots
+will be deleted and composited from the available configuration data enumerated.
+
+.TP
+\fB--from-config\fR
+Instruct pacwrap to populate configuration data from uninitialized containers. Under normal
+circumstances, configuration data will only be populated from containers with configuration
+data and an associative container root present. This option engages an alternate enuermation 
+pathway to allow composition of dormant, uninitialized container configurations.
+
+.TP
+\fB--noconfirm\fR
 Override confirmation prompts and confirm all operations.
 
-.SH
-UTILITIES
--TODO-
+.SS
+EXAMPLES\fR
+.TP
+`$ pacwrap compose -rt element element.yml`
+Reinitialize an existing container named element with its configuration derived 
+from the file 'element.yml'.
+
+.TP
+`$ pacwrap compose --reinitialize-all --from-config`
+Reinitialize all available containers as configured in '\fB$PACWRAP_CONFIG_DIR\fR/container/'.
 
 .SH
-HELP
+QUERY\fR
+.PP
+Query package list on target container. This module presently is not complete.
+
 .TP
-\fB-m, --more\fP
+\fB-q, --quiet\fR
+Quiet the output by truncating the package string.
+
+.TP
+\fB-t, --target=TARGET\fR
+Specify a target container for the specified operation.
+
+.TP
+\fB-e, --explicit\fR
+Filter output to explicitly-marked packages.
+
+.SS
+EXAMPLE\fR
+.TP
+`$ pacwrap -Qqe base`
+Print a list of explicit packages from the \fBbase\fR container to \fBSTDOUT\fR.
+
+.SH
+PROCESS\fR
+.PP
+Table a process list of running containers. Containers may be filtered on target and process depth.
+
+.TP
+\fB-s, --summary\fR
+Enumerate a process summary of containers being executed by pacwrap.
+
+.TP
+\fB-k, --kill\fR
+Kill target containers and their associated processes.
+
+.TP
+\fB-a, --all\fR
+Enumerate all processes associated with running containers.
+
+.TP
+\fB-d, --depth\fR
+Enumerate all processes at the specified depth associated with running containers.
+
+.TP
+\fB-t, --target=TARGET\fR
+Specify a target container for the specified operation.
+
+.TP
+\fB--noconfirm\fR
+Override confirmation prompts and confirm all operations.
+
+.SS
+EXAMPLE\fR
+.TP
+`$ pacwrap -Psaxc`
+Print table enumerating all container processes to \fBSTDOUT\fR with process
+arguments and execution path split into separate columns.
+
+.SH
+UTILITIES\fR
+.PP
+Miscellaneous utilities which provide helpful auxiliary functionality to aid in configuration and
+maintenance of operate containers.
+
+.TP
+\fB-v, --view\fR
+Invoke \fB$EDITOR\fR to view file associated with pacwrap.
+
+.TP
+\fB-e, --edit\fR
+Invoke \fB$EDITOR\fR to edit file associated with pacwrap.
+
+.TP
+\fB-o, --open\fR
+Invoke default file viewer on specified target's home or root directory.
+
+.TP
+\fB-l, --list\fR
+Print a list of containers and basic metrics.
+
+.TP
+\fB-s, --symlink\fR
+Create a symbolic container.
+
+.TP
+\fB-r, --remove\fR
+Delete a container(s) root filesystem.
+
+.SS
+EDITOR OPTIONS\fR
+.PP
+These options are associated with the \fB--edit\fR and \fB--view\fR utility command modules.
+
+.TP
+\fB-c, --config=CONTAINER\fR
+Edit specified container configuration located in the pacwrap data directory. Defaults to
+the primary configuration file: '\fB$PACWRAP_CONFIG_DIR\fR/pacwrap.yml' if no option is otherwise
+specified.
+
+.TP
+\fB-d, --desktop=APPLICATION\fR
+Edit specified desktop file associated with a pacwrap container.
+
+.TP
+\fB-r, --repo\fR
+Edit repositories configuration file: '\fB$PACWRAP_CONFIG_DIR\fR/repositories.conf'.
+
+.TP
+\fB-l, --log\fR
+View 'pacwrap.log'. This file contains transaction log information.
+
+.SS
+OPEN OPTIONS\fR
+.PP
+These options are associated with the \fB--open\fR utility command module.
+
+.TP
+\fB-h, --home=CONTAINER\fR
+Specified container's home filesystem.
+
+.TP
+\fB-r, --root=CONTAINER\fR
+Specified container's root filesystem.
+
+.TP
+\fB-t, --target=CONTAINER\fR
+Target container to perform the operation.
+
+.SS
+LIST\fR
+.PP
+These options are associated with the \fB--list\fR utility command module.
+
+.TP
+\fB-t, --total\fR
+Display a total column.
+
+.TP
+\fB-d, --on-disk\fR
+Display a size on disk column.
+
+.TP
+\fB-s, --summary\fR
+Print out a summary table to \fBSTDOUT\fR.
+
+.TP
+\fB-b, --bytes\fR
+Toggle byte unit display for the proceeding item.
+
+.SS
+REMOVE OPTIONS\fR
+.PP
+These options are associated with the \fB--remove\fR utility command module.
+
+.TP
+\fB-t, --target\fR
+Target container to perform the operation.
+
+.TP
+\fB--noconfirm\fR
+Peform the operation without confirmation.
+
+.TP
+\fB--force\fR
+Disable sanity checks and force removal of conatiner filesystem.
+
+.SS
+SYMBOLIC\fR
+.PP
+These options are associated with the \fB--symlink\fR utility command module.
+
+.TP
+\fB<TARGET> <DEST>\fR
+Create a symbolic container of target at destination.
+
+.TP
+\fB-n, --new\fR
+Create a fresh configuration rather than derive it from the target.
+
+.SS
+EXAMPLES\fR
+.TP
+`$ pacwrap -Ulbtbts`
+Print table listing containers out to \fBSTDOUT\fR with two total columns, one showing
+the total amount of bytes. Then print a summary calculation of total consumption below.
+
+.TP
+`$ pacwrap -Uvl`
+View '\fB$PACWRAP_DATA_DIR\fR/pacwrap.log' with \fB$EDITOR\fR.
+
+.SH
+LIST\fR
+.PP
+List all initialized containers presently managed by pacwrap. 
+
+.PP
+This command module is a shortcut to \fB-Ul\fR.
+
+.TP
+\fB-t, --total\fR
+Display a total column.
+
+.TP
+\fB-o, --on-disk\fR
+Display a size on disk column.
+
+.TP
+\fB-b, --bytes\fR
+Toggle byte unit display.
+
+.SS
+EXAMPLE\fR
+.TP
+`$ pacwrap ls -btbts`
+Print table listing containers out to \fBSTDOUT\fR with two total columns, one showing
+the total amount of bytes. Then print a summary calculation of total consumption below.
+
+.SH
+HELP\fR
+.TP
+\fB-m, --more\fR
 When specifying a topic to display, show the default topic in addition to specified options.
 
 .TP
-\fB-f, --format=FORMAT\fP
-Change output format of help in \fPSTDOUT\fP. Format options include: 'ansi', 'dumb', 'markdown', and 'man'. 
+\fB-f, --format=FORMAT\fR
+Change output format of help in \fBSTDOUT\fR. Format options include: 'ansi', 'dumb', 'markdown', and 'man'. 
 This option is for the express purposes of generating documentation at build time, and has little utility
 outside the context of package maintenance. 'man' option produces troff-formatted documents for man pages.
 
 .TP
-\fB-a, --all, --help=all\fP
+\fB-a, --all, --help=all\fR
 Display all help topics.
 
 .SH
-ENVIRONMENT VARIABLES
-.TP
-\fBPACWRAP_CONFIG_DIR\fP
-Overrides the default XDG Directory Specification compliant configuration directory.
+ENVIRONMENT VARIABLES\fR
+.PP
+Provided herein are environment variables of which can be used to configure pacwrap's runtime parameters.
+Use with care: These variables if used improperly could result in undesired behaviour.
 
 .TP
-\fBPACWRAP_DATA_DIR\fP
-Overrides the default XDG Directory Specification compliant data directory.
+\fBPACWRAP_CONFIG_DIR\fR
+Set the configuration directory. This environment variable overrides the default, 
+XDG Directory Specification compliant path. 
 
 .TP
-\fBPACWRAP_CACHE_DIR\fP
-Overrides the default XDG Directory Specification compliant cache directory.
+\fBPACWRAP_DATA_DIR\fR
+Set the data directory. This environment variable overrides the default, 
+XDG Directory Specification compliant path. 
+
+.TP
+\fBPACWRAP_CACHE_DIR\fR
+Set the cache directory. This environment variable overrides the default, 
+XDG Directory Specification compliant path. 
+
+.TP
+\fBPACWRAP_VERBOSE=[0|1]\fR
+Toggle verbose output during a transaction. This option may be removed or otherwise
+differ in functionality in future.
+
+.TP
+\fBPACWRAP_HOME\fR
+Upon execution, mount the set path provided when engaging the 'home' module.
+
+.TP
+\fBPACWRAP_ROOT\fR
+Upon execution, Mount the set path provided when engaging the 'root' module.
 
 .SH
-VERSION
+VERSION\fR
 .TP
-\fB-V, --version, --version=min\fP
-Sends version information to \fPSTDOUT\fP with colourful ASCII art. 
+\fB-V, --version, --version=min\fR
+Sends version information to \fBSTDOUT\fR with colourful ASCII art. 
 The 'min' option provides a minimalistic output as is provided to non-colour terms.
 
 .SH
-COPYRIGHT
+COPYRIGHT\fR
 Copyright (C) 2023-2024 Xavier R.M.
 
-.PP
 This program may be freely redistributed under the
 terms of the GNU General Public License v3 only.
 

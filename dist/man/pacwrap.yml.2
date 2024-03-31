@@ -1,38 +1,38 @@
 .nh
-.TH pacwrap.yml 2 "17/02/2024" "pacwrap version_string_placeholder" "Pacwrap Configuration Directives"
+.TH pacwrap.yml 2 "30/03/2024" "pacwrap version_string_placeholder" "Pacwrap Configuration Directives"
 
 .SH
-NAME
+NAME\fR
 .TP
-\fBpacwrap.yml\fP - pacwrap configuration file.
+\fBpacwrap.yml\fR - pacwrap configuration file.
 .TP
-\fBrepositories.conf\fP - pacman repository file.
+\fBrepositories.conf\fR - pacman repository file.
 
 .SH
-SYNOPSIS
+SYNOPSIS\fR
 .TP
-\fB~/.config/pacwrap/pacwrap.yml\fP
+\fB~/.config/pacwrap/pacwrap.yml\fR
 .TP
-\fB~/.config/pacwrap/repositories.conf\fP
+\fB~/.config/pacwrap/repositories.conf\fR
 
 .SH
-DESCRIPTION
-Pacwrap upon invocation will attempt to deserialise \fPpacwrap.yml\fP(2) at the location specified herein
-compliant with the XDG Directory Specification. Upon activation of \fPlibalpm\fP(3), the repositories.conf
+DESCRIPTION\fR
+Pacwrap upon invocation will attempt to deserialise \fBpacwrap.yml\fR(2) at the location specified herein
+compliant with the XDG Directory Specification. Upon activation of \fBlibalpm\fR(3), the repositories.conf
 file will be deserialised by the pacman_conf crate in order to faciliate the population of package
 repositories and mirrors.
 
 .PP
-Repository configuration is parsed using \fPpacman.conf\fP(5)'s ini format. All other options related the
-\fPlibalpm\fP(3) as defined by \fPpacman.conf\fP(5) therein are otherwise ignored. At present by default, 
+Repository configuration is parsed using \fBpacman.conf\fR(5)'s ini format. All other options related the
+\fBlibalpm\fR(3) as defined by \fBpacman.conf\fR(5) therein are otherwise ignored. At present by default, 
 the repository configuration, as defined, references the mirrorlist defined by your system. 
 This ensures as smooth of an out-of-box experience as humanly possible.
 
-Optionally you may specify environment variables, as specified in \fPpacwrap\fP(1), to override
+Optionally you may specify environment variables, as specified in \fBpacwrap\fR(1), to override
 these locations. These options are designated for experienced users only.
 
 .SH
-EXAMPLE
+EXAMPLE\fR
 
 config:
   logging: Basic
@@ -47,93 +47,93 @@ alpm:
 
 
 .SH
-SECTIONS
+SECTIONS\fR
 .TP
-\fBconfig:\fP
+\fBconfig:\fR
 .PP
-Configuration pertaining to \fPpacwrap\fP(1) are to be declared within this section.
+Configuration pertaining to \fBpacwrap\fR(1) are to be declared within this section.
 
 .TP
-\fBalpm:\fP
+\fBalpm:\fR
 .PP
-Configuration pertaining to \fPlibalpm\fP(3) are to be declared within this section.
+Configuration pertaining to \fBlibalpm\fR(3) are to be declared within this section.
 
 .SH
-CONFIG
+CONFIG\fR
 .TP
-\fBlogging\fP: Basic
-Logging verbosity specified here. Available options are \fPBasic\fP, \fPVerbose\fP, and \fPNone\fP.
+\fBlogging\fR: Basic
+Logging verbosity specified here. Available options are \fBBasic\fR, \fBVerbose\fB, and \fBNone\fR.
 
 .TP
-\fBsummary\fP: Basic
-Transaction summary type. Available options are \fPBasic\fP, \fPBasicForeign\fP, \fPTable\fP, and \fPTableForeign\fP. 
+\fBsummary\fR: Basic
+Transaction summary type. Available options are \fBBasic\fR, \fBBasicForeign\fR, \fBTable\fR, and \fBTableForeign\fR. 
 
-Each option suffixed with the \fPForeign\fP juxtaposition, will take effect only during the
+Each option suffixed with the \fBForeign\fR juxtaposition, will take effect only during the
 juxtaposed transaction type with otherwise the opposite effect.
 
 .TP
-\fBprogress:\fP
+\fBprogress:\fR
 Progress types are declared within this subsection.
 
 .SH
-PROGRESS
+PROGRESS\fR
 .TP
-\fBtransact\fP: CondensedForeign
+\fBtransact\fR: CondensedForeign
 Progress type for transaction progress is specified with this option. Available values are 
-\fPBasic\fP, \fPCondensed\fP, \fPCondensedForeign\fP, \fPCondensedLocal\fP, and \fPVerbose\fP.
+\fBBasic\fR, \fBCondensed\fB, \fBCondensedForeign\fR, \fBCondensedLocal\fR, and \fBVerbose\fR.
 
-Each option suffixed with the \fPForeign\fP or \fPLocal\fP juxtaposition, will take effect only during 
+Each option suffixed with the \fBForeign\fR or \fBLocal\fR juxtaposition, will take effect only during 
 the juxtaposed transaction type with otherwise the opposite effect.
 
 .TP
-\fBdownload\fP: Verbose
+\fBdownload\fR: Verbose
 Download type for download progress is specified with this option. Available values are 
-\fPBasic\fP, \fPCondensed\fP, \fPCondensedForeign\fP, \fPCondensedLocal\fP, and \fPVerbose\fP.
+\fBBasic\fR, \fBCondensed\fB, \fBCondensedForeign\fR, \fBCondensedLocal\fR, and \fBVerbose\fR.
 
-Each option suffixed with the \fPForeign\fP or \fPLocal\fP juxtaposition, will take effect only during 
+Each option suffixed with the \fBForeign\fR or \fBLocal\fR juxtaposition, will take effect only during 
 the juxtaposed transaction type with otherwise the opposite effect.
 
 .SH
-ALPM
+ALPM\fR
 .TP
-\fBignore_pkg:\fP
+\fBignore_pkg:\fR
 Ignored package(s) are declared herein with a string array.
 
 .TP
-\fBhold_pkg:\fP
+\fBhold_pkg:\fR
 Held package(s) are declared herein with a string array.
 
 .TP
-\fBsig_level\fP: Required DatabaseOptional
-Default global signature level - see \fPpacman.conf\fP(5) for valid options. Options are declared
+\fBsig_level\fR: Required DatabaseOptional
+Default global signature level - see \fBpacman.conf\fR(5) for valid options. Options are declared
 as a singular string value.
 
 .TP
-\fBsig_level_local\fP: Optional
-Default local signature level - see \fPpacman.conf\fP(5) for valid options. Options are declared
+\fBsig_level_local\fR: Optional
+Default local signature level - see \fBpacman.conf\fR(5) for valid options. Options are declared
 as a single string value.
 
 .TP
-\fBcheck_space\fP: true
-Instructs \fPlibalpm\fP(3), where applicable, to check if there's available space on disk in order 
-to facilitate a transaction. Value is declared with a \fPbool\fP.
+\fBcheck_space\fR: true
+Instructs \fBlibalpm\fR(3), where applicable, to check if there's available space on disk in order 
+to facilitate a transaction. Value is declared with a \fBbool\fR.
 
 .TP
-\fBdownload_timeout\fP: true
-Instructs \fPlibalpm\fP(3) to timeout downloads from unsatisfactory mirrors. Value is declared with 
-a \fPbool\fP.
+\fBdownload_timeout\fR: true
+Instructs \fBlibalpm\fR(3) to timeout downloads from unsatisfactory mirrors. Value is declared with 
+a \fBbool\fR.
 
 .TP
-\fBparallel_downloads\fP: 1
-Instructs \fPlibalpm\fP(3) to parallelise the download queue with a maximum queue amount. Specify an 
-\fPinteger\fP to declare a maximum value.
+\fBparallel_downloads\fR: 1
+Instructs \fBlibalpm\fR(3) to parallelise the download queue with a maximum queue amount. Specify an 
+\fBinteger\fR to declare a maximum value.
 
 .SH
-SEE ALSO
-\fPpacman.conf\fP(5), \fPlibalpm\fP(3)
+SEE ALSO\fR
+\fBpacman.conf\fR(5), \fBlibalpm\fR(3)
 
 .SH
-COPYRIGHT
+COPYRIGHT\fR
 Copyright (C) 2023-2024 Xavier R.M.
 
 .PP
