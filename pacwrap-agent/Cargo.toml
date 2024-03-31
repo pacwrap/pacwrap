@@ -1,17 +1,18 @@
 [package]
 name = "pacwrap-agent"
-version = "0.7.2"
+version = "0.8.0"
 authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
 edition = "2021"
+rust-version = "1.72"
 
 description = "Executable agent for conducting containerized transactions"
 homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://github.com/pacwrap/pacwrap"
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core", version = "0.7.2" }
+pacwrap-core = { path = "../pacwrap-core", version = "0.8.0" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

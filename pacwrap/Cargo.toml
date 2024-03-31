@@ -1,10 +1,11 @@
 [package]
 name = "pacwrap"
-version = "0.7.2"
+version = "0.8.0"
 authors = [ "Xavier R.M. <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
 edition = "2021"
+rust-version="1.72"
 default-run = "pacwrap"
 
 description = "Facilitates the creation, management, and execution of unprivileged Arch-based bubblewrap containers."
@@ -12,7 +13,7 @@ homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://github.com/pacwrap/pacwrap"
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core/", version = "0.7.2" }
+pacwrap-core = { path = "../pacwrap-core/", version = "0.8.0" }
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 nix = "0.22.3, <= 0.22.3"
 lazy_static = "1.4.0"
@@ -31,4 +32,4 @@ sha2 = "0.10.8"
 regex = "1.10.3"
 
 [build-dependencies]
-pacwrap-core = { path = "../pacwrap-core/", version = "0.7.2" }
+pacwrap-core = { path = "../pacwrap-core/", version = "0.8.0" }
