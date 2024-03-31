@@ -153,11 +153,10 @@ impl AlpmConfigData {
 
 pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm {
     let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").unwrap();
+    let hook_dirs = vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"];
 
     handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
-    handle
-        .set_hookdirs(vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"].iter())
-        .unwrap();
+    handle.set_hookdirs(hook_dirs.iter()).unwrap();
     handle.set_cachedirs(vec!["/mnt/share/cache"].iter()).unwrap();
     handle.set_gpgdir("/mnt/share/gnupg").unwrap();
     handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
@@ -256,13 +255,15 @@ fn synchronize_database(cache: &ContainerCache, force: bool, lock: &Lock) -> Res
             }
 
             Alpm::release(handle).unwrap();
+            lock.assert()?;
 
             for i in cache.registered().iter() {
-                let ins: &ContainerHandle = cache.get_instance(i).unwrap();
+                let ins: &ContainerHandle = cache.get_instance(i)?;
 
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", ins.vars().root(), repo.name);
+        
                     if let Err(error) = create_hard_link(src, dest).prepend(|| format!("Failed to hardlink db '{}'", dest)) {
                         error.warn();
                     }

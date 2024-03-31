@@ -92,14 +92,14 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
     let lock = Lock::new().lock()?;
 
     if let (true, _) | (_, Ok(_)) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
-        delete_roots(&cache, &mut logger, &instances, force)?;
+        delete_roots(&cache, &lock, &mut logger, &instances, force)?;
         lock.unlock()
     } else {
         Ok(())
     }
 }
 
-pub fn delete_roots(cache: &ContainerCache<'_>, logger: &mut Logger, targets: &Vec<&str>, force: bool) -> Result<()> {
+pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger, targets: &Vec<&str>, force: bool) -> Result<()> {
     let process = process::list(&cache)?;
     let processes = process.filter_by_target(&targets);
     let containers = cache.filter_target_handle(&targets, vec![]);
@@ -115,6 +115,7 @@ pub fn delete_roots(cache: &ContainerCache<'_>, logger: &mut Logger, targets: &V
         let instance = container.vars().instance();
         let state = format!("{}/state/{instance}.dat", *DATA_DIR);
 
+        lock.assert()?;
         remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}':"))?;
 
         if Path::new(&state).exists() {

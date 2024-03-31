@@ -58,6 +58,7 @@ pub fn compose(args: &mut Arguments) -> Result<()> {
 
 fn delete_containers<'a>(
     cache: &'a ContainerCache<'a>,
+    lock: &'a Lock,
     logger: &mut Logger,
     delete: &Vec<&str>,
     flags: &TransactionFlags,
@@ -67,9 +68,9 @@ fn delete_containers<'a>(
 
     if flags.contains(TransactionFlags::NO_CONFIRM) {
         println!("{} {}{}...{}", *BAR_GREEN, *BOLD, &message, *RESET);
-        delete_roots(cache, logger, delete, force)?;
+        delete_roots(cache, lock, logger, delete, force)?;
     } else if let Ok(_) = prompt_targets(&delete, &message, false) {
-        delete_roots(cache, logger, delete, force)?;
+        delete_roots(cache, lock, logger, delete, force)?;
     }
 
     Ok(())
@@ -103,10 +104,12 @@ fn compose_handles<'a>(
 fn instantiate<'a>(
     composed: HashMap<&'a str, ContainerHandle<'a>>,
     mut cache: ContainerCache<'a>,
+    lock: &'a Lock,
     logger: &mut Logger,
 ) -> Result<ContainerCache<'a>> {
+    lock.assert()?;
     println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if composed.len() > 1 { "s" } else { "" }, *RESET);
-
+ 
     for (instance, handle) in composed {
         instantiate_container(&handle)?;
 
@@ -220,10 +223,10 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
     }
 
     if delete.len() > 0 {
-        delete_containers(&cache, &mut logger, &delete, &flags, force)?;
+        delete_containers(&cache, lock, &mut logger, &delete, &flags, force)?;
     }
 
-    cache = instantiate(compose_handles(&cache, compose)?, cache, &mut logger)?;
+    cache = instantiate(compose_handles(&cache, compose)?, cache, lock, &mut logger)?;
     acquire_targets(&cache, &mut targets, &mut queue)?;
     Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
         .assert_lock(lock)?

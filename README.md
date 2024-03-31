@@ -1,5 +1,10 @@
 # pacwrap
 
+[![pacwrap](https://shields.io/aur/version/pacwrap?style=for-the-badge&color=599ffb&archlinux&label=pacwrap)](https://aur.archlinux.org/packages/pacwrap/)
+[![pacwrap-git](https://shields.io/aur/version/pacwrap-git?style=for-the-badge&color=599ffb&logo=archlinux&label=pacwrap-git)](https://aur.archlinux.org/packages/pacwrap-git/)
+[![License](https://shields.io/crates/l/pacwrap/0.8.0?style=for-the-badge&color=6dfb59)](https://spdx.org/licenses/GPL-3.0-only.html)
+![MSRV](https://shields.io/crates/msrv/pacwrap/0.8.0?style=for-the-badge&color=fba759)
+
 <img align="left" src="./assets/logo.svg">
 
 A package management front-end which utilises libalpm to facilitate the creation of unprivileged, userspace containers with parallelised, filesystem-agnostic deduplication. These containers are constructed via bubblewrap to execute package transactions and launch applications.
@@ -30,6 +35,12 @@ And finally, to install ```neovim``` inside of a fresh, aggregated container cal
 $ pacwrap -Syucat editor --dep=base neovim
 ```
 
+To update these containers just created in aggregate:
+
+```
+$ pacwrap -Syu
+```
+
 More advanced examples along with further documentation of configuration can be found further 
 elaborated upon **[here](./docs/)**.
 
@@ -45,7 +56,7 @@ If a feature you see here is not completed, feel free to submit a PR; or submit 
 | Transaction Agent                  | Transact within a sandboxed runtime environment                             | ✅            |
 | Transaction CLI                    | Functional                                                                  | ✅            |
 | Global Configuration               | Functional                                                                  | ✅            |
-| Dependency Resolution              | Functional, but too liberal to compensate for a lack of conflict resolution | ⚠            |
+| Package Dependency Resolution      | Utilizes a recursive first-depth search algorithm; resilient to cycling     | ✅            |
 | Foreign Database Resolution        | Populates foreign package database in aggregate containers                  | ✅            |
 | Foreign Database Resolution (Lazy) | Not yet implemented                                                         | ❌            |
 | Conflict Resolution                | Not yet implemented                                                         | ❌            |
@@ -78,7 +89,7 @@ An online version of the user manual is viewable **[here](./docs/manual.md)**.
 
 A minimum version of Rust 1.72 is required to build with the following libraries fulfilled by your distribution:
 ```
-libalpm, libseccomp, libzstd
+libalpm>=14, libseccomp, libzstd
 ```
 
 ## Packaging requirements

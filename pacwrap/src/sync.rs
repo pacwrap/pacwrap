@@ -76,6 +76,7 @@ fn action(args: &mut Arguments) -> (TransactionType, bool) {
 
 fn instantiate<'a>(
     cache: &mut ContainerCache<'a>,
+    lock: &'a Lock,
     logger: &mut Logger,
     action_type: &TransactionType,
     targets: IndexMap<&'a str, (ContainerType, Vec<&'a str>)>,
@@ -102,6 +103,7 @@ fn instantiate<'a>(
         }
     }
 
+    lock.assert()?;
     println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for (container, (container_type, deps)) in targets {
@@ -239,7 +241,7 @@ fn engage_aggregator<'a>(
     if create_targets.len() > 0 || init {
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;
         instantiate_trust()?;
-        instantiate(&mut cache, log, &action_type, create_targets)?;
+        instantiate(&mut cache, lock, log, &action_type, create_targets)?;
     }
 
     Ok(TransactionAggregator::new(cache, log, action_type)

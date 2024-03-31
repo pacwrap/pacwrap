@@ -23,7 +23,7 @@ use crate::utils::list;
 
 mod compose;
 mod exec;
-mod manual;
+mod help;
 mod proc;
 mod query;
 mod remove;
@@ -36,13 +36,13 @@ fn main() {
         Op::Short('E') | Op::Long("exec") | Op::Value("shell") | Op::Value("run") => exec::execute(arguments),
         Op::Short('S') | Op::Long("sync") | Op::Value("sync") | Op::Value("init") => sync::synchronize(arguments),
         Op::Short('L') | Op::Long("list") | Op::Value("ls") | Op::Value("list") => list::list_containers(arguments),
-        Op::Short('R') | Op::Long("remove") | Op::Value("remove") => remove::remove(arguments),
+        Op::Short('R') | Op::Long("remove") | Op::Value("remove") | Op::Value("rm") => remove::remove(arguments),
+        Op::Short('P') | Op::Long("process") | Op::Value("process") | Op::Value("ps") => proc::process(arguments),
         Op::Short('Q') | Op::Long("query") | Op::Value("query") => query::query(arguments),
         Op::Short('C') | Op::Long("compose") | Op::Value("compose") => compose::compose(arguments),
-        Op::Short('P') | Op::Long("process") | Op::Value("ps") => proc::process(arguments),
         Op::Short('U') | Op::Long("utils") | Op::Value("utils") => utils::engage_utility(arguments),
-        Op::Short('V') | Op::Long("version") | Op::Value("version") => manual::print_version(arguments),
-        Op::Short('h') | Op::Long("help") | Op::Value("help") => manual::help(arguments),
+        Op::Short('V') | Op::Long("version") | Op::Value("version") => help::print_version(arguments),
+        Op::Short('h') | Op::Long("help") | Op::Value("help") => help::help(arguments),
         _ => arguments.invalid_operand(),
     };
 
