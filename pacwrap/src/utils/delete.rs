@@ -93,13 +93,18 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
 
     if let (true, _) | (_, Ok(_)) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
         delete_roots(&cache, &lock, &mut logger, &instances, force)?;
-        lock.unlock()
-    } else {
-        Ok(())
     }
+
+    lock.unlock()
 }
 
-pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger, targets: &Vec<&str>, force: bool) -> Result<()> {
+pub fn delete_roots(
+    cache: &ContainerCache<'_>,
+    lock: &Lock,
+    logger: &mut Logger,
+    targets: &Vec<&str>,
+    force: bool,
+) -> Result<()> {
     let process = process::list(&cache)?;
     let processes = process.filter_by_target(&targets);
     let containers = cache.filter_target_handle(&targets, vec![]);
