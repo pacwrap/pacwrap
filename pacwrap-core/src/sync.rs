@@ -263,7 +263,7 @@ fn synchronize_database(cache: &ContainerCache, force: bool, lock: &Lock) -> Res
                 for repo in PACMAN_CONF.repos.iter() {
                     let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
                     let dest = &format!("{}/var/lib/pacman/sync/{}.db", ins.vars().root(), repo.name);
-        
+
                     if let Err(error) = create_hard_link(src, dest).prepend(|| format!("Failed to hardlink db '{}'", dest)) {
                         error.warn();
                     }

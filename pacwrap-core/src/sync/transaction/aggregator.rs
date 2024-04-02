@@ -135,9 +135,12 @@ impl<'a> TransactionAggregator<'a> {
 
         let _timestamp = *UNIX_TIMESTAMP;
         let filesystem_sync = self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE);
-        let upgrade = match self.action {
+        let transact = match self.action {
             Upgrade(upgrade, refresh, force) => {
-                if !upgrade && !refresh && !self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC) {
+                if !upgrade
+                    && !refresh
+                    && !self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::TARGET_ONLY)
+                {
                     err!(InvalidArgument::OperationUnspecified)?
                 }
 
@@ -145,7 +148,7 @@ impl<'a> TransactionAggregator<'a> {
                     sync::synchronize_database(self.cache, force, self.lock()?)?;
                 }
 
-                upgrade
+                upgrade | self.targets.is_some()
             }
             Remove(..) => self.targets.is_some(),
         };
@@ -173,7 +176,7 @@ impl<'a> TransactionAggregator<'a> {
             linker.finish(self.progress.as_ref());
         }
 
-        if upgrade {
+        if transact {
             self.transaction(&upstream)?;
         }
 
@@ -188,7 +191,7 @@ impl<'a> TransactionAggregator<'a> {
             linker.release();
         }
 
-        if upgrade {
+        if transact {
             self.transaction(&downstream)?;
         }
 

@@ -109,7 +109,7 @@ fn instantiate<'a>(
 ) -> Result<ContainerCache<'a>> {
     lock.assert()?;
     println!("{} {}Instantiating container{}...{}", *BAR_GREEN, *BOLD, if composed.len() > 1 { "s" } else { "" }, *RESET);
- 
+
     for (instance, handle) in composed {
         instantiate_container(&handle)?;
 

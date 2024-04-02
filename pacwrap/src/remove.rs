@@ -38,7 +38,7 @@ pub fn remove(mut args: &mut Arguments) -> Result<()> {
     check_root()?;
     init()?;
 
-    if args[0] == Op::Value("rm") || args[1] == Op::Short('m') || args[1] == Op::Long("delete") {
+    if args.len() > 1 && (args[0] == Op::Value("rm") || args[1] == Op::Short('m') || args[1] == Op::Long("delete")) {
         return remove_containers(args);
     }
 
@@ -131,6 +131,5 @@ fn engage_aggregator<'a>(
         .target(Some(targets))
         .flag(flags)
         .queue(queue)
-        .progress()
         .aggregate()?)
 }
