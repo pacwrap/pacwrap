@@ -115,7 +115,7 @@ pub fn execute(buf: &mut String, layout: &HelpLayout) -> Result {
     writeln!(
         buf,
         "{head}EXECUTE{reset}
-{sub_para}Invoke a container to execute the provided command sequence. Command verb `{bold}run{reset_bold}` provides a 
+{sub_para}Invoke a container to execute the provided command sequence. Command verb {bold}`run`{reset_bold}` provides a 
 {tab}shortcut to this module.
 
 {sub_bold}<CONTAINER> <CMD>{reset_bold}
@@ -159,23 +159,23 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Synchronize remote package databases. Specify up to 2 times to force a refresh.
 
 {sub_bold}-u, --upgrade{reset_bold}
-{tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}-t, --target=TARGET{reset_bold} followed by
-{tab}{tab}a list of packages to specify package targets. Packages applicable to a target {bold}must{reset_bold} only be specified 
+{tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}`-t, --target=[CONTAINER]`{reset_bold} followed
+{tab}{tab}by a list of packages to specify package targets. Packages applicable to a target {bold}must{reset_bold} only be specified 
 {tab}{tab}after the target operand.
 
 {sub_bold}-c, --create{reset_bold}
 {tab}{tab}Create a container with the first specified target. A container type argument is also required. Command verb 
-{tab}{tab}`{bold}init{reset_bold}` provides a shortcut to the synchronization module, equivalent to specifying the options `{bold}-Syuc{reset_bold}`.
+{tab}{tab}{bold}`init`{reset_bold} provides a shortcut to the synchronization module, equivalent to specifying the options {bold}`-Syuc`{reset_bold}.
 
 {sub_bold}-b, --base{reset_bold}
-{tab}{tab}Base container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
+{tab}{tab}Base container type. Specify alongside {bold}`-c, --create`{reset_bold} to assign this container type during creation.
 
 {tab}{tab}This container type is used as the base layer for all downstream containers. Only one base container 
 {tab}{tab}dependency per slice or aggregate is supported. Filesystem and package deduplication via slices and 
 {tab}{tab}aggregate containers are recommended, but optional. This container type is not dependant.
 
 {sub_bold}-s, --slice{reset_bold}
-{tab}{tab}Slice container type. Specify alongside {bold}-c, --create{reset_bold} to assign this container type during creation.
+{tab}{tab}Slice container type. Specify alongside {bold}`-c, --create`{reset_bold} to assign this container type during creation.
 
 {tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
 {tab}{tab}packages and influence ordering of downstream synchronization target(s). Container slicing provides
@@ -185,7 +185,7 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Useful for graphics drivers, graphical toolkits, fonts, etc.; these are not meant for applications.
 
 {sub_bold}-a, --aggegrate{reset_bold}
-{tab}{tab}Aggregate container type. Specify alongside {bold}-c, --create{reset_bold} to this assign container type during creation.
+{tab}{tab}Aggregate container type. Specify alongside {bold}`-c, --create`{reset_bold} to this assign container type during creation.
 
 {tab}{tab}Requires a base dependency, and optionally one or more sliced dependencies, in order to acertain foreign
 {tab}{tab}packages and amalgamate the target. These containers are ideal for installing software with the aid of
@@ -194,7 +194,7 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Useful for all general purpose applications, browsers, e-mail clients, or even terminal user interface 
 {tab}{tab}applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
 
-{sub_bold}-t, --target=<TARGET>{reset_bold}
+{sub_bold}-t, --target=[CONTAINER]{reset_bold}
 {tab}{tab}Declare a target container for the specified operation.
 
 {sub_bold}<PACKAGE>{reset_bold}
@@ -209,7 +209,7 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-o, --target-only{reset_bold}
 {tab}{tab}Apply specified operation on the specified target(s) only.
 
-{sub_bold}-d, --dep=<CONTAINER>{reset_bold}
+{sub_bold}-d, --dep=[CONTAINER]{reset_bold}
 {tab}{tab}Specify dependencies for a container create operation.
 
 {sub_bold}-p, --preview{reset_bold}
@@ -272,7 +272,7 @@ pub fn remove(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}associated dependencies, provided they are not required by other packages, and are not
 {tab}{tab}marked as being upstream of the target container.
 
-{sub_bold}-t, --target=TARGET{reset_bold}
+{sub_bold}-t, --target=[CONTAINER]{reset_bold}
 {tab}{tab}Specify a target container for the specified operation. At least one container target is 
 {tab}{tab}is required for package removal operations.
 
@@ -327,7 +327,7 @@ pub fn compose(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Compose an available, existing container for composition. The pre-existing container root
 {tab}{tab}will be deleted and the container will be composited from the configuration data enumerated.
 
-{sub_bold}-t, --target=TARGET{reset_bold}
+{sub_bold}-t, --target=[CONTAINER]{reset_bold}
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}-f, --force{reset_bold}
@@ -375,7 +375,7 @@ pub fn query(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-q, --quiet{reset_bold}
 {tab}{tab}Quiet the output by truncating the package string.
 
-{sub_bold}-t, --target=TARGET{reset_bold}
+{sub_bold}-t, --target=[CONTAINER]{reset_bold}
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}-e, --explicit{reset_bold}
@@ -415,7 +415,7 @@ pub fn process(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-d, --depth{reset_bold}
 {tab}{tab}Enumerate all processes at the specified depth associated with running containers.
 
-{sub_bold}-t, --target=TARGET{reset_bold}
+{sub_bold}-t, --target=[CONTAINER]{reset_bold}
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}--noconfirm{reset_bold}
@@ -444,7 +444,7 @@ pub fn list(buf: &mut String, layout: &HelpLayout) -> Result {
         "{head}LIST{reset}
 {sub_para}List all initialized containers presently managed by pacwrap. 
 
-{sub_para}This command module is a shortcut to {bold}-Ul{reset_bold}. Command verb `{bold}ls{reset_bold}` also is a
+{sub_para}This command module is a shortcut to {bold}-Ul{reset_bold}. Command verb {bold}`ls`{reset_bold} also is a
 {tab}{tab}shortcut to this command module.
 
 {sub_bold}-t, --total{reset_bold}
@@ -506,30 +506,30 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_sect}EDITOR OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--edit{reset_bold} and {bold}--view{reset_bold} utility command modules.
 
-{sub_bold}-c, --config=CONTAINER{reset_bold}
+{sub_bold}-c, --config=[CONTAINER]{reset_bold}
 {tab}{tab}Edit specified container configuration located in the pacwrap data directory. Defaults to
 {tab}{tab}the primary configuration file: '{bold}$PACWRAP_CONFIG_DIR{reset_bold}/pacwrap.yml' if no option is otherwise
 {tab}{tab}specified.
 
-{sub_bold}-d, --desktop=APPLICATION{reset_bold}
+{sub_bold}-d, --desktop=[APPLICATION]{reset_bold}
 {tab}{tab}Edit specified desktop file associated with a pacwrap container.
 
 {sub_bold}-r, --repo{reset_bold}
 {tab}{tab}Edit repositories configuration file: '{bold}$PACWRAP_CONFIG_DIR{reset_bold}/repositories.conf'.
 
 {sub_bold}-l, --log{reset_bold}
-{tab}{tab}View 'pacwrap.log'. This file contains transaction log information.
+{tab}{tab}View 'pacwrap.log'. This file contains transaction log iformation.
 
 {sub_sect}OPEN OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--open{reset_bold} utility command module.
 
-{sub_bold}-h, --home=CONTAINER{reset_bold}
+{sub_bold}-h, --home, --home=[CONTAINER]{reset_bold}
 {tab}{tab}Specified container's home filesystem.
 
-{sub_bold}-r, --root=CONTAINER{reset_bold}
+{sub_bold}-r, --home, --root=[CONTAINER]{reset_bold}
 {tab}{tab}Specified container's root filesystem.
 
-{sub_bold}-t, --target=CONTAINER{reset_bold}
+{sub_bold}-t, --target=[CONTAINER]{reset_bold}
 {tab}{tab}Target container to perform the operation.
 
 {sub_sect}LIST{reset_bold}
@@ -606,7 +606,7 @@ pub fn meta(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-m, --more{reset_bold}
 {tab}{tab}When specifying a topic to display, show the default topic in addition to specified options.
 
-{sub_bold}-f, --format=FORMAT{reset_bold}
+{sub_bold}-f, --format=[FORMAT]{reset_bold}
 {tab}{tab}Change output format of help in {bold}STDOUT{reset_bold}. Format options include: 'ansi', 'dumb', 'markdown', and 'man'. 
 {tab}{tab}This option is for the express purposes of generating documentation at build time, and has little utility
 {tab}{tab}outside the context of package maintenance. 'man' option produces troff-formatted documents for man pages.
@@ -634,22 +634,22 @@ pub fn environment(buf: &mut String, layout: &HelpLayout) -> Result {
 
 {sub_para}Use with care: These variables if used improperly could result in undesired behaviour.
 
-{sub_bold}PACWRAP_CONFIG_DIR=<DIR>{reset_bold}
+{sub_bold}PACWRAP_CONFIG_DIR=[DIR]{reset_bold}
 {tab}{tab}Set the configuration directory, overriding the default location.
 
-{sub_bold}PACWRAP_DATA_DIR=<DIR>{reset_bold}
+{sub_bold}PACWRAP_DATA_DIR=[DIR]{reset_bold}
 {tab}{tab}Set the data directory, overriding the default location.
 
-{sub_bold}PACWRAP_CACHE_DIR=<DIR>{reset_bold}
+{sub_bold}PACWRAP_CACHE_DIR=[DIR]{reset_bold}
 {tab}{tab}Set the cache directory, overriding the default location.
 
-{sub_bold}PACWRAP_VERBOSE=[0|1]{reset_bold}
+{sub_bold}PACWRAP_VERBOSE=[0 | 1]{reset_bold}
 {tab}{tab}Toggle verbose output during a transaction. This option may be subject to change.
 
-{sub_bold}PACWRAP_HOME=<DIR>{reset_bold}
+{sub_bold}PACWRAP_HOME=[DIR]{reset_bold}
 {tab}{tab}Upon container invocation, mount the set path provided when engaging the '{bold}home{reset_bold}' filesystem module.
 
-{sub_bold}PACWRAP_ROOT=<DIR>{reset_bold}
+{sub_bold}PACWRAP_ROOT=[DIR]{reset_bold}
 {tab}{tab}Upon container invocation, mount the set path provided when engaging the '{bold}root{reset_bold}' filesystem module.
 
 {sub_sect}DEFAULT{reset_bold}
@@ -657,13 +657,13 @@ pub fn environment(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}included here in this subsection are to be assumed to have inert values by default.
 
 {sub_bold}PACWRAP_CACHE_DIR{reset_bold}
-{tab}{tab}`{bold}$HOME{reset_bold}/.cache/pacwrap`: Default cache directory.
+{tab}{tab}`$HOME/.cache/pacwrap`: Default cache directory.
 
 {sub_bold}PACWRAP_CONFIG_DIR{reset_bold}
-{tab}{tab}`{bold}$HOME{reset_bold}/.config/pacwrap`: Default configuration directory.
+{tab}{tab}`$HOME/.config/pacwrap`: Default configuration directory.
 
 {sub_bold}PACWRAP_DATA_DIR
-{tab}{tab}`${bold}HOME{reset_bold}/.local/share/pacwrap`: Default data directory.\n"
+{tab}{tab}`$HOME/.local/share/pacwrap`: Default data directory.\n"
     )
 }
 

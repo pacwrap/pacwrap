@@ -70,7 +70,7 @@ Display version banner or information.
 .SH
 EXECUTE\fR
 .PP
-Invoke a container to execute the provided command sequence. Command verb `\fBrun\fR` provides a 
+Invoke a container to execute the provided command sequence. Command verb \fB`run`\fR` provides a 
 shortcut to this module.
 
 .TP
@@ -109,18 +109,18 @@ Synchronize remote package databases. Specify up to 2 times to force a refresh.
 
 .TP
 \fB-u, --upgrade\fR
-Execute aggregate upgrade routine on all or specified containers. Use \fB-t, --target=TARGET\fR followed by
-a list of packages to specify package targets. Packages applicable to a target \fBmust\fR only be specified 
+Execute aggregate upgrade routine on all or specified containers. Use \fB`-t, --target=[CONTAINER]`\fR followed
+by a list of packages to specify package targets. Packages applicable to a target \fBmust\fR only be specified 
 after the target operand.
 
 .TP
 \fB-c, --create\fR
 Create a container with the first specified target. A container type argument is also required. Command verb 
-`\fBinit\fR` provides a shortcut to the synchronization module, equivalent to specifying the options `\fB-Syuc\fR`.
+\fB`init`\fR provides a shortcut to the synchronization module, equivalent to specifying the options \fB`-Syuc`\fR.
 
 .TP
 \fB-b, --base\fR
-Base container type. Specify alongside \fB-c, --create\fR to assign this container type during creation.
+Base container type. Specify alongside \fB`-c, --create`\fR to assign this container type during creation.
 
 This container type is used as the base layer for all downstream containers. Only one base container 
 dependency per slice or aggregate is supported. Filesystem and package deduplication via slices and 
@@ -128,7 +128,7 @@ aggregate containers are recommended, but optional. This container type is not d
 
 .TP
 \fB-s, --slice\fR
-Slice container type. Specify alongside \fB-c, --create\fR to assign this container type during creation.
+Slice container type. Specify alongside \fB`-c, --create`\fR to assign this container type during creation.
 
 Requires a base dependency, and optionally one or more sliced dependencies, to ascertain foreign
 packages and influence ordering of downstream synchronization target(s). Container slicing provides
@@ -139,7 +139,7 @@ Useful for graphics drivers, graphical toolkits, fonts, etc.; these are not mean
 
 .TP
 \fB-a, --aggegrate\fR
-Aggregate container type. Specify alongside \fB-c, --create\fR to this assign container type during creation.
+Aggregate container type. Specify alongside \fB`-c, --create`\fR to this assign container type during creation.
 
 Requires a base dependency, and optionally one or more sliced dependencies, in order to acertain foreign
 packages and amalgamate the target. These containers are ideal for installing software with the aid of
@@ -149,7 +149,7 @@ Useful for all general purpose applications, browsers, e-mail clients, or even t
 applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
 
 .TP
-\fB-t, --target=<TARGET>\fR
+\fB-t, --target=[CONTAINER]\fR
 Declare a target container for the specified operation.
 
 .TP
@@ -168,7 +168,7 @@ of manual filesystem changes to all aggregate containers.
 Apply specified operation on the specified target(s) only.
 
 .TP
-\fB-d, --dep=<CONTAINER>\fR
+\fB-d, --dep=[CONTAINER]\fR
 Specify dependencies for a container create operation.
 
 .TP
@@ -231,7 +231,7 @@ associated dependencies, provided they are not required by other packages, and a
 marked as being upstream of the target container.
 
 .TP
-\fB-t, --target=TARGET\fR
+\fB-t, --target=[CONTAINER]\fR
 Specify a target container for the specified operation. At least one container target is 
 is required for package removal operations.
 
@@ -284,7 +284,7 @@ Compose an available, existing container for composition. The pre-existing conta
 will be deleted and the container will be composited from the configuration data enumerated.
 
 .TP
-\fB-t, --target=TARGET\fR
+\fB-t, --target=[CONTAINER]\fR
 Specify a target container for the specified operation.
 
 .TP
@@ -328,7 +328,7 @@ Query package list on target container.
 Quiet the output by truncating the package string.
 
 .TP
-\fB-t, --target=TARGET\fR
+\fB-t, --target=[CONTAINER]\fR
 Specify a target container for the specified operation.
 
 .TP
@@ -363,7 +363,7 @@ Enumerate all processes associated with running containers.
 Enumerate all processes at the specified depth associated with running containers.
 
 .TP
-\fB-t, --target=TARGET\fR
+\fB-t, --target=[CONTAINER]\fR
 Specify a target container for the specified operation.
 
 .TP
@@ -383,7 +383,7 @@ LIST\fR
 List all initialized containers presently managed by pacwrap. 
 
 .PP
-This command module is a shortcut to \fB-Ul\fR. Command verb `\fBls\fR` also is a
+This command module is a shortcut to \fB-Ul\fR. Command verb \fB`ls`\fR also is a
 shortcut to this command module.
 
 .TP
@@ -447,13 +447,13 @@ EDITOR OPTIONS\fR
 These options are associated with the \fB--edit\fR and \fB--view\fR utility command modules.
 
 .TP
-\fB-c, --config=CONTAINER\fR
+\fB-c, --config=[CONTAINER]\fR
 Edit specified container configuration located in the pacwrap data directory. Defaults to
 the primary configuration file: '\fB$PACWRAP_CONFIG_DIR\fR/pacwrap.yml' if no option is otherwise
 specified.
 
 .TP
-\fB-d, --desktop=APPLICATION\fR
+\fB-d, --desktop=[APPLICATION]\fR
 Edit specified desktop file associated with a pacwrap container.
 
 .TP
@@ -462,7 +462,7 @@ Edit repositories configuration file: '\fB$PACWRAP_CONFIG_DIR\fR/repositories.co
 
 .TP
 \fB-l, --log\fR
-View 'pacwrap.log'. This file contains transaction log information.
+View 'pacwrap.log'. This file contains transaction log iformation.
 
 .SS
 OPEN OPTIONS\fR
@@ -470,15 +470,15 @@ OPEN OPTIONS\fR
 These options are associated with the \fB--open\fR utility command module.
 
 .TP
-\fB-h, --home=CONTAINER\fR
+\fB-h, --home, --home=[CONTAINER]\fR
 Specified container's home filesystem.
 
 .TP
-\fB-r, --root=CONTAINER\fR
+\fB-r, --home, --root=[CONTAINER]\fR
 Specified container's root filesystem.
 
 .TP
-\fB-t, --target=CONTAINER\fR
+\fB-t, --target=[CONTAINER]\fR
 Target container to perform the operation.
 
 .SS
@@ -575,7 +575,7 @@ HELP\fR
 When specifying a topic to display, show the default topic in addition to specified options.
 
 .TP
-\fB-f, --format=FORMAT\fR
+\fB-f, --format=[FORMAT]\fR
 Change output format of help in \fBSTDOUT\fR. Format options include: 'ansi', 'dumb', 'markdown', and 'man'. 
 This option is for the express purposes of generating documentation at build time, and has little utility
 outside the context of package maintenance. 'man' option produces troff-formatted documents for man pages.
@@ -594,27 +594,27 @@ All environment variables listed are case sensitive.
 Use with care: These variables if used improperly could result in undesired behaviour.
 
 .TP
-\fBPACWRAP_CONFIG_DIR=<DIR>\fR
+\fBPACWRAP_CONFIG_DIR=[DIR]\fR
 Set the configuration directory, overriding the default location.
 
 .TP
-\fBPACWRAP_DATA_DIR=<DIR>\fR
+\fBPACWRAP_DATA_DIR=[DIR]\fR
 Set the data directory, overriding the default location.
 
 .TP
-\fBPACWRAP_CACHE_DIR=<DIR>\fR
+\fBPACWRAP_CACHE_DIR=[DIR]\fR
 Set the cache directory, overriding the default location.
 
 .TP
-\fBPACWRAP_VERBOSE=[0|1]\fR
+\fBPACWRAP_VERBOSE=[0 | 1]\fR
 Toggle verbose output during a transaction. This option may be subject to change.
 
 .TP
-\fBPACWRAP_HOME=<DIR>\fR
+\fBPACWRAP_HOME=[DIR]\fR
 Upon container invocation, mount the set path provided when engaging the '\fBhome\fR' filesystem module.
 
 .TP
-\fBPACWRAP_ROOT=<DIR>\fR
+\fBPACWRAP_ROOT=[DIR]\fR
 Upon container invocation, mount the set path provided when engaging the '\fBroot\fR' filesystem module.
 
 .SS
@@ -625,15 +625,15 @@ included here in this subsection are to be assumed to have inert values by defau
 
 .TP
 \fBPACWRAP_CACHE_DIR\fR
-`\fB$HOME\fR/.cache/pacwrap`: Default cache directory.
+`$HOME/.cache/pacwrap`: Default cache directory.
 
 .TP
 \fBPACWRAP_CONFIG_DIR\fR
-`\fB$HOME\fR/.config/pacwrap`: Default configuration directory.
+`$HOME/.config/pacwrap`: Default configuration directory.
 
 .TP
 \fBPACWRAP_DATA_DIR
-`$\fBHOME\fR/.local/share/pacwrap`: Default data directory.
+`$HOME/.local/share/pacwrap`: Default data directory.
 
 .SH
 COPYRIGHT\fR
