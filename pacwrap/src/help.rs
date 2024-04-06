@@ -298,8 +298,9 @@ fn version_string() -> String {
     let release = env!("PACWRAP_BUILD");
     let head = env!("PACWRAP_BUILDHEAD");
     let date = env!("PACWRAP_BUILDSTAMP");
+    let tag = env!("PACWRAP_BUILDTAG");
 
-    if head.is_empty() {
+    if head.is_empty() | !tag.is_empty() {
         format!("{version} ({date})")
     } else {
         format!("{version}-{head}-{release} ({date})")

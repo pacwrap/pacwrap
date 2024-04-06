@@ -28,6 +28,14 @@ fn head() -> String {
         .unwrap_or(String::new())
 }
 
+fn tag() -> String {
+    Command::new("git")
+        .args(["tag", "--points-at"])
+        .output()
+        .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
+        .unwrap_or(String::new())
+}
+
 fn time(debug: bool) -> String {
     match debug {
         false => Command::new("git")
@@ -83,6 +91,7 @@ fn main() {
     println!("cargo:rustc-env=PACWRAP_BUILD={}", release(debug));
     println!("cargo:rustc-env=PACWRAP_BUILDSTAMP={}", time(debug));
     println!("cargo:rustc-env=PACWRAP_BUILDHEAD={}", head());
+    println!("cargo:rustc-env=PACWRAP_BUILDTAG={}", tag());
 
     if built {
         schema::serialize_path("../dist/bin/filesystem.tar.zst", "../dist/bin/filesystem.dat");

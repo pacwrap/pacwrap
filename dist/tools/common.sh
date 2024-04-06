@@ -87,6 +87,7 @@ version() {
 
     if [[ ! -z "$(type -P git)" ]] && [[ -d ".git" ]]; then
         local git=$(git rev-parse --short HEAD)
+        local tag=$(git tag --points-at)
         local release=
         local date=
 
@@ -97,7 +98,11 @@ version() {
                         date=$(date +'%d/%m/%Y %T%:z');;
         esac
 
-        echo -n "$version-$git-$release"; [[ $2 ]] && echo -n " ($date)"
+        if [[ -z "$tag" ]]; then
+            echo -n "$version-$git-$release"; [[ $2 ]] && echo -n " ($date)"
+        else
+            echo -n "$version"; [[ $2 ]] && echo -n " ($date)"
+        fi
     else
         local unix_epoch=$(stat $DIST_SRC --print=%Y)
         local date=$(date +%d/%m/%Y --utc --date=@$unix_epoch)
