@@ -17,11 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Result as FmtResult, Write};
+use std::fmt::{Result, Write};
 
 use crate::help::{version_string, HelpLayout};
 
-pub fn default(buf: &mut String, layout: &HelpLayout) -> FmtResult {
+pub fn default(buf: &mut String, layout: &HelpLayout) -> Result {
     let head = layout.head();
     let tab = layout.tab();
     let bold = layout.bold();

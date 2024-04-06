@@ -27,10 +27,11 @@ use pacwrap_core::{
     utils::{arguments::Operand, is_color_terminal, Arguments},
     Error,
     ErrorTrait,
+    Result,
 };
 
-mod manual;
 mod config;
+mod manual;
 pub mod version;
 
 pub use version::print_version;
@@ -43,11 +44,11 @@ lazy_static! {
         HelpTopic::Compose,
         HelpTopic::Query,
         HelpTopic::Process,
-        HelpTopic::Utils,
         HelpTopic::List,
+        HelpTopic::Utils,
+        HelpTopic::Version,
         HelpTopic::Help,
         HelpTopic::Env,
-        HelpTopic::Version,
         HelpTopic::Copyright
     ]
     .into();
@@ -61,7 +62,7 @@ enum ErrorKind {
 impl_error!(ErrorKind);
 
 impl Display for ErrorKind {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::InvalidTopic(err) => write!(fmter, "Topic '{}' is not available.", err),
         }?;
@@ -70,7 +71,7 @@ impl Display for ErrorKind {
     }
 }
 
-pub fn help(mut args: &mut Arguments) -> Result<(), Error> {
+pub fn help(mut args: &mut Arguments) -> Result<()> {
     let help = ascertain_help(&mut args)?;
     let mut buffer = String::new();
 
@@ -87,7 +88,7 @@ pub fn help(mut args: &mut Arguments) -> Result<(), Error> {
     Ok(())
 }
 
-fn ascertain_help<'a>(args: &'a mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout), Error> {
+fn ascertain_help<'a>(args: &'a mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout)> {
     let mut layout = match is_color_terminal() {
         true => &HelpLayout::Console,
         false => &HelpLayout::Dumb,
@@ -133,14 +134,14 @@ enum HelpTopic {
     Process,
     List,
     Help,
+    Version,
     Env,
     Copyright,
-    Version,
     PacwrapYml,
 }
 
 impl HelpTopic {
-    fn from(str: &str) -> Result<&Self, Error> {
+    fn from(str: &str) -> Result<&Self> {
         Ok(match str {
             "E" | "exec" | "run" => &HelpTopic::Execute,
             "S" | "sync" | "init" => &HelpTopic::Sync,
@@ -216,7 +217,7 @@ impl HelpLayout {
 
     fn sub_section(&self) -> &str {
         match self {
-            Self::Console => "  [37;1m",
+            Self::Console => "  [1m",
             Self::Markdown => "### **",
             Self::Man => ".SS\n",
             Self::Dumb => "    ",
@@ -252,7 +253,7 @@ impl HelpLayout {
     fn reset_underline(&self) -> &str {
         match self {
             Self::Console => "[0m",
-            Self::Man => "\n.I",
+            Self::Man => "\\fR",
             Self::Markdown => "</ins>",
             Self::Dumb => "",
         }
