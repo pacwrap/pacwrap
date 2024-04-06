@@ -22,4 +22,4 @@ When an environment variable is not available in the host environment, this modu
 provide warning and set a blank value in the target container.
 
 By default pacwrap, will not passthrough environment variables from the host, unless specified
-otherwise by the user with the elidation of the `set` parameter when definining a `var`.
+otherwise by the user with the elidation of the `set` parameter when defining a `var`.

@@ -1,13 +1,9 @@
-# Modules
+# Dbus Modules
 
-This directory contains brief documentation along with examples for each permission module.
+This directory contains brief documentation along with examples for each dbus module.
 
 ### Table of Contents
 
-- [Devices](./dev.md)
-- [Display Servers](./display.md)
-- [Environment Variables](./env.md)
-- [Graphics Devices](./gpu.md)
-- [Networking](./gpu.md)
-- [Pipewire](./pipewire.md)
-- [PulseAudio](./pulseaudio.md)
+- [AppIndicator](./appindicator.md)
+- [Socket](./socket.md)
+- [XDG Portal](./xdg_portal.md)
