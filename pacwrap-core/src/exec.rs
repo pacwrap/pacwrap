@@ -142,9 +142,7 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
         .arg("--symlink").arg("usr/bin").arg("/bin")
         .arg("--symlink").arg("usr/bin").arg("/sbin")
         .arg("--symlink").arg("usr/etc").arg("/etc")
-        .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs") 
-        .arg("--bind").arg(ins.vars().home()).arg("/mnt/fs/root")
-        .arg("--proc").arg("/mnt/fs/proc")
+        .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
         .arg("--dev").arg("/mnt/fs/dev")
         .arg("--unshare-all")
         .arg("--share-net")
@@ -168,20 +166,21 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
             process.arg("--dir").arg("/root")  
                 .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
                 .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
-                .arg("--ro-bind").arg(&format!("{}/etc/bash.bashrc",*DIST_IMG)).arg("/mnt/fs/etc/bash.bashrc")
-                .arg("--setenv").arg("ENV").arg("/etc/profile");
+                .arg("--dir").arg("/mnt/fs/root") ;
 
             if arguments[0] == "ash" {
                 process.arg("--hostname").arg("BusyBox")
+                    .arg("--setenv").arg("ENV").arg("/etc/profile") 
             } else {
                 process.arg("--hostname").arg("FakeChroot")
-                    .arg("fakeroot").arg("chroot").arg("/mnt/fs") 
+                    .arg("fakeroot").arg("chroot").arg("/mnt/fs")
             }
         } else {
             process.arg("--hostname").arg("FakeChroot")
                 .arg("--ro-bind").arg("/etc/resolv.conf").arg("/mnt/fs/etc/resolv.conf")
                 .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/fs/etc/pacman.d/gnupg")
-                .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg") 
+                .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg")
+                .arg("--bind").arg(ins.vars().home()).arg("/mnt/fs/root")
                 .arg("--setenv").arg("EUID").arg("0") 
                 .arg("--setenv").arg("PATH").arg(DEFAULT_PATH)
                 .arg("fakeroot").arg("chroot").arg("/mnt/fs")
