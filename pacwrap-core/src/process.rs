@@ -254,12 +254,19 @@ fn qualify_process<'a>(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32
     if let Some(some) = map.get(&parent_id) {
         return Some((some.instance().into(), some.depth + 1, some.fork()));
     } else if cmdlist[0] == "pacwrap" {
-        for idx in 0 .. cmdlist.len() {
-            if !cmdlist[idx].contains("-E") && !cmdlist[idx].contains("run") && !cmdlist[idx].contains("shell") {
+        let mut pos = 0;
+
+        for idx in 1 .. cmdlist.len() {
+            if cmdlist[idx].starts_with("-") || cmdlist[idx] == "run" || cmdlist[idx] == "shell" {
                 continue;
             }
 
-            if let Some(var) = cmdlist.get(idx + 1) {
+            pos = idx;
+            break;
+        }
+
+        if let Some(var) = cmdlist.get(pos) {
+            if var != "pacwrap" {
                 return Some((var.into(), 1, false));
             }
         }
