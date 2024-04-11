@@ -49,7 +49,8 @@ lazy_static! {
         HelpTopic::Version,
         HelpTopic::Help,
         HelpTopic::Env,
-        HelpTopic::Copyright
+        HelpTopic::Authors,
+        HelpTopic::License,
     ]
     .into();
 }
@@ -136,7 +137,8 @@ enum HelpTopic {
     Help,
     Version,
     Env,
-    Copyright,
+    Authors,
+    License,
     PacwrapYml,
 }
 
@@ -154,7 +156,8 @@ impl HelpTopic {
             "V" | "version" => &HelpTopic::Version,
             "h" | "help" => &HelpTopic::Help,
             "env" | "environment" => &HelpTopic::Env,
-            "copyright" => &HelpTopic::Copyright,
+            "author" | "authors" => &HelpTopic::Authors,
+            "license" => &HelpTopic::License,
             "synopsis" => &HelpTopic::Default,
             "pacwrap.yml" => &HelpTopic::PacwrapYml,
             _ => err!(ErrorKind::InvalidTopic(str.into()))?,
@@ -175,7 +178,8 @@ impl HelpTopic {
             Self::List => manual::list(buf, layout),
             Self::Help => manual::meta(buf, layout),
             Self::Query => manual::query(buf, layout),
-            Self::Copyright => manual::copyright(buf, layout),
+            Self::Authors => manual::authors(buf, layout),
+            Self::License => manual::license(buf, layout),
             Self::PacwrapYml => config::default(buf, layout),
         }
     }

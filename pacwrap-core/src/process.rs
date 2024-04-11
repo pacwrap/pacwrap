@@ -18,6 +18,7 @@
  */
 
 use std::{
+    fmt::Write,
     fs::{read_dir, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
 };
@@ -67,10 +68,7 @@ impl ProcessList {
     }
 
     pub fn keys_by_instance(&self, ins: &str) -> Option<&Vec<i32>> {
-        match self.groups.get(ins) {
-            Some(ins) => Some(ins),
-            None => None,
-        }
+        self.groups.get(ins)
     }
 }
 
@@ -105,15 +103,14 @@ impl Process {
         self.cmd.iter().map(|a| a.as_str()).collect()
     }
 
-    pub fn cmdlist_string(&self, start: usize) -> String {
+    pub fn cmdlist_string(&self, start: usize) -> Result<String, Error> {
         let mut string = String::new();
 
         for idx in start .. self.cmd.len() {
-            string.push_str(&self.cmd[idx]);
-            string.push_str(" ");
+            write!(string, "{} ", self.cmd[idx]).prepend(|| format!("Failure writing string to cmd buffer."))?;
         }
 
-        string
+        Ok(string)
     }
 
     pub fn stat(&self) -> &ProcStat {
@@ -206,10 +203,7 @@ fn procfs() -> Result<Vec<i32>, Error> {
     Ok(read_dir("/proc/")
         .prepend_io(|| "/proc/".into())?
         .filter(|s| s.as_ref().is_ok_and(|s| s.metadata().is_ok_and(|m| m.is_dir())))
-        .filter_map(|e| match e.unwrap().file_name().to_str().unwrap().parse() {
-            Ok(val) => Some(val),
-            Err(_) => None,
-        })
+        .filter_map(|e| e.unwrap().file_name().to_str().unwrap().parse().map_or_else(|_| None, |v| Some(v)))
         .collect())
 }
 
@@ -290,8 +284,5 @@ fn instance_from_path(var: &str) -> &str {
     let length = CONTAINER_DIR.len();
     let var = var.split_at(length).1;
 
-    match var.find('/') {
-        None => var,
-        Some(index) => var.split_at(index).0,
-    }
+    var.find('/').map_or_else(|| var, |idx| var.split_at(idx).0)
 }

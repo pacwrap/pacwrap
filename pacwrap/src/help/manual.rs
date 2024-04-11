@@ -93,11 +93,11 @@ pub fn default(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-U, --utils{reset_bold}
 {tab}{tab}Engage miscellaneous utilities to manage containers.
 
-{sub_bold}-h, --help, --help=[OPERATION | VERB]{reset_bold}
-{tab}{tab}Print this manual to {bold}STDOUT{reset_bold}.
-
 {sub_bold}-V, --version{reset_bold}
-{tab}{tab}Display version banner or information.\n"
+{tab}{tab}Display version banner or information.
+
+{sub_bold}-h, --help{reset_bold} <{bold}OPERATION{reset_bold} | {bold}VERB{reset_bold} | {bold}TOPIC{reset_bold}>
+{tab}{tab}Print the help manual to {bold}STDOUT{reset_bold}.\n"
     )
 }
 
@@ -115,7 +115,7 @@ pub fn execute(buf: &mut String, layout: &HelpLayout) -> Result {
     writeln!(
         buf,
         "{head}EXECUTE{reset}
-{sub_para}Invoke a container to execute the provided command sequence. Command verb {bold}`run`{reset_bold}` provides a 
+{sub_para}Invoke a container to execute the provided command sequence. Command verb {bold}`run`{reset_bold} provides a 
 {tab}shortcut to this module.
 
 {sub_bold}<CONTAINER> <CMD>{reset_bold}
@@ -124,7 +124,7 @@ pub fn execute(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}of the container environment.
 
 {sub_bold}-s, --shell{reset_bold}
-{tab}{tab}Invoke a bash shell in the target container. Command verb `{bold}shell{reset_bold}` provides a shortcut
+{tab}{tab}Invoke a bash shell in the target container. Command verb {bold}`shell`{reset_bold} provides a shortcut
 {tab}{tab}to this module with this option.
 
 {sub_bold}-r, --root{reset_bold}
@@ -152,14 +152,14 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 
     writeln!(
              buf,
-             "{head}SYNCHRONIZATION{reset}.
+             "{head}SYNCHRONIZATION{reset}
 {sub_para}Provides the facilities required to be able to synchronize and create containers in aggregate. 
 
 {sub_bold}-y, --refresh{reset_bold}
 {tab}{tab}Synchronize remote package databases. Specify up to 2 times to force a refresh.
 
 {sub_bold}-u, --upgrade{reset_bold}
-{tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}`-t, --target=[CONTAINER]`{reset_bold} followed
+{tab}{tab}Execute aggregate upgrade routine on all or specified containers. Use {bold}`-t, --target[=CONTAINER]`{reset_bold} followed
 {tab}{tab}by a list of packages to specify package targets. Packages applicable to a target {bold}must{reset_bold} only be specified 
 {tab}{tab}after the target operand.
 
@@ -194,11 +194,8 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Useful for all general purpose applications, browsers, e-mail clients, or even terminal user interface 
 {tab}{tab}applications such as IRC clients. It is recommended to base your containers on aggregate type containers.
 
-{sub_bold}-t, --target=[CONTAINER]{reset_bold}
-{tab}{tab}Declare a target container for the specified operation.
-
-{sub_bold}<PACKAGE>{reset_bold}
-{tab}{tab}Package target declared for target container specified.
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}> <..{bold}PACKAGE{reset_bold}>
+{tab}{tab}Declare a target container for the specified operation, followed by a list of package target(s).
 
 {sub_bold}-f, --filesystem{reset_bold}
 {tab}{tab}Force execution of filesystem synchronization target on all or specified containers. In combination 
@@ -209,7 +206,7 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-o, --target-only{reset_bold}
 {tab}{tab}Apply specified operation on the specified target(s) only.
 
-{sub_bold}-d, --dep=[CONTAINER]{reset_bold}
+{sub_bold}-d, --dep{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specify dependencies for a container create operation.
 
 {sub_bold}-p, --preview{reset_bold}
@@ -272,7 +269,7 @@ pub fn remove(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}associated dependencies, provided they are not required by other packages, and are not
 {tab}{tab}marked as being upstream of the target container.
 
-{sub_bold}-t, --target=[CONTAINER]{reset_bold}
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specify a target container for the specified operation. At least one container target is 
 {tab}{tab}is required for package removal operations.
 
@@ -327,7 +324,7 @@ pub fn compose(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Compose an available, existing container for composition. The pre-existing container root
 {tab}{tab}will be deleted and the container will be composited from the configuration data enumerated.
 
-{sub_bold}-t, --target=[CONTAINER]{reset_bold}
+{sub_bold}-t, --target={reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}-f, --force{reset_bold}
@@ -375,7 +372,7 @@ pub fn query(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-q, --quiet{reset_bold}
 {tab}{tab}Quiet the output by truncating the package string.
 
-{sub_bold}-t, --target=[CONTAINER]{reset_bold}
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}-e, --explicit{reset_bold}
@@ -404,27 +401,34 @@ pub fn process(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_para}Table a process list of running containers. Containers may be filtered on target and process depth.
 
 {sub_bold}-s, --summary{reset_bold}
-{tab}{tab}Enumerate a process summary of containers being executed by pacwrap.
+{tab}{tab}Enumerate a process summary of containers instantiated by pacwrap.
+
+{sub_bold}-i, --id-list{reset_bold}
+{tab}{tab}Enumerate a process id list of containers instantiated by pacwrap. 
 
 {sub_bold}-k, --kill{reset_bold}
 {tab}{tab}Kill target containers and their associated processes.
 
 {sub_bold}-a, --all{reset_bold}
-{tab}{tab}Enumerate all processes associated with running containers.
+{tab}{tab}Target all containers and enumerate their associated processes.
 
 {sub_bold}-d, --depth{reset_bold}
 {tab}{tab}Enumerate all processes at the specified depth associated with running containers.
 
-{sub_bold}-t, --target=[CONTAINER]{reset_bold}
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}--noconfirm{reset_bold}
 {tab}{tab}Override confirmation prompts and confirm all operations.
 
-{sub_sect}EXAMPLE{reset_bold}
+{sub_sect}EXAMPLES{reset_bold}
 {sub}`$ pacwrap -Psaxc`
-{tab}{tab}Print table enumerating all container processes to {bold}STDOUT{reset_bold} with process
-{tab}{tab}arguments and execution path split into separate columns.\n"
+{tab}{tab}Print table enumerating all container processes to {bold}STDOUT{reset_bold} with process arguments
+{tab}{tab}and execution path split into separate columns.
+
+{sub}`$ ps up \"$(pacwrap -Pia)\"`
+{tab}{tab}Enumerate container processes with `ps` via encapsulating an enumeration of pids from all instances
+{tab}{tab}into a space-delimited bash string.\n"
     )
 }
 
@@ -483,7 +487,11 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
         buf,
         "{head}UTILITIES{reset}
 {sub_para}Miscellaneous utilities which provide helpful auxiliary functionality to aid in configuration and
-{tab}maintenance of containers.
+{tab}maintenance of containers. Each utility is considered a command module and therefore can be shortcuted
+{tab}with a command verb.
+
+{sub_bold}-d, --desktop{reset_bold}
+{tab}{tab}Create desktop file to launch application inside of a pacwrap container.
 
 {sub_bold}-v, --view{reset_bold}
 {tab}{tab}Invoke {bold}$EDITOR{reset_bold} to view file associated with pacwrap.
@@ -503,19 +511,32 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-r, --remove{reset_bold}
 {tab}{tab}Delete a container(s) root filesystem.
 
+{sub_sect}DESKTOP OPTIONS{reset_bold}
+{sub_para}Create and manage desktop files to launch applications in pacwrap from your favourite applications menu.
+
+{sub_bold}-c, --create{reset_bold} <{bold}CONTAINER{reset_bold}> <{bold}APPLICATION{reset_bold}>
+{tab}{tab}Create desktop file associated with application at `$HOME/.local/share/applications/` launching an 
+{tab}{tab}application in pacwrap.
+
+{sub_bold}-l, --list{reset_bold} <{bold}CONTAINER{reset_bold}>
+{tab}{tab}List available desktop files in the container root located at `/usr/share/applications/`.
+
+{sub_bold}-r, --remove{reset_bold} <{bold}APPLICATION{reset_bold}>
+{tab}{tab}Remove desktop file associated with application from `$HOME/.local/share/applications/`. 
+
 {sub_sect}EDITOR OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--edit{reset_bold} and {bold}--view{reset_bold} utility command modules.
 
-{sub_bold}-c, --config=[CONTAINER]{reset_bold}
+{sub_bold}-c, --config{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Edit specified container configuration located in the pacwrap data directory. Defaults to
 {tab}{tab}the primary configuration file: '{bold}$PACWRAP_CONFIG_DIR{reset_bold}/pacwrap.yml' if no option is otherwise
 {tab}{tab}specified.
 
-{sub_bold}-d, --desktop=[APPLICATION]{reset_bold}
+{sub_bold}-d, --desktop{reset_bold} <{bold}APPLICATION{reset_bold}>
 {tab}{tab}Edit specified desktop file associated with a pacwrap container.
 
 {sub_bold}-r, --repo{reset_bold}
-{tab}{tab}Edit repositories configuration file: '{bold}$PACWRAP_CONFIG_DIR{reset_bold}/repositories.conf'.
+{tab}{tab}Edit repositories configuration file: `$PACWRAP_CONFIG_DIR/repositories.conf`.
 
 {sub_bold}-l, --log{reset_bold}
 {tab}{tab}View 'pacwrap.log'. This file contains transaction log iformation.
@@ -523,13 +544,13 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_sect}OPEN OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--open{reset_bold} utility command module.
 
-{sub_bold}-h, --home, --home=[CONTAINER]{reset_bold}
+{sub_bold}-h, --home{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specified container's home filesystem.
 
-{sub_bold}-r, --home, --root=[CONTAINER]{reset_bold}
+{sub_bold}-r, --root{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specified container's root filesystem.
 
-{sub_bold}-t, --target=[CONTAINER]{reset_bold}
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Target container to perform the operation.
 
 {sub_sect}LIST{reset_bold}
@@ -550,7 +571,7 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_sect}REMOVE OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--remove{reset_bold} utility command module.
 
-{sub_bold}-t, --target{reset_bold}
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Target container to perform the operation.
 
 {sub_bold}--noconfirm{reset_bold}
@@ -572,20 +593,24 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub}`$ pacwrap -Uoh firefox`
 {tab}{tab}Open firefox's home directory in the default file manager.
 
-{sub}`$ pacwrap -Us java runelite`
-{tab}{tab}Create a symbolic container called `runelite` of `java`.
-
 {sub}`$ pacwrap -Uvl`
-{tab}{tab}View '{bold}$PACWRAP_DATA_DIR{reset_bold}/pacwrap.log' with {bold}$EDITOR{reset_bold}.
+{tab}{tab}View `{bold}$PACWRAP_DATA_DIR{reset_bold}/pacwrap.log` with {bold}$EDITOR{reset_bold}.
 
 {sub}`$ pacwrap -Uec firefox`
-{tab}{tab}Edit '{bold}$PACWRAP_CONFIG_DIR{reset_bold}/container/firefox.yml' with {bold}$EDITOR{reset_bold}.
+{tab}{tab}Edit `$PACWRAP_CONFIG_DIR{reset_bold}/container/firefox.yml` with {bold}$EDITOR{reset_bold}.
+
+{sub}`$ pacwrap utils -dc firefox firefox`
+{tab}{tab}Create desktop file `$HOME/.local/share/applications/pacwrap.firefox.desktop` derived from
+{tab}{tab}`/usr/share/applications/firefox.desktop` in the root of the firefox container.
+
+{sub}`$ pacwrap utils symlink java runelite`
+{tab}{tab}Create a symbolic container called `runelite` of `java`.
 
 {sub}`$ pacwrap -Uld`
 {tab}{tab}Print container tabulation out to {bold}STDOUT{reset_bold} with two total columns, one listing the
 {tab}{tab}container name, and the other detailing the total size-on-disk consumption displayed with byteunits.
 
-{sub}`$ pacwrap -Ulbtbts`
+{sub}`$ pacwrap utils -lbtbts`
 {tab}{tab}Print container tabulation to {bold}STDOUT{reset_bold} with three total columns, first listing the
 {tab}{tab}container name, second the total amount of bytes, and the last showing the total with byteunits. 
 {tab}{tab}Then print a summation of total, actual consumption below.\n"
@@ -603,10 +628,13 @@ pub fn meta(buf: &mut String, layout: &HelpLayout) -> Result {
     writeln!(
              buf,
              "{head}HELP{reset}
+{sub_bold}-h, --help{reset_bold} <{bold}TOPIC{reset_bold}>
+{tab}{tab}Print the specified topic to {bold}STDOUT{reset_bold}.
+
 {sub_bold}-m, --more{reset_bold}
 {tab}{tab}When specifying a topic to display, show the default topic in addition to specified options.
 
-{sub_bold}-f, --format=[FORMAT]{reset_bold}
+{sub_bold}-f, --format{reset_bold} <{bold}FORMAT{reset_bold}>
 {tab}{tab}Change output format of help in {bold}STDOUT{reset_bold}. Format options include: 'ansi', 'dumb', 'markdown', and 'man'. 
 {tab}{tab}This option is for the express purposes of generating documentation at build time, and has little utility
 {tab}{tab}outside the context of package maintenance. 'man' option produces troff-formatted documents for man pages.
@@ -634,23 +662,24 @@ pub fn environment(buf: &mut String, layout: &HelpLayout) -> Result {
 
 {sub_para}Use with care: These variables if used improperly could result in undesired behaviour.
 
-{sub_bold}PACWRAP_CONFIG_DIR=[DIR]{reset_bold}
-{tab}{tab}Set the configuration directory, overriding the default location.
+{sub_bold}PACWRAP_CONFIG_DIR{reset_bold} <{bold}DIR{reset_bold}>
+{tab}{tab}Set path of the configuration directory, overriding the default location.
 
-{sub_bold}PACWRAP_DATA_DIR=[DIR]{reset_bold}
-{tab}{tab}Set the data directory, overriding the default location.
+{sub_bold}PACWRAP_DATA_DIR{reset_bold} <{bold}DIR{reset_bold}>
+{tab}{tab}Set path of the data directory, overriding the default location.
 
-{sub_bold}PACWRAP_CACHE_DIR=[DIR]{reset_bold}
-{tab}{tab}Set the cache directory, overriding the default location.
+{sub_bold}PACWRAP_CACHE_DIR{reset_bold} <{bold}DIR{reset_bold}> 
+{tab}{tab}Set path of the cache directory, overriding the default location.
 
-{sub_bold}PACWRAP_VERBOSE=[0 | 1]{reset_bold}
-{tab}{tab}Toggle verbose output during a transaction. This option may be subject to change.
+{sub_bold}PACWRAP_HOME{reset_bold} <{bold}DIR{reset_bold}>
+{tab}{tab}Upon container invocation, mount the set path provided when engaging the {bold}`home`{reset_bold} filesystem module.
 
-{sub_bold}PACWRAP_HOME=[DIR]{reset_bold}
-{tab}{tab}Upon container invocation, mount the set path provided when engaging the '{bold}home{reset_bold}' filesystem module.
+{sub_bold}PACWRAP_ROOT{reset_bold} <{bold}DIR{reset_bold}>
+{tab}{tab}Upon container invocation, mount the set path provided when engaging the {bold}`root`{reset_bold} filesystem module.
 
-{sub_bold}PACWRAP_ROOT=[DIR]{reset_bold}
-{tab}{tab}Upon container invocation, mount the set path provided when engaging the '{bold}root{reset_bold}' filesystem module.
+{sub_bold}PACWRAP_VERBOSE{reset_bold} <{bold}0{reset_bold} | {bold}1{reset_bold}>
+{tab}{tab}Toggle verbose output during a transaction. Valid options are `1` for enablement and `0` for 
+{tab}{tab}disablement of verbosity.
 
 {sub_sect}DEFAULT{reset_bold}
 {sub_para}For the following environment variables, contained herein are default runtime values. Any variables not
@@ -662,7 +691,7 @@ pub fn environment(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}PACWRAP_CONFIG_DIR{reset_bold}
 {tab}{tab}`$HOME/.config/pacwrap`: Default configuration directory.
 
-{sub_bold}PACWRAP_DATA_DIR
+{sub_bold}PACWRAP_DATA_DIR{reset_bold}
 {tab}{tab}`$HOME/.local/share/pacwrap`: Default data directory.\n"
     )
 }
@@ -684,17 +713,26 @@ pub fn version(buf: &mut String, layout: &HelpLayout) -> Result {
     )
 }
 
-pub fn copyright(buf: &mut String, layout: &HelpLayout) -> Result {
+pub fn authors(buf: &mut String, layout: &HelpLayout) -> Result {
     let head = layout.head();
     let tab = layout.tab();
     let reset = layout.reset();
 
     writeln!(
         buf,
-        "{head}COPYRIGHT{reset}
-{tab}Copyright (C) 2023-2024 Xavier R.M.
+        "{head}AUTHOR{reset}
+{tab}Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>\n"
+    )
+}
 
-{tab}This program may be freely redistributed under the
-{tab}terms of the GNU General Public License v3 only.\n"
+pub fn license(buf: &mut String, layout: &HelpLayout) -> Result {
+    let head = layout.head();
+    let tab = layout.tab();
+    let reset = layout.reset();
+
+    writeln!(
+        buf,
+        "{head}LICENSE{reset}
+{tab}This program may be freely redistributed under the terms of the GNU General Public License v3 only.\n"
     )
 }

@@ -156,8 +156,8 @@ fn summary(args: &mut Arguments) -> Result<()> {
         let ins = process.instance().to_string();
         let row = table.insert(match col {
             (true, false, _) => vec![pid, ins, process.exec().into()],
-            (false, true, i) => vec![pid, ins, process.cmdlist_string(i)],
-            (true, true, i) => vec![pid, ins, process.exec().into(), process.cmdlist_string(i)],
+            (false, true, i) => vec![pid, ins, process.cmdlist_string(i)?],
+            (true, true, i) => vec![pid, ins, process.exec().into(), process.cmdlist_string(i)?],
             _ => vec![pid, ins],
         });
 

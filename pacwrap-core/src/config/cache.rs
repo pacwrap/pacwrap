@@ -190,14 +190,9 @@ pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
         &read_dir(&format!("{}/container", *CONFIG_DIR))
             .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
             .filter(|e| e.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_file() && !m.is_symlink())))
-            .filter_map(|e| {
-                let file = e.unwrap().file_name();
-                let file = file.to_str().unwrap_or_default();
-
-                match file.ends_with(".yml") {
-                    true => Some(file.to_string().leak().split_at(file.len() - 4).0 as &'a str),
-                    false => None,
-                }
+            .filter_map(|e| match e.unwrap().file_name().to_str() {
+                Some(f) => f.ends_with(".yml").then(|| f.to_string().leak().split_at(f.len() - 4).0),
+                None => None,
             })
             .collect(),
     )

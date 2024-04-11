@@ -218,6 +218,8 @@ impl<'a> FilesystemSync<'a> {
                 self.link_instance(inshandle, tx.clone())?;
             } else if let Base | Slice = ins_type {
                 self.obtain_slice(inshandle, tx.clone())?;
+            } else {
+                continue;
             }
 
             self.queued.insert(ins);
