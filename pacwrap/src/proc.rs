@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+ * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify

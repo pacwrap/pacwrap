@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+ * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -721,7 +721,7 @@ pub fn authors(buf: &mut String, layout: &HelpLayout) -> Result {
     writeln!(
         buf,
         "{head}AUTHOR{reset}
-{tab}Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>\n"
+{tab}Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>\n"
     )
 }
 
