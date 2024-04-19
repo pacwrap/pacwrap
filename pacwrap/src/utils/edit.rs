@@ -50,6 +50,15 @@ impl<'a> FileType<'a> {
             _ => edit,
         }
     }
+
+    fn from(str: &'a str) -> Option<FileType<'a>> {
+        match str {
+            "log" => Some(FileType::LogFile),
+            "repo" => Some(FileType::Repo),
+            "config" => Some(FileType::Config),
+            _ => None,
+        }
+    }
 }
 
 impl<'a> Display for FileType<'a> {
@@ -75,6 +84,13 @@ pub fn edit_file(args: &mut Arguments, edit: bool) -> Result<()> {
             Operand::Short('c') | Operand::Long("config") | Operand::Value("config") => FileType::Config,
             Operand::ShortPos('d', val) | Operand::LongPos("desktop", val) => FileType::DesktopFile(val),
             Operand::ShortPos('c', val) | Operand::LongPos("config", val) => FileType::ContainerConfig(val),
+            Operand::LongPos("view", arg)
+            | Operand::LongPos("edit", arg)
+            | Operand::ShortPos('e', arg)
+            | Operand::ShortPos('v', arg) => match FileType::from(arg) {
+                Some(f) => f,
+                None => return args.invalid_operand(),
+            },
             _ => return args.invalid_operand(),
         });
     }
