@@ -239,6 +239,10 @@ fn engage_aggregator<'a>(
     }
 
     if create_targets.len() > 0 || init {
+        if flags.intersects(TransactionFlags::PREVIEW) {
+            err!(ErrorKind::Message("Container creation cannot be previewed."))?;
+        }
+
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;
         instantiate_trust()?;
         instantiate(&mut cache, lock, log, &action_type, create_targets)?;

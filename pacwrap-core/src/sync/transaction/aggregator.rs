@@ -136,6 +136,7 @@ impl<'a> TransactionAggregator<'a> {
         signal_trap();
 
         let _timestamp = *UNIX_TIMESTAMP;
+        let preview = self.flags.intersects(TransactionFlags::PREVIEW);
         let filesystem_sync = self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::CREATE);
         let transact = match self.action {
             Upgrade(upgrade, refresh, force) => {
@@ -171,7 +172,7 @@ impl<'a> TransactionAggregator<'a> {
             progress.set_length(target_amount);
         }
 
-        if !validate_fs_states(&upstream) && are_downstream {
+        if !validate_fs_states(&upstream) && !preview && are_downstream {
             linker.refresh_state();
             linker.prepare(upstream.len(), self.progress.as_ref());
             linker.engage(&upstream)?;
@@ -183,7 +184,7 @@ impl<'a> TransactionAggregator<'a> {
         }
 
         if are_downstream {
-            if filesystem_sync || self.updated.len() > 0 {
+            if !preview && (filesystem_sync || self.updated.len() > 0) {
                 linker.filesystem_state();
                 linker.prepare(self.cache.registered().len(), self.progress.as_ref());
                 linker.engage(&self.cache.registered())?;
