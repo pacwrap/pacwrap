@@ -108,6 +108,11 @@ impl<'a> ContainerHandle<'a> {
         self
     }
 
+    pub fn stamp(mut self) -> Self {
+        self.inner.metadata.meta_version = *UNIX_TIMESTAMP;
+        self
+    }
+
     pub fn config(&self) -> &ContainerRuntime {
         &self.inner.runtime
     }

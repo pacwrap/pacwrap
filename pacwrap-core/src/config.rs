@@ -105,7 +105,7 @@ pub fn compose_handle<'a>(instance: &'a str, path: Option<&'a str>) -> Result<Co
         err!(ConfigError::AlreadyExists(instance.into()))?
     }
 
-    Ok(handle(vars)?.create())
+    Ok(handle(vars)?.stamp().create())
 }
 
 pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<ContainerHandle<'a>> {

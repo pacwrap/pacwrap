@@ -25,7 +25,7 @@ use crate::{
         Transaction,
         TransactionAggregator,
         TransactionHandle,
-        TransactionState::{self, Complete},
+        TransactionState::{self, Skip},
     },
     Result,
 };
@@ -52,6 +52,6 @@ impl Transaction for UpToDate {
             None => println!("{} {} is up-to-date!", *ARROW_GREEN, handle.vars().instance()),
         }
 
-        Ok(Complete(false))
+        Ok(Skip)
     }
 }

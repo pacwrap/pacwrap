@@ -70,7 +70,7 @@ pub enum SyncError {
     InvalidMagicNumber,
     SignalInterrupt,
     AgentVersionMismatch,
-    NothingToDo(bool),
+    NothingToDo,
     DependentContainerMissing(String),
     RecursionDepthExceeded(isize),
     TargetUpstream(String),
@@ -108,7 +108,7 @@ impl Display for SyncError {
             Self::SignalInterrupt => write!(fmter, "Signal interrupt was triggered."),
             Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
             Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
-            Self::NothingToDo(_) => write!(fmter, "Nothing to do."),
+            Self::NothingToDo => write!(fmter, "Nothing to do."),
             _ => Ok(()),
         }?;
 

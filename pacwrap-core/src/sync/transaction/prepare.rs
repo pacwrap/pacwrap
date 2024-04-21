@@ -85,10 +85,10 @@ impl Transaction for Prepare {
 
                 if let Upgrade(upgrade, ..) = action {
                     if !upgrade && handle.meta.queue.is_empty() {
-                        err!(SyncError::NothingToDo(true))?
+                        err!(SyncError::NothingToDo)?
                     }
                 } else if handle.meta.queue.is_empty() {
-                    err!(SyncError::NothingToDo(true))?
+                    err!(SyncError::NothingToDo)?
                 }
 
                 if handle.meta.queue.is_empty() {

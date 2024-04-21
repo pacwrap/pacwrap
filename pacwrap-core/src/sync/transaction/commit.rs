@@ -46,6 +46,8 @@ use crate::{
     Result,
 };
 
+use super::SyncState;
+
 pub struct Commit {
     state: TransactionState,
     keyring: bool,
@@ -68,13 +70,12 @@ impl Transaction for Commit {
         inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         let instance = inshandle.vars().instance();
-        let ready = handle.trans_ready(&ag.action());
         let state = self.state.as_str();
 
-        if let Err(_) = ready {
+        if let SyncState::NotRequired = handle.trans_ready(&ag.action(), ag.flags())? {
             match ready_state(handle, ag.action(), &self.state) {
                 Some(result) => return result,
-                None => ready?,
+                None => return Ok(TransactionState::Complete(false)),
             }
         }
 
@@ -102,9 +103,7 @@ impl Transaction for Commit {
 
         handle.set_alpm(Some(sync::instantiate_alpm(inshandle)));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
-        ag.logger()
-            .log(Info, &format!("container {instance}'s {state} transaction complete"))
-            .ok();
+        ag.logger().log(Info, &format!("container {instance}'s {state} transaction complete"))?;
         next_state(handle, ag.action(), &self.state, true)
     }
 }
@@ -116,11 +115,11 @@ fn confirm(
 ) -> StdResult<(u64, u64), Result<TransactionState>> {
     let database = ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE);
     let foreign = !handle.get_mode().bool();
-    let create_foreign = match handle.get_mode() {
-        TransactionMode::Foreign => ag.flags().contains(TransactionFlags::CREATE),
+    let create = match handle.get_mode() {
+        TransactionMode::Foreign => ag.flags().intersects(TransactionFlags::CREATE),
         TransactionMode::Local => false,
     };
-    let confirm = foreign || database && !create_foreign;
+    let confirm = foreign || database && !create;
     let sum = Summary::new()
         .kind(CONFIG.config().summary(), confirm)
         .mode(handle.get_mode())

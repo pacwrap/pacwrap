@@ -54,15 +54,16 @@ pub type Result<T> = crate::Result<T>;
 pub static MAGIC_NUMBER: u32 = 663445956;
 
 pub enum TransactionState {
-    Complete(bool),
     Prepare,
+    UpdateSchema(Option<SchemaState>),
     UpToDate,
     PrepareForeign(bool),
     Stage,
     StageForeign,
-    UpdateSchema(Option<SchemaState>),
     Commit(bool),
     CommitForeign,
+    Skip,
+    Complete(bool),
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
@@ -71,12 +72,13 @@ pub enum TransactionType {
     Remove(bool, bool, bool),
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum TransactionMode {
     Foreign,
     Local,
 }
 
+#[derive(Copy, Clone)]
 pub enum SyncState {
     Required,
     NotRequired,
@@ -97,19 +99,19 @@ pub trait Transaction {
 bitflags! {
     pub struct TransactionFlags: u8 {
         const NONE = 0;
-        const TARGET_ONLY = 0b0000001;
-        const PREVIEW = 0b0000010;
-        const NO_CONFIRM =  0b0000100;
-        const FORCE_DATABASE = 0b0001000;
-        const DATABASE_ONLY = 0b0010000;
-        const CREATE = 0b0100000;
-        const FILESYSTEM_SYNC =  0b1000000;
+        const TARGET_ONLY =     0b0000001;
+        const PREVIEW =         0b0000010;
+        const NO_CONFIRM =      0b0000100;
+        const FORCE_DATABASE =  0b0001000;
+        const DATABASE_ONLY =   0b0010000;
+        const CREATE =          0b0100000;
+        const FILESYSTEM_SYNC = 0b1000000;
     }
 }
 
 pub struct TransactionHandle<'a> {
     meta: &'a mut TransactionMetadata<'a>,
-    fail: bool,
+    state: SyncState,
     agent: bool,
     config: Option<&'a Global>,
     alpm: Option<Alpm>,
@@ -159,7 +161,7 @@ impl TransactionState {
             Self::StageForeign => Stage::new(self, ag),
             Self::Commit(_) => Commit::new(self, ag),
             Self::CommitForeign => Commit::new(self, ag),
-            Self::Complete(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 
@@ -248,7 +250,7 @@ impl<'a> TransactionHandle<'a> {
     pub fn new(metadata: &'a mut TransactionMetadata<'a>) -> Self {
         Self {
             meta: metadata,
-            fail: true,
+            state: Required,
             agent: false,
             alpm: None,
             deps: None,
@@ -316,11 +318,9 @@ impl<'a> TransactionHandle<'a> {
         self.meta
             .queue
             .extend(self.meta.foreign_pkgs.iter().map(|p| p.to_owned().into()).collect::<Vec<_>>());
-        self.fail = false;
     }
 
     pub fn ignore(&mut self) {
-        let mut fail = self.fail;
         let alpm = self.alpm.as_mut().unwrap();
         let config = match self.config {
             Some(config) => config,
@@ -355,7 +355,7 @@ impl<'a> TransactionHandle<'a> {
         {
             let new = match package.sync_new_version(alpm.syncdbs()) {
                 Some(new) => {
-                    fail = false;
+                    self.state = NotRequired;
 
                     match self.agent {
                         true => break,
@@ -373,8 +373,6 @@ impl<'a> TransactionHandle<'a> {
                 *BOLD, *RESET, *BOLD_YELLOW, *RESET, *BOLD_GREEN, *RESET
             ));
         }
-
-        self.fail = fail;
     }
 
     pub fn prepare(&mut self, trans_type: &TransactionType, flags: &TransactionFlags) -> Result<()> {
@@ -496,15 +494,19 @@ impl<'a> TransactionHandle<'a> {
         Ok(())
     }
 
-    pub fn trans_ready(&mut self, trans_type: &TransactionType) -> Result<()> {
+    pub fn trans_ready(&mut self, trans_type: &TransactionType, trans_flags: &TransactionFlags) -> Result<SyncState> {
         if match trans_type {
-            Upgrade(..) => self.alpm().trans_add().len(),
-            Remove(..) => self.alpm().trans_remove().len(),
-        } > 0
-        {
-            Ok(())
+            Upgrade(..) => !self.alpm().trans_add().is_empty(),
+            Remove(..) => !self.alpm().trans_remove().is_empty(),
+        } {
+            Ok(Required)
+        } else if trans_flags.intersects(TransactionFlags::CREATE) {
+            Ok(NotRequired)
         } else {
-            err!(SyncError::NothingToDo(self.fail))
+            match self.state {
+                Required => err!(SyncError::NothingToDo),
+                NotRequired => Ok(NotRequired),
+            }
         }
     }
 

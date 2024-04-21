@@ -71,6 +71,7 @@ pub struct TransactionAggregator<'a> {
     action: TransactionType,
     cache: &'a ContainerCache<'a>,
     keyring: bool,
+    tracted: bool,
     logger: &'a mut Logger,
     flags: TransactionFlags,
     targets: Option<Vec<&'a str>>,
@@ -89,6 +90,7 @@ impl<'a> TransactionAggregator<'a> {
             action: action_type,
             cache: inscache,
             keyring: false,
+            tracted: false,
             logger: log,
             flags: TransactionFlags::NONE,
             lock: None,
@@ -249,7 +251,10 @@ impl<'a> TransactionAggregator<'a> {
                 Ok(result) => {
                     self.signal(&mut handle.alpm)?;
 
-                    if let Complete(updated) = result {
+                    if let Skip = result {
+                        handle.release();
+                        return Ok(());
+                    } else if let Complete(updated) = result {
                         if updated {
                             self.updated.insert(inshandle.vars().instance());
 
@@ -258,23 +263,24 @@ impl<'a> TransactionAggregator<'a> {
                             }
                         }
 
+                        self.tracted = !updated;
                         handle.release();
                         return Ok(());
-                    } else if let Prepare = result {
+                    } else if let UpdateSchema(_) = result {
                         self.updated.insert(inshandle.vars().instance());
                     }
 
                     result
                 }
                 Err(err) => {
-                    if let Some(progress) = &self.progress {
-                        progress.finish_and_clear();
+                    if let Some(progress) = self.progress.as_ref() {
+                        progress.set_draw_target(ProgressDrawTarget::hidden());
+                        progress.finish();
                     }
 
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
                         SyncError::TransactionFailureAgent => exit(err.kind().code()),
-                        SyncError::NothingToDo(bool) => bool.then(|| Err(err)).unwrap_or_else(|| Ok(())),
                         _ => Err(err),
                     };
                 }
@@ -286,7 +292,8 @@ impl<'a> TransactionAggregator<'a> {
     fn print_complete(&mut self, filesystem_sync: bool, target_amount: u64, target: Option<&&str>) {
         if let Some(_) = &self.progress {
             let are_multiple = target_amount > 1;
-            let container = if filesystem_sync && self.queried.is_empty() {
+            let flagged = self.flags.intersects(TransactionFlags::PREVIEW | TransactionFlags::CREATE);
+            let container = if filesystem_sync && self.queried.is_empty() || flagged || self.tracted {
                 None
             } else if are_multiple {
                 Some("Containers")
