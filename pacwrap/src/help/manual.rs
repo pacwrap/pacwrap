@@ -324,7 +324,7 @@ pub fn compose(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Compose an available, existing container for composition. The pre-existing container root
 {tab}{tab}will be deleted and the container will be composited from the configuration data enumerated.
 
-{sub_bold}-t, --target={reset_bold} <{bold}CONTAINER{reset_bold}>
+{sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Specify a target container for the specified operation.
 
 {sub_bold}-f, --force{reset_bold}

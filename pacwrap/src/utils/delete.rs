@@ -92,7 +92,9 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
     let lock = Lock::new().lock()?;
 
     if let (true, _) | (_, Ok(_)) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
-        delete_roots(&cache, &lock, &mut logger, &instances, force)?;
+        if let Err(err) = delete_roots(&cache, &lock, &mut logger, &instances, force) {
+            err.error();
+        }
     }
 
     lock.unlock()
@@ -121,7 +123,7 @@ pub fn delete_roots(
         let state = format!("{}/state/{instance}.dat", *DATA_DIR);
 
         lock.assert()?;
-        remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}':"))?;
+        remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}'"))?;
 
         if Path::new(&state).exists() {
             remove_file(&state).prepend_io(|| state)?;
