@@ -78,7 +78,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
         }
     }
 
-    let cache = cache::populate_config()?;
+    let cache = cache::populate()?;
     let instances = cache.filter_target(&targets, vec![]);
 
     if instances.len() != targets.len() {

@@ -35,6 +35,7 @@ use pacwrap_core::{
     utils::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
+        print_warning,
     },
     ErrorKind,
 };
@@ -169,6 +170,7 @@ fn engage_aggregator<'a>(
             Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
             Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
+            Op::Short('l') | Op::Long("lazy-load") => flags = flags | TransactionFlags::LAZY_LOAD_DB,
             Op::Short('o') | Op::Long("target-only") => flags = flags | TransactionFlags::TARGET_ONLY,
             Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
             Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
@@ -236,6 +238,12 @@ fn engage_aggregator<'a>(
                 },
             _ => args.invalid_operand()?,
         }
+    }
+
+    if flags.contains(TransactionFlags::LAZY_LOAD_DB) {
+        print_warning("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
+        print_warning("In future, manual intervention may be required for missing dependencies.");
+        print_warning("See `--help sync` or the pacwrap(1) man page for further information.");
     }
 
     if create_targets.len() > 0 || init {

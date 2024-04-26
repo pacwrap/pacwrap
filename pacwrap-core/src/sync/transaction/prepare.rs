@@ -75,10 +75,11 @@ impl Transaction for Prepare {
                     }
 
                     let create = ag.flags().contains(TransactionFlags::CREATE);
+                    let lazy_load = ag.flags().contains(TransactionFlags::LAZY_LOAD_DB);
                     let timestamp = inshandle.metadata().timestamp();
                     let present = *UNIX_TIMESTAMP;
 
-                    if create && present == timestamp {
+                    if !lazy_load && create && present == timestamp {
                         handle.enumerate_foreign_queue();
                     }
                 }

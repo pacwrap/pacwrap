@@ -32,6 +32,7 @@ use pacwrap_core::{
     utils::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
+        print_warning,
         prompt::prompt_targets,
     },
     Error,
@@ -176,6 +177,7 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
                         compose.insert(instance, None);
                     }
                 },
+            Op::Short('l') | Op::Long("lazy-load") => flags = flags | TransactionFlags::LAZY_LOAD_DB,
             Op::Short('f') | Op::Long("force") => force = true,
             Op::Short('r') | Op::Long("reinitialize") => reinitialize = true,
             Op::Short('t') | Op::Long("target") => match args.next() {
@@ -224,6 +226,12 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
 
     if delete.len() > 0 {
         delete_containers(&cache, lock, &mut logger, &delete, &flags, force)?;
+    }
+
+    if flags.contains(TransactionFlags::LAZY_LOAD_DB) {
+        print_warning("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
+        print_warning("In future, manual intervention may be required for missing dependencies.");
+        print_warning("See `--help compose` or the pacwrap(1) man page for further information.");
     }
 
     cache = instantiate(compose_handles(&cache, compose)?, cache, lock, &mut logger)?;
