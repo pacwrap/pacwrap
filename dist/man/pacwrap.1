@@ -1,5 +1,5 @@
 .nh
-.TH pacwrap 1 "21/04/2024" "pacwrap version_string_placeholder" "User Manual"
+.TH pacwrap 1 "30/04/2024" "pacwrap version_string_placeholder" "User Manual"
 
 .SH
 NAME\fR
@@ -173,6 +173,11 @@ Perform a dryrun operation on existing containers to preview changes applicable 
 Only applicable to pre-existing targets and not create operations.
 
 .TP
+\fB-l, --lazy-load\fR
+Enable lazy-database initialization for this transaction. \fBNOTE\fR: This feature is experimental.
+Edge cases exist wherein the use of \fB`--force-foreign`\fR may be required.
+
+.TP
 \fB--force-foreign\fR
 Force synchronization of foreign packages on resident container. Useful for when installing 
 a new package in an aggregate container without all the prerequisite foreign dependencies
@@ -291,6 +296,11 @@ Disable sanity checks and force removal of container filesystem(s).
 \fB--reinitialize-all\fR
 Queues all available, existing containers for composition. All pre-existing container roots
 will be deleted and composited from the available configuration data enumerated.
+
+.TP
+\fB-l, --lazy-load\fR
+Enable lazy-database initialization for this transaction. \fBNOTE\fR: This feature is experimental.
+Edge cases exist wherein the use of \fB`--force-foreign`\fR may be required.
 
 .TP
 \fB--from-config\fR
