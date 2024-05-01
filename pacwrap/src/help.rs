@@ -18,7 +18,6 @@
  */
 
 use indexmap::IndexSet;
-use lazy_static::lazy_static;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use pacwrap_core::{
@@ -32,28 +31,25 @@ use pacwrap_core::{
 
 mod config;
 mod manual;
-pub mod version;
+mod version;
 
 pub use version::print_version;
 
-lazy_static! {
-    static ref HELP_ALL: Vec<HelpTopic> = [
-        HelpTopic::Execute,
-        HelpTopic::Sync,
-        HelpTopic::Remove,
-        HelpTopic::Compose,
-        HelpTopic::Query,
-        HelpTopic::Process,
-        HelpTopic::List,
-        HelpTopic::Utils,
-        HelpTopic::Version,
-        HelpTopic::Help,
-        HelpTopic::Env,
-        HelpTopic::Authors,
-        HelpTopic::License,
-    ]
-    .into();
-}
+static HELP_ALL: [HelpTopic; 13] = [
+    HelpTopic::Execute,
+    HelpTopic::Sync,
+    HelpTopic::Remove,
+    HelpTopic::Compose,
+    HelpTopic::Query,
+    HelpTopic::Process,
+    HelpTopic::List,
+    HelpTopic::Utils,
+    HelpTopic::Version,
+    HelpTopic::Help,
+    HelpTopic::Env,
+    HelpTopic::Authors,
+    HelpTopic::License,
+];
 
 #[derive(Debug)]
 enum ErrorKind {

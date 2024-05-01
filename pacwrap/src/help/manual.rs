@@ -213,6 +213,10 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Perform a dryrun operation on existing containers to preview changes applicable or otherwise specified.
 {tab}{tab}Only applicable to pre-existing targets and not create operations.
 
+{sub_bold}-l, --lazy-load{reset_bold}
+{tab}{tab}Enable lazy-database initialization for this transaction. {bold}NOTE{reset_bold}: This feature is experimental.
+{tab}{tab}Edge cases exist wherein the use of {bold}`--force-foreign`{reset_bold} may be required.
+
 {sub_bold}--force-foreign{reset_bold}
 {tab}{tab}Force synchronization of foreign packages on resident container. Useful for when installing 
 {tab}{tab}a new package in an aggregate container without all the prerequisite foreign dependencies
@@ -333,6 +337,10 @@ pub fn compose(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}--reinitialize-all{reset_bold}
 {tab}{tab}Queues all available, existing containers for composition. All pre-existing container roots
 {tab}{tab}will be deleted and composited from the available configuration data enumerated.
+
+{sub_bold}-l, --lazy-load{reset_bold}
+{tab}{tab}Enable lazy-database initialization for this transaction. {bold}NOTE{reset_bold}: This feature is experimental.
+{tab}{tab}Edge cases exist wherein the use of {bold}`--force-foreign`{reset_bold} may be required.
 
 {sub_bold}--from-config{reset_bold}
 {tab}{tab}Instruct pacwrap to populate configuration data from uninitialized containers. Under normal
