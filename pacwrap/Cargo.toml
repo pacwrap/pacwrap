@@ -16,7 +16,6 @@ repository = "https://github.com/pacwrap/pacwrap"
 pacwrap-core = { path = "../pacwrap-core/", version = "0.8.1" }
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 nix = "0.22.3, <= 0.22.3"
-lazy_static = "1.4.0"
 simplebyteunit = "0.2.1"
 
 # Container runtime
