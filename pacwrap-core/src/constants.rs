@@ -35,6 +35,7 @@ use crate::{
 };
 
 pub static PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);
+
 pub const BWRAP_EXECUTABLE: &str = "bwrap";
 pub const DBUS_PROXY_EXECUTABLE: &str = "xdg-dbus-proxy";
 pub const DEFAULT_PATH: &str = "/usr/local/bin:/bin:/usr/bin/";
@@ -64,9 +65,7 @@ macro_rules! to_static_str {
 lazy_static! {
     pub static ref UID: u32 = geteuid().as_raw();
     pub static ref GID: u32 = getegid().as_raw();
-    pub static ref PWD: &'static str = env_opt("PWD");
     pub static ref HOME: &'static str = env("HOME");
-    pub static ref USER: &'static str = env("USER");
     pub static ref TERM: &'static str = env_opt("TERM");
     pub static ref VERSION_MAJOR: u32 = env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap();
     pub static ref VERSION_MINOR: u32 = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap();

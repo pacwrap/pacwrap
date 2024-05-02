@@ -22,16 +22,13 @@ use std::{
     hash::{Hash, Hasher},
     io::{BufReader, Read, Seek},
     path::Path,
-    process::exit,
+    sync::OnceLock,
 };
 
 use indexmap::IndexSet;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tar::{Archive, EntryType};
 use zstd::Decoder;
-
-use self::SchemaStatus::*;
 
 use crate::{
     config::ContainerHandle,
@@ -44,16 +41,13 @@ use crate::{
     Result,
 };
 
+use self::SchemaStatus::*;
+
+static SCHEMA_STATE: OnceLock<SchemaState> = OnceLock::new();
+
 const MAGIC_NUMBER: u32 = 659933704;
 const ARCHIVE_PATH: &'static str = env!("PACWRAP_DIST_FS");
 const SCHEMA_META: &'static str = ".container_schema";
-
-lazy_static! {
-    pub static ref SCHEMA_STATE: SchemaState = match deserialize() {
-        Ok(s) => s,
-        Err(e) => exit(e.error()),
-    };
-}
 
 pub enum SchemaStatus {
     UpToDate,
@@ -123,21 +117,22 @@ impl From<EntryType> for NodeType {
 
 pub fn extract(inshandle: &ContainerHandle, old_schema: &Option<SchemaState>) -> Result<()> {
     let meta_path = format!("{}/{}", inshandle.vars().root(), SCHEMA_META);
+    let schema_state = get_schema_state()?;
 
     if let Some(schema) = old_schema {
         for file in schema
             .files
             .iter()
-            .filter(|a| SCHEMA_STATE.files.get(*a).is_none())
+            .filter(|a| schema_state.files.get(*a).is_none())
             .rev()
             .collect::<IndexSet<&SchemaNode>>()
         {
             let path = format!("{}/{}", inshandle.vars().root(), file.node_path);
 
             if let Err(error) = match file.node_type {
-                NodeType::File => remove_file(path),
-                NodeType::Directory => remove_directory(path),
-                NodeType::Symlink => remove_symlink(path),
+                NodeType::File => remove_file(&path),
+                NodeType::Directory => remove_directory(&path),
+                NodeType::Symlink => remove_symlink(&path),
                 NodeType::Other => continue,
             } {
                 error.warn();
@@ -213,6 +208,17 @@ pub fn serialize_path(from: &str, dest: &str) {
     bincode::serialize_into(file, &schema).unwrap();
 }
 
+fn get_schema_state() -> Result<&'static SchemaState> {
+    Ok(match SCHEMA_STATE.get() {
+        Some(f) => f,
+        None => {
+            let state = deserialize()?;
+
+            SCHEMA_STATE.get_or_init(|| state)
+        }
+    })
+}
+
 fn deserialize() -> Result<SchemaState> {
     let schema = env!("PACWRAP_DIST_META");
     let file = File::open(schema).prepend_io(|| schema.into())?;
@@ -224,7 +230,7 @@ fn access_archive<'a>(path: &str) -> Result<Archive<Decoder<'a, BufReader<File>>
     Ok(Archive::new(Decoder::new(File::open(path).prepend_io(|| path.into())?).prepend_io(|| path.into())?))
 }
 
-fn remove_file(path: String) -> Result<()> {
+fn remove_file(path: &str) -> Result<()> {
     if Path::new(&format!("{}.pacnew", &path)).exists() {
         fs::remove_file(&path).prepend(|| format!("Failed to remove '{path}'"))?;
     } else {
@@ -234,16 +240,16 @@ fn remove_file(path: String) -> Result<()> {
     Ok(())
 }
 
-fn remove_symlink(path: String) -> Result<()> {
-    if let Ok(_) = fs::read_link(&path) {
-        fs::remove_file(&path).prepend(|| format!("Failed to remove symlink '{path}'"))?;
+fn remove_symlink(path: &str) -> Result<()> {
+    if let Ok(_) = fs::read_link(path) {
+        fs::remove_file(path).prepend(|| format!("Failed to remove symlink '{path}'"))?;
     }
 
     Ok(())
 }
 
-fn remove_directory(path: String) -> Result<()> {
-    if is_directory_occupied(&path)? {
+fn remove_directory(path: &str) -> Result<()> {
+    if is_directory_occupied(path)? {
         return Ok(());
     }
 

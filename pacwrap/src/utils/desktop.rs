@@ -17,7 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::{
     fs::{read_dir, remove_file, File},
@@ -34,10 +33,6 @@ use pacwrap_core::{
     ErrorKind,
     Result,
 };
-
-lazy_static! {
-    static ref DESKTOP_ENTRY: Regex = Regex::new("Exec=*").unwrap();
-}
 
 pub fn file(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
@@ -105,7 +100,8 @@ fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
         .prepend_io(|| desktop_file.into())?
         .read_to_string(&mut contents)
         .prepend_io(|| desktop_file.into())?;
-    contents = DESKTOP_ENTRY
+    contents = Regex::new("Exec=*")
+        .unwrap()
         .replace_all(&mut contents, format!("Exec=pacwrap run {} ", target))
         .to_string();
 

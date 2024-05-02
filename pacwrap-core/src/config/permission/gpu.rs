@@ -17,9 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{fs::read_dir, path::Path};
+use std::{fs::read_dir, sync::OnceLock};
 
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -28,11 +27,11 @@ use crate::{
         Permission,
     },
     exec::args::ExecutionArgs,
+    Error,
+    ErrorGeneric,
 };
 
-lazy_static! {
-    static ref GPU_DEV: Vec<String> = populate_dev();
-}
+static GPU_DEV: OnceLock<Vec<String>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Graphics;
@@ -40,11 +39,12 @@ struct Graphics;
 #[typetag::serde(name = "gpu")]
 impl Permission for Graphics {
     fn check(&self) -> Result<Option<Condition>, PermError> {
-        if !Path::new("/dev").exists() {
-            Err(Fail(format!("/dev is inaccessible.")))?
-        }
+        let gpu_dev = populate_dev().map_err(|f| {
+            f.error();
+            Fail(format!("No graphics devices are available."))
+        })?;
 
-        if GPU_DEV.len() == 0 {
+        if GPU_DEV.get_or_init(|| gpu_dev).is_empty() {
             Err(Fail(format!("No graphics devices are available.")))?
         }
 
@@ -52,7 +52,7 @@ impl Permission for Graphics {
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        for dev in GPU_DEV.iter() {
+        for dev in GPU_DEV.get().expect("Uninitialized device array").iter() {
             args.dev(dev);
         }
     }
@@ -62,19 +62,20 @@ impl Permission for Graphics {
     }
 }
 
-fn populate_dev() -> Vec<String> {
-    let mut vec: Vec<String> = Vec::new();
-    if let Ok(dir) = read_dir("/dev") {
-        for f in dir {
-            if let Ok(f) = f {
-                let file = f.file_name();
-                let dev = file.to_str().unwrap();
-                if dev.starts_with("nvidia") || dev == "dri" {
-                    vec.push(format!("/dev/{}", dev));
-                }
-            }
-        }
-    }
+fn populate_dev() -> Result<Vec<String>, Error> {
+    Ok(read_dir("/dev/")
+        .prepend_io(|| format!("/dev"))?
+        .into_iter()
+        .filter_map(|f| {
+            f.map_or_else(
+                |_| None,
+                |f| {
+                    let file = f.file_name();
+                    let dev = file.to_str().unwrap();
 
-    vec
+                    (dev.starts_with("nvidia") || dev == "dri").then_some(format!("/dev/{}", dev))
+                },
+            )
+        })
+        .collect::<Vec<String>>())
 }
