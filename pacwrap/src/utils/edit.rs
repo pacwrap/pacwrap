@@ -20,7 +20,7 @@
 use std::{
     fmt::{Display, Formatter},
     fs::{copy, remove_file, File},
-    io::{copy as copy_io, Read},
+    io::{copy as copy_io, Read, Result as IOResult},
     process::Command,
 };
 
@@ -73,7 +73,7 @@ impl<'a> Display for FileType<'a> {
     }
 }
 
-pub fn edit_file(args: &mut Arguments, edit: bool) -> Result<()> {
+pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
     let mut file = None;
 
     while let Some(arg) = args.next() {
@@ -95,41 +95,50 @@ pub fn edit_file(args: &mut Arguments, edit: bool) -> Result<()> {
         });
     }
 
-    let (file, temporary_file, lock, edit) = &match file {
+    let (file, temp, lock, edit) = &match file {
         Some(file) => {
             let edit = file.can_edit(edit);
+            let prs = pseudorandom_string(10).prepend_io(|| "/dev/urandom".into())?;
+            let temp = format!("/tmp/tmp.{}", prs);
             let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
                 Some(Lock::new().lock()?)
             } else {
                 None
             };
-
-            (file.to_string(), format!("/tmp/tmp.{}", random_string(10)?), lock, edit)
+            let file = file.to_string(); 
+ 
+            (file, temp, lock, edit)
         }
         None => return args.invalid_operand(),
     };
 
+    if let Err(err) = edit_file(file, temp, lock.as_ref(), *edit) {
+        if let Some(lock) = lock {
+            lock.unlock()?;
+        }
+
+        Err(err)?
+    }
+
+    Ok(())
+}
+
+fn edit_file(file: &str, temporary_file: &str, lock: Option<&Lock>, edit: bool) -> Result<()> {
     copy(file, temporary_file).prepend_io(|| file.into())?;
     handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
 
-    if *edit && hash_file(file)? != hash_file(temporary_file)? {
+    if edit && hash_file(file)? != hash_file(temporary_file)? {
         if let Some(lock) = lock {
             lock.assert()?;
         }
 
         copy(temporary_file, file).prepend_io(|| temporary_file.into())?;
         eprintln!("{} Changes written to file.", *ARROW_GREEN);
-    } else if *edit {
+    } else if edit {
         eprintln!("{} No changes made.", *ARROW_CYAN);
     }
 
-    remove_file(temporary_file).prepend_io(|| temporary_file.into())?;
-
-    if let Some(lock) = lock {
-        lock.unlock()?;
-    }
-
-    Ok(())
+    remove_file(temporary_file).prepend_io(|| temporary_file.into())
 }
 
 fn hash_file(file_path: &str) -> Result<Vec<u8>> {
@@ -140,8 +149,8 @@ fn hash_file(file_path: &str) -> Result<Vec<u8>> {
     Ok(hasher.finalize().to_vec())
 }
 
-fn random_string(len: usize) -> Result<String> {
-    let mut urand = File::open("/dev/urandom").prepend_io(|| "/dev/urandom".into())?;
+fn pseudorandom_string(len: usize) -> IOResult<String> {
+    let mut urand = File::open("/dev/urandom")?;
     let mut vec: Vec<u8> = Vec::new();
 
     vec.reserve_exact(len);
@@ -149,7 +158,7 @@ fn random_string(len: usize) -> Result<String> {
     while vec.len() < len {
         let mut buffer = [0; 1];
 
-        urand.read_exact(&mut buffer).prepend_io(|| "/dev/urandom".into())?;
+        urand.read_exact(&mut buffer)?;
 
         if buffer[0] > 64 && buffer[0] < 91 || buffer[0] > 96 && buffer[0] < 122 || buffer[0] > 48 && buffer[0] < 58 {
             vec.push(buffer[0]);
