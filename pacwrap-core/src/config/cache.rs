@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{fs::read_dir, path::Path};
+use std::{fs::read_dir, path::Path, result::Result as StdResult};
 
 use indexmap::IndexMap;
 
@@ -176,11 +176,9 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
     populate_from(
         &read_dir(*CONTAINER_DIR)
             .prepend_io(|| CONTAINER_DIR.to_string())?
-            .filter(|e| e.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_dir() | m.is_symlink())))
-            .filter_map(|e| match e.unwrap().file_name().to_str() {
-                Some(str) => Some(str.to_string().leak() as &'a str),
-                None => None,
-            })
+            .filter_map(StdResult::ok)
+            .filter(|e| e.metadata().is_ok_and(|f| f.is_dir() && !f.is_symlink()))
+            .filter_map(|e| e.file_name().to_str().and_then(|f| Some(f.to_string().leak() as &'a str)))
             .collect(),
     )
 }
@@ -189,10 +187,12 @@ pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
     populate_config_from(
         &read_dir(&format!("{}/container", *CONFIG_DIR))
             .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
-            .filter(|e| e.as_ref().is_ok_and(|e| e.metadata().is_ok_and(|m| m.is_file() && !m.is_symlink())))
-            .filter_map(|e| match e.unwrap().file_name().to_str() {
-                Some(f) => f.ends_with(".yml").then(|| f.to_string().leak().split_at(f.len() - 4).0),
-                None => None,
+            .filter_map(StdResult::ok)
+            .filter(|e| e.metadata().is_ok_and(|f| f.is_file() && !f.is_symlink()))
+            .filter_map(|e| {
+                e.file_name()
+                    .to_str()
+                    .and_then(|f| f.ends_with(".yml").then(|| f.to_string().leak().split_at(f.len() - 4).0))
             })
             .collect(),
     )

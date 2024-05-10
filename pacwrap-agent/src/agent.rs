@@ -27,6 +27,7 @@ use serde::Deserialize;
 
 use pacwrap_core::{
     config::Global,
+    constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     err,
     sync::{
         self,
@@ -125,9 +126,8 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
     handle.mark_depends();
 
     if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/fs/etc/ld.so.cache") {
-        match error.kind() {
-            NotFound => (),
-            _ => print_warning(&format!("Failed to propagate ld.so.cache: {}", error)),
+        if error.kind() != NotFound {
+            print_warning(&format!("Failed to propagate ld.so.cache: {}", error));
         }
     }
 
@@ -136,9 +136,9 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
 
 fn decode_header(buffer: &mut ByteBuffer) -> Result<()> {
     let magic = buffer.read_le_32();
-    let major: (u8, u8) = (env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(), buffer.read_byte());
-    let minor: (u8, u8) = (env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(), buffer.read_byte());
-    let patch: (u8, u8) = (env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(), buffer.read_byte());
+    let major: (u8, u8) = (*VERSION_MAJOR as u8, buffer.read_byte());
+    let minor: (u8, u8) = (*VERSION_MINOR as u8, buffer.read_byte());
+    let patch: (u8, u8) = (*VERSION_PATCH as u8, buffer.read_byte());
 
     if magic != MAGIC_NUMBER {
         err!(AgentError::InvalidMagic(magic, MAGIC_NUMBER))?

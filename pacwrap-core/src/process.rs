@@ -21,6 +21,7 @@ use std::{
     fmt::Write,
     fs::{read_dir, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
+    result::Result as StdResult,
 };
 
 use crate::{config::ContainerCache, constants::CONTAINER_DIR, utils::print_warning, Error, ErrorGeneric};
@@ -202,8 +203,15 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
 fn procfs() -> Result<Vec<i32>, Error> {
     Ok(read_dir("/proc/")
         .prepend_io(|| "/proc/".into())?
-        .filter(|s| s.as_ref().is_ok_and(|s| s.metadata().is_ok_and(|m| m.is_dir())))
-        .filter_map(|e| e.unwrap().file_name().to_str().unwrap().parse().map_or_else(|_| None, |v| Some(v)))
+        .filter_map(StdResult::ok)
+        .filter(|s| s.metadata().is_ok_and(|s| s.is_dir()))
+        .filter_map(|e| {
+            e.file_name()
+                .to_str()
+                .expect("Invalid UTF-8 filename in procfs")
+                .parse()
+                .map_or_else(|_| None, |v| Some(v))
+        })
         .collect())
 }
 
