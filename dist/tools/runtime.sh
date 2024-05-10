@@ -5,7 +5,7 @@
 #  This script packages the most minimal userspace environment possible 
 #  allowing pacwrap's agent binary to execute in an otherwise empty container.
 # 
-#  Copyright (C) 2023-2024 Xavier R.M. 
+#  Copyright (C) 2023-2024 Xavier Moffett 
 #  sapphirus(at)azorium(dot)net
 #
 #  This program is free software: you can redistribute it and/or modify

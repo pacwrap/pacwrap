@@ -4,7 +4,7 @@
 #                 Based on pacman-key, 
 #                 which itself was derived from apt-key.
 #
-#   Copyright (C) 2023-2024 Xavier R.M. <sapphirus@azorium.net>
+#   Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
 #   Copyright (C) 2010-2021 Pacman Development Team <pacman-dev@archlinux.org>
 #   SPDX-License-Identifier: GPL-3.0-only
 #
@@ -144,14 +144,16 @@ ${HEADER}USAGE$HEADER_RESET
 ${TAB}pacwrap-key [${BOLD}OPERATIONS$RESET] [${BOLD}TARGETS$RESET]
 
 ${HEADER}SYNOPSIS$HEADER_RESET
-${TAB}Manage pacwrap's gnupg trust database. This utility is only to be used with pacwrap and its associated containers.
+${TAB}Manage pacwrap's gnupg trust database. 
+
+${TAB}This utility is only to be used with pacwrap and its associated containers.
 
 ${HEADER}OPERATIONS$HEADER_RESET
 ${SUB_HEADER}-a, --add$RESET
 ${SUB_TEXT}Add the specified keys (empty for stdin)
 
 ${SUB_HEADER}-d, --delete$RESET
-${SUB_TEXT}REmove the specified keys from the keyring.
+${SUB_TEXT}Remove the specified keys from the keyring.
 
 ${SUB_HEADER}-e, --export$RESET
 ${SUB_TEXT}Export the specified or all keyring ids.
@@ -172,8 +174,7 @@ ${SUB_HEADER}--init$RESET
 ${SUB_TEXT}Initialize the gnupg keyring for use with pacwrap.
 
 ${SUB_HEADER}--populate$RESET
-${SUB_TEXT}Populate the keyring with default signatures located typically in: 
-${SUB_TEXT}'/usr/share/pacman/keyrings/'
+${SUB_TEXT}Populate the keyring with default signatures located typically in: '/usr/share/pacman/keyrings/'
 
 ${SUB_HEADER}--list-sigs$RESET
 ${SUB_TEXT}List populated keys alongside their signatures.
@@ -187,7 +188,7 @@ ${SUB_TEXT}Locally sign the specified keyring id
 ${SUB_HEADER}--import-trustdb$RESET
 ${SUB_TEXT}Locally sign the specified keyring id
 
-${SUB_HEADER}--keyserver $RESET[${BOLD}keyserver$RESET]$BOLD$RESET
+${SUB_HEADER}--keyserver $RESET<${BOLD}server$RESET>$BOLD$RESET
 ${SUB_TEXT}Specify an alternate keyserver
 
 ${SUB_HEADER}-h, --help$RESET
@@ -201,12 +202,12 @@ ${SUB_HEADER}PACWRAP_DATA_DIR$RESET
 ${SUB_TEXT}Overrides the default XDG Directory Specification compliant data directory. Set this$RESET
 ${SUB_TEXT}environment variable to change the relative target directory for the keystore.$RESET
 
-${HEADER}COPYRIGHT$HEADER_RESET
-${TAB}Copyright (C) 2023-2024 Xavier R.M.
+${HEADER}AUTHORS$HEADER_RESET
+${TAB}Copyright (C) 2023-2024 Xavier Moffett
 ${TAB}Copyright (C) 2010-2021 Pacman Development Team
 
-${TAB}This program may be freely redistributed under
-${TAB}the terms of the GNU General Public License v3.
+${HEADER}LICENSE$HEADER_RESET
+${TAB}This program may be freely redistributed under the terms of the GNU General Public License v3 only.
 
 _USAGE
 }
@@ -314,7 +315,7 @@ usage() {
 version() {
     cat << ENDOF
 pacwrap-key v${VERSION}
-Copyright (C) 2023-2024 Xavier R.M.
+Copyright (C) 2023-2024 Xavier Moffett
 Copyright (C) 2010-2021 Pacman Development Team
 
 Website: https://pacwrap.sapphirus.org/

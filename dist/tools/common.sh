@@ -2,7 +2,7 @@
 #
 #  pacwrap - common.sh
 #
-#  Copyright (C) 2023-2024 Xavier R.M. 
+#  Copyright (C) 2023-2024 Xavier Moffett 
 #  sapphirus(at)azorium(dot)net
 #
 #  This program is free software: you can redistribute it and/or modify
