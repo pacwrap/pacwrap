@@ -258,7 +258,7 @@ fn cmdlist(pid: i32) -> Option<Vec<String>> {
     Some(cmdlist)
 }
 
-fn qualify_process<'a>(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32, Process>) -> Option<(String, u32, bool)> {
+fn qualify_process(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32, Process>) -> Option<(String, u32, bool)> {
     if let Some(some) = map.get(&parent_id) {
         return Some((some.instance().into(), some.depth + 1, some.fork()));
     } else if cmdlist[0] == "pacwrap" {

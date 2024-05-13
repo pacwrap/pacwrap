@@ -16,6 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     str::FromStr,
@@ -240,7 +241,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
         }
     }
 
-    if process.len() == 0 && !all {
+    if process.is_empty() && !all {
         err!(InvalidArgument::TargetUnspecified)?
     }
 
@@ -275,13 +276,11 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     }
 
     let instances: Vec<String> = instances.iter().map(|a| format!("{} ({}{}{})", a.0, *DIM, a.1, *RESET)).collect();
+    let instances = &instances.iter().map(|a| a.as_ref()).collect();
 
-    if no_confirm {
-        kill_processes(&list, sigint)
-    } else if let Ok(_) = prompt_targets(&instances.iter().map(|a| a.as_ref()).collect(), "Kill container processes?", false) {
-        kill_processes(&list, sigint)
-    } else {
-        Ok(())
+    match no_confirm || prompt_targets(instances, "Kill container processes?", false).is_ok() {
+        true => kill_processes(&list, sigint),
+        false => Ok(()),
     }
 }
 
@@ -299,7 +298,11 @@ fn fork_warn(process: &Process) {
 
 fn kill_processes(process_list: &Vec<&Process>, sigint: Signal) -> Result<()> {
     for list in process_list {
-        kill(Pid::from_raw(list.pid()), sigint).prepend(|| format!("Error killing '{}':", list.pid()))?;
+        if let Err(err) = kill(Pid::from_raw(list.pid()), sigint).prepend(|| format!("Error killing '{}'", list.pid())) {
+            err.warn();
+            continue;
+        }
+
         eprintln!("{} Killed process {} ({}{}{}) ", *ARROW_GREEN, list.pid(), *BOLD, list.instance(), *RESET);
     }
 
