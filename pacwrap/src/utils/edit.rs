@@ -105,22 +105,19 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
             } else {
                 None
             };
-            let file = file.to_string(); 
- 
+            let file = file.to_string();
+
             (file, temp, lock, edit)
         }
         None => return args.invalid_operand(),
     };
+    let result = edit_file(file, temp, lock.as_ref(), *edit);
 
-    if let Err(err) = edit_file(file, temp, lock.as_ref(), *edit) {
-        if let Some(lock) = lock {
-            lock.unlock()?;
-        }
-
-        Err(err)?
+    if let Some(lock) = lock {
+        lock.unlock()?;
     }
 
-    Ok(())
+    result
 }
 
 fn edit_file(file: &str, temporary_file: &str, lock: Option<&Lock>, edit: bool) -> Result<()> {
