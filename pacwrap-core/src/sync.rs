@@ -19,6 +19,7 @@
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     fs::{create_dir, create_dir_all},
+    os::unix::fs::symlink,
     path::Path,
     process::exit,
 };
@@ -189,7 +190,14 @@ pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> 
     let root = handle.vars().root();
     let home = handle.vars().home();
 
-    create_dir(root).prepend_io(|| root.into())?;
+    if let ContainerType::Symbolic = instype {
+        let dep = handle.metadata().dependencies();
+        let dep = dep.last().expect("Dependency element");
+
+        symlink(dep, root).prepend_io(|| root.into())?;
+    } else {
+        create_dir(root).prepend_io(|| root.into())?;
+    }
 
     if let ContainerType::Aggregate | ContainerType::Base = instype {
         if !Path::new(home).exists() {

@@ -220,8 +220,8 @@ fn engage_aggregator<'a>(
                             create = init;
                         } else if let (true, None) = (create, container_type) {
                             err!(ErrorKind::Message("Container type not specified."))?;
-                        } else {
-                            cache.get_instance(target)?;
+                        } else if let ContainerType::Symbolic = cache.get_instance(target)?.metadata().container_type() {
+                            err!(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
                         }
                     }
                     _ => args.invalid_operand()?,

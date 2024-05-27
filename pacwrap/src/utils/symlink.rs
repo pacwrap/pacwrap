@@ -17,22 +17,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{
-    fs::{create_dir, read_link},
-    os::unix::fs::symlink,
-    path::Path,
-};
-
 use pacwrap_core::{
     config::{cache, ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables},
     constants::{ARROW_CYAN, ARROW_GREEN, BOLD, RESET},
     err,
+    sync::instantiate_container,
     utils::{
         arguments::{InvalidArgument, Operand},
         Arguments,
     },
     Error,
-    ErrorGeneric,
     Result,
 };
 
@@ -74,25 +68,17 @@ pub fn link(args: &mut Arguments) -> Result<()> {
                 ContainerHandle::new(container, container_vars)
             } else {
                 let container_vars = ContainerVariables::new(src);
+                let mut deps = dest_handle.metadata().dependencies();
                 let mut handle = ContainerHandle::from(dest_handle, container_vars);
 
+                deps.push(dest_handle.vars().instance());
                 handle.metadata_mut().set_type(ContainerType::Symbolic);
-                handle.metadata_mut().set_metadata(vec![], vec![]);
+                handle.metadata_mut().set_metadata(deps, vec![]);
                 handle
             },
     };
-    let home = src_handle.vars().home();
-    let root = src_handle.vars().root();
 
-    if Path::new(root).exists() || read_link(root).is_ok() {
-        err!(ConfigError::AlreadyExists(src.to_string()))?;
-    }
-
-    if !Path::new(home).exists() {
-        create_dir(home).prepend_io(|| home.into())?;
-    }
-
-    symlink(dest_handle.vars().instance(), src_handle.vars().root()).prepend_io(|| src_handle.vars().root().into())?;
+    instantiate_container(&src_handle)?;
     src_handle.save()?;
     eprintln!(
         "{} Created symbolic container '{}{src}{}' {} '{}{dest}{}'.",

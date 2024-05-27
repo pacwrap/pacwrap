@@ -86,7 +86,11 @@ fn compose_handles<'a>(
     for (instance, config) in compose {
         let handle = compose_handle(instance, config)?;
 
-        if let ContainerType::Base = handle.metadata().container_type() {
+        if let ContainerType::Symbolic = handle.metadata().container_type() {
+            if handle.metadata().dependencies().is_empty() {
+                err!(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
+            }
+        } else if let ContainerType::Base = handle.metadata().container_type() {
             if handle.metadata().dependencies().len() > 0 {
                 err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
             }

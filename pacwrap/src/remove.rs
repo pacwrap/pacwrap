@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 
 use pacwrap_core::{
-    config::{cache, init::init},
+    config::{cache, init::init, ContainerType},
     err,
     error::*,
     lock::Lock,
@@ -30,6 +30,7 @@ use pacwrap_core::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
     },
+    ErrorKind,
 };
 
 use crate::utils::delete::remove_containers;
@@ -101,7 +102,10 @@ fn engage_aggregator<'a>(
             Op::Short('t') | Op::Long("target") => match args.next() {
                 Some(arg) => match arg {
                     Op::ShortPos('t', target) | Op::LongPos("target", target) => {
-                        cache.get_instance(target)?;
+                        if let ContainerType::Symbolic = cache.get_instance(target)?.metadata().container_type() {
+                            err!(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
+                        }
+
                         current_target = Some(target);
                         targets.push(target);
                     }
