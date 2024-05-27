@@ -177,7 +177,7 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
         &read_dir(*CONTAINER_DIR)
             .prepend_io(|| CONTAINER_DIR.to_string())?
             .filter_map(StdResult::ok)
-            .filter(|e| e.metadata().is_ok_and(|f| f.is_dir() && !f.is_symlink()))
+            .filter(|e| e.metadata().is_ok_and(|f| f.is_dir() || f.is_symlink()))
             .filter_map(|e| e.file_name().to_str().and_then(|f| Some(f.to_string().leak() as &'a str)))
             .collect(),
     )
