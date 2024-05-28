@@ -167,6 +167,10 @@ impl<'a> TransactionAggregator<'a> {
         let target_amount = (downstream.len() + upstream.len()) as u64;
         let mut linker = FilesystemSync::new(self.cache).assert_lock(self.lock);
 
+        if upstream.is_empty() && downstream.is_empty() {
+            err!(SyncError::NothingToDo)?
+        }
+
         if let Some(progress) = self.progress.as_ref() {
             progress.set_draw_target(ProgressDrawTarget::stderr());
             progress.set_length(target_amount);

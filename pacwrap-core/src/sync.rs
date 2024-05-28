@@ -30,7 +30,15 @@ use pacmanconf::{self, Config};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{cache::ContainerCache, global::ProgressKind, ContainerHandle, ContainerType, ContainerVariables, Global, CONFIG},
+    config::{
+        cache::ContainerCache,
+        global::ProgressKind,
+        ContainerHandle,
+        ContainerType::*,
+        ContainerVariables,
+        Global,
+        CONFIG,
+    },
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET},
     err,
     error,
@@ -186,11 +194,10 @@ fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConf
 }
 
 pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> {
-    let instype = handle.metadata().container_type();
-    let root = handle.vars().root();
-    let home = handle.vars().home();
+    let (root, home) = (handle.vars().root(), handle.vars().home());
+    let container_type = handle.metadata().container_type();
 
-    if let ContainerType::Symbolic = instype {
+    if let Symbolic = container_type {
         let dep = handle.metadata().dependencies();
         let dep = dep.last().expect("Dependency element");
 
@@ -199,17 +206,17 @@ pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> 
         create_dir(root).prepend_io(|| root.into())?;
     }
 
-    if let ContainerType::Aggregate | ContainerType::Base = instype {
+    if let Aggregate | Base = container_type {
         if !Path::new(home).exists() {
             create_dir(home).prepend_io(|| home.into())?;
         }
     }
 
-    if let ContainerType::Base | ContainerType::Slice = instype {
+    if let Base | Slice = container_type {
         create_blank_state(handle.vars().instance())?;
     }
 
-    if let ContainerType::Base = instype {
+    if let Base = container_type {
         schema::extract(handle, &None)?;
     }
 
@@ -249,39 +256,36 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
 }
 
 fn synchronize_database(cache: &ContainerCache, force: bool, lock: &Lock) -> Result<()> {
-    match cache.obtain_base_handle() {
-        Some(ins) => {
-            let db_path = format!("{}/pacman/", *DATA_DIR);
-            let mut handle = alpm_handle(&ins.vars(), db_path, &*DEFAULT_ALPM_CONF);
+    let handle = match cache.obtain_base_handle() {
+        Some(handle) => handle,
+        None => err!(SyncError::NoCompatibleRemotes)?,
+    };
+    let db_path = format!("{}/pacman/", *DATA_DIR);
+    let mut handle = alpm_handle(&handle.vars(), db_path, &*DEFAULT_ALPM_CONF);
 
-            lock.assert()?;
-            println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
-            handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
+    lock.assert()?;
+    println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
+    handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
 
-            if let Err(err) = handle.syncdbs_mut().update(force) {
-                err!(SyncError::InitializationFailure(err.to_string()))?
-            }
-
-            Alpm::release(handle).unwrap();
-            lock.assert()?;
-
-            for i in cache.registered().iter() {
-                let ins: &ContainerHandle = cache.get_instance(i)?;
-
-                for repo in PACMAN_CONF.repos.iter() {
-                    let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
-                    let dest = &format!("{}/var/lib/pacman/sync/{}.db", ins.vars().root(), repo.name);
-
-                    if let Err(error) = create_hard_link(src, dest).prepend(|| format!("Failed to hardlink db '{}'", dest)) {
-                        error.warn();
-                    }
-                }
-            }
-
-            Ok(())
-        }
-        None => err!(SyncError::NoCompatibleRemotes),
+    if let Err(err) = handle.syncdbs_mut().update(force) {
+        err!(SyncError::InitializationFailure(err.to_string()))?
     }
+
+    Alpm::release(handle).expect("Release Alpm handle");
+    lock.assert()?;
+
+    for handle in cache.filter_handle(vec![Base, Slice, Aggregate]).iter() {
+        for repo in PACMAN_CONF.repos.iter() {
+            let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
+            let dest = &format!("{}/var/lib/pacman/sync/{}.db", handle.vars().root(), repo.name);
+
+            if let Err(error) = create_hard_link(src, dest).prepend(|| format!("Failed to hardlink db '{}'", dest)) {
+                error.warn();
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
