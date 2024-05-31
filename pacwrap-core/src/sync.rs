@@ -171,7 +171,7 @@ impl AlpmRepository {
     }
 
     fn signature(&self) -> SigLevel {
-        SigLevel::from_bits(self.sig_lvl).expect("Valid bitflags")
+        SigLevel::from_bits(self.sig_lvl).expect("Invalid bitflags")
     }
 }
 
@@ -271,10 +271,10 @@ pub fn instantiate_trust() -> Result<()> {
 
 fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     for repo in &config.repos {
-        let core = handle.register_syncdb_mut(repo.name(), repo.signature()).expect("syncdb");
+        let core = handle.register_syncdb_mut(repo.name(), repo.signature()).expect("Invalid syncdb");
 
         for server in repo.mirrors() {
-            core.add_server(server).expect("mirror");
+            core.add_server(server).expect("Invalid mirror");
         }
 
         core.set_usage(Usage::ALL).unwrap();

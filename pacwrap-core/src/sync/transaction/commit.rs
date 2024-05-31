@@ -193,18 +193,18 @@ fn wait_on_agent(mut agent: Child) -> Result<()> {
     match agent.wait() {
         Ok(status) => match status.code().unwrap_or(-1) {
             0 => Ok(()),
-            1 => err!(SyncError::TransactionFailureAgent),
-            2 => err!(SyncError::ParameterAcquisitionFailure),
-            3 => err!(SyncError::DeserializationFailure),
-            4 => err!(SyncError::InvalidMagicNumber),
-            5 => err!(SyncError::AgentVersionMismatch),
+            2 => err!(SyncError::TransactionFailureAgent),
+            3 => err!(SyncError::ParameterAcquisitionFailure),
+            4 => err!(SyncError::DeserializationFailure),
+            5 => err!(SyncError::InvalidMagicNumber),
+            6 => err!(SyncError::AgentVersionMismatch),
             _ =>
                 if let Some(code) = status.code() {
-                    err!(SyncError::TransactionFailure(format!("General failure of agent: Exit code {}", code)))
+                    err!(SyncError::TransactionFailure(format!("General agent fault: Exit code {}", code)))
                 } else if let Some(_) = status.signal() {
                     err!(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))
                 } else {
-                    err!(SyncError::TransactionFailure(format!("General failure of agent")))
+                    err!(SyncError::TransactionFailure(format!("General agent fault")))
                 },
         },
         Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,

@@ -50,11 +50,11 @@ impl Display for AgentError {
 impl ErrorTrait for AgentError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidMagic(..) => 5,
-            Self::InvalidVersion(..) => 4,
-            Self::DeserializationError(..) => 3,
-            Self::IOError(..) => 2,
-            _ => 1,
+            Self::InvalidMagic(..) => 6,
+            Self::InvalidVersion(..) => 5,
+            Self::DeserializationError(..) => 4,
+            Self::IOError(..) => 3,
+            _ => 2,
         }
     }
 }

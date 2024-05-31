@@ -252,7 +252,7 @@ check() {
 colorize() {
     [[ $COLOR_SET == 1 ]] && return
 
-    if [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]] && [[ $USE_COLOR != 'n' ]] && [[ -t 2 ]]; then 
+    if [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]] && [[ $USE_COLOR != 'n' ]] && [[ -t 1 ]]; then 
         RESET="[0m"
 		BOLD="[1m"
 		BLUE="${BOLD}[1;36m"

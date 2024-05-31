@@ -26,8 +26,7 @@ use pacwrap_core::{
     lock::Lock,
     log::{Level::Info, Logger},
     sync::{
-        instantiate_container,
-        transaction::{TransactionAggregator, TransactionFlags, TransactionType},
+        instantiate_container, instantiate_trust, transaction::{TransactionAggregator, TransactionFlags, TransactionType}
     },
     utils::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
@@ -240,6 +239,7 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
 
     cache = instantiate(compose_handles(&cache, compose)?, cache, lock, &mut logger)?;
     acquire_targets(&cache, &mut targets, &mut queue)?;
+    instantiate_trust()?;
     Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
         .assert_lock(lock)?
         .target(Some(targets))
