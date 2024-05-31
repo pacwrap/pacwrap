@@ -26,7 +26,7 @@ use std::{
 
 use alpm::{Alpm, SigLevel, Usage};
 use lazy_static::lazy_static;
-use pacmanconf::{self, Config};
+use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -59,11 +59,12 @@ use self::filesystem::create_blank_state;
 
 pub mod event;
 pub mod filesystem;
-mod resolver;
-mod resolver_local;
 pub mod schema;
 pub mod transaction;
 pub mod utils;
+
+mod resolver;
+mod resolver_local;
 
 lazy_static! {
     pub static ref DEFAULT_ALPM_CONF: AlpmConfigData = AlpmConfigData::new();
@@ -144,19 +145,46 @@ impl From<SyncError> for String {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct AlpmRepository {
+    name: String,
+    mirrors: Vec<String>,
+    sig_lvl: u32,
+}
+
+impl From<&Repository> for AlpmRepository {
+    fn from(repo: &Repository) -> Self {
+        Self {
+            name: repo.name.clone(),
+            mirrors: repo.servers.clone(),
+            sig_lvl: signature(&repo.sig_level, *DEFAULT_SIGLEVEL).bits(),
+        }
+    }
+}
+
+impl AlpmRepository {
+    fn mirrors(&self) -> Vec<&str> {
+        self.mirrors.iter().map(|a| a.as_str()).collect()
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> SigLevel {
+        SigLevel::from_bits(self.sig_lvl).expect("Valid bitflags")
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct AlpmConfigData {
-    repos: Vec<(String, u32, Vec<String>)>,
+    repos: Vec<AlpmRepository>,
 }
 
 impl AlpmConfigData {
     fn new() -> Self {
-        let mut remotes = Vec::new();
-
-        for repo in PACMAN_CONF.repos.iter() {
-            remotes.push((repo.name.clone(), signature(&repo.sig_level, *DEFAULT_SIGLEVEL).bits(), repo.servers.clone()));
+        Self {
+            repos: PACMAN_CONF.repos.iter().map(|a| a.into()).collect(),
         }
-
-        Self { repos: remotes }
     }
 }
 
@@ -243,10 +271,10 @@ pub fn instantiate_trust() -> Result<()> {
 
 fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     for repo in &config.repos {
-        let core = handle.register_syncdb_mut(repo.0.clone(), SigLevel::from_bits(repo.1).unwrap()).unwrap();
+        let core = handle.register_syncdb_mut(repo.name(), repo.signature()).expect("syncdb");
 
-        for server in &repo.2 {
-            core.add_server(server.as_str()).unwrap();
+        for server in repo.mirrors() {
+            core.add_server(server).expect("mirror");
         }
 
         core.set_usage(Usage::ALL).unwrap();
