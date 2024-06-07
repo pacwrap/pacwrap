@@ -12,7 +12,7 @@ repository = "https://github.com/pacwrap/pacwrap"
 
 description = "Executable agent for conducting containerized transactions"
 keywords = [ "bubblewrap", "sandbox", "package", "manager", "archlinux" ]
-categories = [ "command-line-utilites", "virtualization", "filesystem", "concurrency", "caching" ]
+categories = [ "command-line-utilities", "virtualization", "filesystem", "concurrency", "caching" ]
 
 [dependencies]
 pacwrap-core = { path = "../pacwrap-core", version = "0.8.3" }

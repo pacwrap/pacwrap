@@ -12,7 +12,7 @@ repository = "https://github.com/pacwrap/pacwrap"
 
 description = "Library providing core functionality for pacwrap"
 keywords = [ "bubblewrap", "sandbox", "package", "manager", "archlinux" ]
-categories = [ "command-line-utilites", "virtualization", "filesystem", "concurrency", "caching" ]
+categories = [ "command-line-utilities", "virtualization", "filesystem", "concurrency", "caching" ]
 
 [dependencies]
 bitflags = "2.4.2"
