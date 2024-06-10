@@ -20,13 +20,15 @@
 use std::{collections::HashMap, path::Path};
 
 use pacwrap_core::{
-    config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType},
+    config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType::*},
     constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
     err,
     lock::Lock,
     log::{Level::Info, Logger},
     sync::{
-        instantiate_container, instantiate_trust, transaction::{TransactionAggregator, TransactionFlags, TransactionType}
+        instantiate_container,
+        instantiate_trust,
+        transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
@@ -84,18 +86,20 @@ fn compose_handles<'a>(
 
     for (instance, config) in compose {
         let handle = compose_handle(instance, config)?;
+        let container_type = handle.metadata().container_type();
+        let depends = handle.metadata().dependencies();
 
-        if let ContainerType::Symbolic = handle.metadata().container_type() {
-            if handle.metadata().dependencies().is_empty() {
+        if let Symbolic = container_type {
+            if depends.is_empty() {
                 err!(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
             }
-        } else if let ContainerType::Base = handle.metadata().container_type() {
-            if handle.metadata().dependencies().len() > 0 {
+        } else if let Base = container_type {
+            if depends.len() > 0 {
                 err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
             }
         }
 
-        for target in handle.metadata().dependencies() {
+        for target in depends {
             cache.get_instance(target)?;
         }
 
@@ -134,12 +138,21 @@ fn acquire_targets<'a>(
     targets: &mut Vec<&'a str>,
     queue: &mut HashMap<&'a str, Vec<&'a str>>,
 ) -> Result<()> {
-    for handle in cache.registered_handles().iter().filter(|a| a.is_creation()) {
+    let registered = cache.registered_handles();
+
+    for handle in registered.iter().filter(|a| a.is_creation()) {
+        let mut depends = handle.metadata().dependencies();
         let instance = handle.vars().instance();
 
+        depends.extend(
+            registered
+                .iter()
+                .filter(|a| !targets.contains(&a.vars().instance()) && a.metadata().dependencies().contains(&instance))
+                .map(|a| a.vars().instance()),
+        );
         queue.insert(instance, handle.metadata().explicit_packages());
-        targets.extend(handle.metadata().dependencies());
         targets.push(instance);
+        targets.extend(depends);
     }
 
     Ok(())
