@@ -17,13 +17,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{fs::read_dir, sync::OnceLock};
+use std::{fs::read_dir, path::Path, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        permission::{Condition::Success, PermError::Fail, *},
+        permission::{
+            Condition::{self, *},
+            PermError::{self, *},
+        },
         Permission,
     },
     exec::args::ExecutionArgs,
@@ -43,16 +46,28 @@ impl Permission for Graphics {
             f.error();
             Fail(format!("No graphics devices are available."))
         })?;
+        let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
 
         if GPU_DEV.get_or_init(|| gpu_dev).is_empty() {
             Err(Fail(format!("No graphics devices are available.")))?
+        }
+
+        if nvidia && !Path::new("/sys/module/nvidia").exists() {
+            return Ok(Some(SuccessWarn(format!("'/sys/module/nvidia': Device module unavailable."))));
         }
 
         Ok(Some(Success))
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        for dev in GPU_DEV.get().expect("Uninitialized device array").iter() {
+        let gpu_dev = GPU_DEV.get().expect("Uninitialized device array");
+        let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
+
+        if nvidia && Path::new("/sys/module/nvidia").exists() {
+            args.robind("/sys/module/nvidia", "/sys/module/nvidia")
+        }
+
+        for dev in gpu_dev {
             args.dev(dev);
         }
     }
