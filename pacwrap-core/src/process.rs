@@ -18,8 +18,11 @@
  */
 
 use std::{
+    cmp::Reverse,
+    error::Error as StdError,
+    ffi::OsString,
     fmt::Write,
-    fs::{read_dir, File},
+    fs::{read_dir, DirEntry, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
     result::Result as StdResult,
 };
@@ -162,8 +165,11 @@ impl ProcStat {
 pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
     let mut map: IndexMap<i32, Process> = IndexMap::new();
     let mut groups: IndexMap<String, Vec<i32>> = IndexMap::new();
+    let mut processes = procfs()?;
 
-    for pid in procfs()? {
+    processes.sort_by_key(|m| Reverse(m.1));
+
+    for pid in processes.iter().map(|m| m.0) {
         let cmdlist = match cmdlist(pid) {
             Some(cmdlist) => cmdlist,
             None => continue,
@@ -200,19 +206,22 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
     Ok(ProcessList::new(map, groups))
 }
 
-fn procfs() -> Result<Vec<i32>, Error> {
+fn procfs() -> Result<Vec<(i32, u64)>, Error> {
     Ok(read_dir("/proc/")
         .prepend_io(|| "/proc/".into())?
         .filter_map(StdResult::ok)
-        .filter(|s| s.metadata().is_ok_and(|s| s.is_dir()))
-        .filter_map(|e| {
-            e.file_name()
-                .to_str()
+        .filter_map(|s| procfs_meta(s).expect("Unable to obtain procfs metadata"))
+        .filter_map(|(name, mtime)| {
+            name.to_str()
                 .expect("Invalid UTF-8 filename in procfs")
                 .parse()
-                .map_or_else(|_| None, |v| Some(v))
+                .map_or_else(|_| None, |v| Some((v, mtime)))
         })
         .collect())
+}
+
+fn procfs_meta(e: DirEntry) -> Result<Option<(OsString, u64)>, Box<dyn StdError>> {
+    Ok(Some((e.file_name(), e.metadata()?.modified()?.elapsed()?.as_secs())))
 }
 
 fn cmdlist(pid: i32) -> Option<Vec<String>> {
