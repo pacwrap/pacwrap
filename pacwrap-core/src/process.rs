@@ -35,17 +35,16 @@ pub struct ProcessList {
     groups: IndexMap<String, Vec<i32>>,
 }
 
-#[derive(Clone)]
 pub struct Process {
     pid: i32,
+    mtime: u64,
+    depth: u32,
+    fork: bool,
     cmd: Vec<String>,
     stat: ProcStat,
     instance: String,
-    depth: u32,
-    fork: bool,
 }
 
-#[derive(Clone)]
 pub struct ProcStat {
     parent: i32,
     thread_name: String,
@@ -77,19 +76,24 @@ impl ProcessList {
 }
 
 impl Process {
-    fn new(id: i32, level: u32, cmdline: Vec<String>, procstat: ProcStat, ins: String, forked: bool) -> Self {
+    fn new(id: i32, time: u64, level: u32, cmdline: Vec<String>, procstat: ProcStat, ins: String, forked: bool) -> Self {
         Self {
             pid: id,
+            mtime: time,
+            fork: forked,
             depth: level,
             cmd: cmdline,
             stat: procstat,
             instance: ins,
-            fork: forked,
         }
     }
 
     pub fn pid(&self) -> i32 {
         self.pid
+    }
+
+    pub fn mtime(&self) -> u64 {
+        self.mtime
     }
 
     pub fn exec_path(&self) -> &str {
@@ -107,14 +111,14 @@ impl Process {
         self.cmd.iter().map(|a| a.as_str()).collect()
     }
 
-    pub fn cmdlist_string(&self, start: usize) -> Result<String, Error> {
+    pub fn cmdlist_string(&self, start: usize) -> String {
         let mut string = String::new();
 
         for idx in start .. self.cmd.len() {
-            write!(string, "{} ", self.cmd[idx]).prepend(|| format!("Failure writing string to cmd buffer."))?;
+            write!(string, "{} ", self.cmd[idx]).expect("Writing substring to string buffer failed");
         }
 
-        Ok(string)
+        string
     }
 
     pub fn stat(&self) -> &ProcStat {
@@ -169,7 +173,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
 
     processes.sort_by_key(|m| Reverse(m.1));
 
-    for pid in processes.iter().map(|m| m.0) {
+    for (pid, mtime) in processes {
         let cmdlist = match cmdlist(pid) {
             Some(cmdlist) => cmdlist,
             None => continue,
@@ -200,7 +204,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
             }
         }
 
-        map.insert(pid, Process::new(pid, depth, cmdlist, stat, ins, fork));
+        map.insert(pid, Process::new(pid, mtime, depth, cmdlist, stat, ins, fork));
     }
 
     Ok(ProcessList::new(map, groups))
