@@ -23,10 +23,11 @@ if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed vi
 if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
 
 source ./dist/tools/common.sh
+ACTION_NOUN="Packaging"
 
 DIST_MAN="$PWD/dist/man"
 
 validate_args $1
-package $DIST_MAN/pacwrap.1 $DIST_BIN/pacwrap.1 $1; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap.1 manpage failed."; fi
-package $DIST_MAN/pacwrap.yml.2 $DIST_BIN/pacwrap.yml.2 $1; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap.yml.2 manpage failed."; fi
-./dist/tools/runtime.sh $1; if [[ $? != 0 ]]; then error_fatal "Build of container runtime failed."; fi
+package $DIST_MAN/pacwrap.1 $DIST_BIN/pacwrap.1 $1
+package $DIST_MAN/pacwrap.yml.2 $DIST_BIN/pacwrap.yml.2 $1
+./dist/tools/runtime.sh $1

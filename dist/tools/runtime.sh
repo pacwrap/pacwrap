@@ -24,6 +24,7 @@ if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed vi
 if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
 
 source ./dist/tools/common.sh
+ACTION_NOUN="Runtime generation"
 
 # 
 # Environment variables
@@ -118,8 +119,8 @@ populate_lib() {
 	ln -s .$FAKEROOT$FAKECHROOT/libfakechroot.so $DEST_DIR$LIB_DIR/libfakechroot.so
 
     # Remove debuglink section, to ensure the Arch Build System doesn't complain
-    for lib in $(find $DEST_DIR$LIB_DIR -maxdepth 3 -printf "%p "); do
-        objcopy --remove-section=.gnu_debuglink $lib 2>/dev/null
+    for lib in $(find $DEST_DIR$LIB_DIR -maxdepth 3 -type f -printf "%p "); do
+        objcopy --remove-section=.gnu_debuglink $lib
     done
 }
 
@@ -148,8 +149,14 @@ populate_etc() {
 # Populate busybox links
 #
 busybox_links() {
-	for applet in $(busybox --list); do 
-		ln -s busybox ./dist/runtime/bin/$applet 2>/dev/null
+    for applet in $(busybox --list); do
+        if [[ "${COREUTILS[@]}" == *$applet* ]] ||
+           [[ "${BIN_UTILS[@]}" == *$applet* ]] ||
+           [[ $applet == "busybox" ]]; then
+                continue
+        fi
+
+		ln -s busybox ./dist/runtime/bin/$applet
 	done
 }
 
@@ -173,8 +180,12 @@ copy_bins() {
 	for bin in ${@}; do 
         cp $(type -P $bin) $DEST_DIR$BIN_DIR/$bin
 
+        if [[ $bin == "fakeroot" ]]; then 
+            continue
+        fi
+
         # Remove debuglink section, to ensure the Arch Build System doesn't complain 
-        objcopy --remove-section=.gnu_debuglink $DEST_DIR$BIN_DIR/$bin 2>/dev/null
+        objcopy --remove-section=.gnu_debuglink $DEST_DIR$BIN_DIR/$bin
     done	
 }
 

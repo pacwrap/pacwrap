@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 #
 #  pacwrap - common.sh
 #
@@ -19,6 +19,11 @@
 
 [[ ! -z $COMMON_SCRIPT ]] && return
 
+set -e
+trap 'LAST_CMD=$BASH_COMMAND' DEBUG
+trap 'handle_failure "$ACTION_NOUN" $?' ERR TERM INT
+
+ACTION_NOUN="Common script"
 DIST_BIN="$PWD/dist/bin"
 DIST_SRC="$PWD/dist/src"
 
@@ -27,7 +32,11 @@ if [[ -t 2 ]] && [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]]; then
     RED="[1;31m"
  	GREEN="[1;32m"
     RESET="[0m"
-fi	
+fi
+
+handle_failure() {
+    error_fatal "$1 failure: $LAST_CMD exited with exit code $?."
+}
 
 error_fatal() {
 	echo $BOLD$RED"error:$RESET $@";

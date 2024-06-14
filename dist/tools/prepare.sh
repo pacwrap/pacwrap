@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 #
 #  pacwrap - prepare.sh
 #
@@ -23,8 +23,9 @@ if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed vi
 if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
 
 source ./dist/tools/common.sh
+ACTION_NOUN="Preparation"
 
-validate_args $1; if [[ $? != 0 ]]; then error_fatal "Argument validation failed."; fi
-layout_dir; if [[ $? != 0 ]]; then error_fatal "Directory initialization failed."; fi
-package $DIST_SRC/pacwrap-key $DIST_BIN/pacwrap-key $1 0; if [[ $? != 0 ]]; then error_fatal "Packaging of pacwrap-key failed."; fi
-./dist/tools/schema.sh $1; if [[ $? != 0 ]]; then error_fatal "Build of container schema failed."; fi
+validate_args $1
+layout_dir
+package $DIST_SRC/pacwrap-key $DIST_BIN/pacwrap-key $1 0
+./dist/tools/schema.sh $1

@@ -25,6 +25,7 @@ if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed vi
 if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
 
 source ./dist/tools/common.sh
+ACTION_NOUN="Schema generation"
 
 # 
 # Environment variables
@@ -75,7 +76,7 @@ clean() {
 # Populate container skeleton archive
 #
 create_archive() {
-	cd $DEST_DIR
+    cd $DEST_DIR
 	tar acf ../bin/filesystem.tar.zst *
 }
 
