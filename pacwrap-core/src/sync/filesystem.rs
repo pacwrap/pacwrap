@@ -496,17 +496,16 @@ impl SyncType {
     }
 }
 
-pub fn validate_fs_states<'a>(vec: &'a Vec<&'a str>) -> bool {
-    for instance in vec {
-        match check(instance) {
-            Ok(bool) =>
-                if bool {
-                    return false;
-                },
+pub fn validate_fs_states<'a>(instances: &'a Vec<&'a str>) -> bool {
+    for ins in instances {
+        if !match check(ins) {
+            Ok(bool) => !bool,
             Err(err) => {
                 err.warn();
-                return false;
+                false
             }
+        } {
+            return false;
         }
     }
 
@@ -555,11 +554,12 @@ fn decode_state<'a, R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
     let hash_length = header_buffer.read_le_16();
     let state_length = header_buffer.read_le_64();
 
-    if state_length >= BYTE_LIMIT {
-        Err(IOError::new(
-            IOErrorKind::InvalidInput,
-            format!("Data length provided exceeded maximum {state_length} >= {BYTE_LIMIT}"),
-        ))?;
+    if state_length == 0 {
+        Err(IOError::new(IOErrorKind::InvalidInput, format!("Data length provided is zero")))?;
+    } else if hash_length != 32 {
+        Err(IOError::new(IOErrorKind::InvalidInput, format!("Hash length provided is invalid.")))?;
+    } else if state_length >= BYTE_LIMIT {
+        Err(IOError::new(IOErrorKind::InvalidInput, format!("Data length exceeded maximum {state_length} >= {BYTE_LIMIT}")))?;
     }
 
     let mut hash_buffer = vec![0; hash_length as usize];
