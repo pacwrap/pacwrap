@@ -18,7 +18,7 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     fs::{copy, remove_file, File},
     io::copy as copy_io,
     process::Command,
@@ -45,13 +45,6 @@ enum FileType<'a> {
 }
 
 impl<'a> FileType<'a> {
-    fn can_edit(&self, edit: bool) -> bool {
-        match self {
-            Self::LogFile => false,
-            _ => edit,
-        }
-    }
-
     fn from(str: &'a str) -> Option<FileType<'a>> {
         match str {
             "log" => Some(FileType::LogFile),
@@ -60,10 +53,23 @@ impl<'a> FileType<'a> {
             _ => None,
         }
     }
+
+    fn ext(&self) -> &'static str {
+        match self {
+            Self::LogFile => ".log",
+            Self::ContainerConfig(_) | Self::Config => ".yml",
+            Self::DesktopFile(_) => ".desktop",
+            Self::Repo => ".conf",
+        }
+    }
+
+    fn can_edit(&self, edit: bool) -> bool {
+        !matches!(self, Self::LogFile) && edit
+    }
 }
 
 impl<'a> Display for FileType<'a> {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
         match self {
             FileType::LogFile => write!(fmt, "{}/pacwrap.log", *DATA_DIR),
             FileType::ContainerConfig(file) => write!(fmt, "{}/container/{}.yml", *CONFIG_DIR, file),
@@ -98,9 +104,9 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
 
     let (file, temp, lock, edit) = &match file {
         Some(file) => {
-            let edit = file.can_edit(edit);
+            let (edit, ext) = (file.can_edit(edit), file.ext());
             let prs = pseudorandom_string(10);
-            let temp = format!("/tmp/tmp.{}", prs);
+            let temp = format!("/tmp/tmp.{}.{}", prs, ext);
             let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
                 Some(Lock::new().lock()?)
             } else {
