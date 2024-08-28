@@ -20,7 +20,7 @@
 use std::{
     fmt::{Display, Formatter},
     fs::{copy, remove_file, File},
-    io::{copy as copy_io, Read, Result as IOResult},
+    io::copy as copy_io,
     process::Command,
 };
 
@@ -32,6 +32,7 @@ use pacwrap_core::{
     ErrorGeneric,
     Result,
 };
+use rand::Rng;
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy)]
@@ -98,7 +99,7 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
     let (file, temp, lock, edit) = &match file {
         Some(file) => {
             let edit = file.can_edit(edit);
-            let prs = pseudorandom_string(10).prepend_io(|| "/dev/urandom".into())?;
+            let prs = pseudorandom_string(10);
             let temp = format!("/tmp/tmp.{}", prs);
             let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
                 Some(Lock::new().lock()?)
@@ -146,21 +147,19 @@ fn hash_file(file_path: &str) -> Result<Vec<u8>> {
     Ok(hasher.finalize().to_vec())
 }
 
-fn pseudorandom_string(len: usize) -> IOResult<String> {
-    let mut urand = File::open("/dev/urandom")?;
-    let mut vec: Vec<u8> = Vec::new();
+fn pseudorandom_string(len: usize) -> String {
+    let mut rand = rand::thread_rng();
+    let mut chars: Vec<u8> = Vec::new();
 
-    vec.reserve_exact(len);
+    chars.reserve_exact(len);
 
-    while vec.len() < len {
-        let mut buffer = [0; 1];
+    while chars.len() < len {
+        let rand: u8 = rand.gen();
 
-        urand.read_exact(&mut buffer)?;
-
-        if buffer[0] > 64 && buffer[0] < 91 || buffer[0] > 96 && buffer[0] < 122 || buffer[0] > 48 && buffer[0] < 58 {
-            vec.push(buffer[0]);
+        if rand > 64 && rand < 91 || rand > 96 && rand < 122 || rand > 48 && rand < 58 {
+            chars.push(rand);
         }
     }
 
-    Ok(String::from_utf8_lossy(&vec).to_string())
+    String::from_utf8(chars).expect("Valid UTF-8").to_string()
 }

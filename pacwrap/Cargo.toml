@@ -32,6 +32,7 @@ alpm = { version = "3.0.5", features = ["checkver"] }
 # Miscellaneous
 sha2 = "0.10.8"
 regex = "1.10.3"
+rand = "0.8.5"
 
 [build-dependencies]
 pacwrap-core = { path = "../pacwrap-core/", version = "0.8.4" }
