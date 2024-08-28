@@ -32,7 +32,7 @@ use pacwrap_core::{
     ErrorGeneric,
     Result,
 };
-use rand::Rng;
+use rand::distributions::{Alphanumeric, DistString};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy)]
@@ -105,8 +105,8 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
     let (file, temp, lock, edit) = &match file {
         Some(file) => {
             let (edit, ext) = (file.can_edit(edit), file.ext());
-            let prs = pseudorandom_string(10);
-            let temp = format!("/tmp/tmp.{}.{}", prs, ext);
+            let prs = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+            let temp = format!("/tmp/tmp.{}{}", prs, ext);
             let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
                 Some(Lock::new().lock()?)
             } else {
@@ -151,21 +151,4 @@ fn hash_file(file_path: &str) -> Result<Vec<u8>> {
 
     copy_io(&mut file, &mut hasher).prepend_io(|| file_path.into())?;
     Ok(hasher.finalize().to_vec())
-}
-
-fn pseudorandom_string(len: usize) -> String {
-    let mut rand = rand::thread_rng();
-    let mut chars: Vec<u8> = Vec::new();
-
-    chars.reserve_exact(len);
-
-    while chars.len() < len {
-        let rand: u8 = rand.gen();
-
-        if rand > 64 && rand < 91 || rand > 96 && rand < 122 || rand > 48 && rand < 58 {
-            chars.push(rand);
-        }
-    }
-
-    String::from_utf8(chars).expect("Valid UTF-8").to_string()
 }
