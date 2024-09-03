@@ -32,6 +32,7 @@ pub enum Operand<'a> {
     Long(&'a str),
     LongPos(&'a str, &'a str),
     Value(&'a str),
+    ShortEmpty,
     Nothing,
 }
 
@@ -85,7 +86,7 @@ impl<'a> Arguments<'a> {
 
                         self.operands.push(Operand::Long(value[0]));
                         self.operands.push(Operand::LongPos(value[0], value[1]));
-                    } else if string.len() > 2 {
+                    } else {
                         self.operands.push(Operand::Long(&string[2 ..]));
                     },
                 string if string.starts_with("-") =>
@@ -93,6 +94,8 @@ impl<'a> Arguments<'a> {
                         for operand in string[1 ..].chars() {
                             self.operands.push(Operand::Short(operand));
                         }
+                    } else {
+                        self.operands.push(Operand::ShortEmpty);
                     },
                 _ => self.operands.push(match self.operands.last() {
                     Some(last) => match last {
@@ -176,6 +179,7 @@ impl<'a> Display for Operand<'a> {
             Operand::Short(char) => write!(fmt, "-{}", char),
             Operand::ShortPos(str, eq) => write!(fmt, "-{} {}", str, eq),
             Operand::Value(str) => write!(fmt, "{}", str),
+            Operand::ShortEmpty => write!(fmt, "-"),
             Operand::Nothing => write!(fmt, "None"),
         }
     }
