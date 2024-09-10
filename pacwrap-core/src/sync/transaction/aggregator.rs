@@ -285,7 +285,7 @@ impl<'a> TransactionAggregator<'a> {
 
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
-                        SyncError::TransactionFailureAgent => exit(err.kind().code()),
+                        SyncError::TransactionAgentFailure => exit(err.kind().code()),
                         _ => Err(err),
                     };
                 }

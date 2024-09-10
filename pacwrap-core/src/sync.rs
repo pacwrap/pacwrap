@@ -74,7 +74,8 @@ lazy_static! {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum SyncError {
-    TransactionFailureAgent,
+    TransactionAgentError,
+    TransactionAgentFailure,
     ParameterAcquisitionFailure,
     DeserializationFailure,
     InvalidMagicNumber,
@@ -117,12 +118,15 @@ impl Display for SyncError {
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
             Self::SignalInterrupt => write!(fmter, "Signal interrupt was triggered."),
             Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
+            Self::TransactionAgentError => write!(fmter, "Agent process terminated due to upstream error."),
             Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
             Self::NothingToDo => write!(fmter, "Nothing to do."),
             _ => Ok(()),
         }?;
-
-        if let Self::SignalInterrupt = self {
+        
+        if let Self::TransactionFailure(_) = self {
+            Ok(())
+        } else if let Self::SignalInterrupt = self {
             write!(fmter, "\n{} Transaction aborted.", *ARROW_RED)
         } else {
             write!(fmter, "\n{} Transaction failed.", *ARROW_RED)

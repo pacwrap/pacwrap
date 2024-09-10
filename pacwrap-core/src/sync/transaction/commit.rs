@@ -193,7 +193,8 @@ fn wait_on_agent(mut agent: Child) -> Result<()> {
     match agent.wait() {
         Ok(status) => match status.code().unwrap_or(-1) {
             0 => Ok(()),
-            2 => err!(SyncError::TransactionFailureAgent),
+            1 => err!(SyncError::TransactionAgentError),
+            2 => err!(SyncError::TransactionAgentFailure),
             3 => err!(SyncError::ParameterAcquisitionFailure),
             4 => err!(SyncError::DeserializationFailure),
             5 => err!(SyncError::InvalidMagicNumber),
