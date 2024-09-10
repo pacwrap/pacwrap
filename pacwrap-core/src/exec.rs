@@ -238,7 +238,7 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
         .arg("--setenv").arg("LANG").arg(*LANG)
         .arg("--setenv").arg("COLORTERM").arg(*COLORTERM) 
         .arg("--setenv").arg("LD_LIBRARY_PATH").arg("/lib64:/usr/lib")
-        .arg("--setenv").arg("LD_PRELOAD").arg("/lib64/libfakeroot.so:/lib64/libfakechroot.so")
+        .arg("--setenv").arg("LD_PRELOAD").arg("/lib64/libfakechroot.so")
         .arg("--setenv").arg("PACWRAP_REAL_UID").arg(ID.0)
         .arg("--setenv").arg("PACWRAP_REAL_GID").arg(ID.1)
         .arg("--setenv").arg("RUST_BACKTRACE").arg("1")
