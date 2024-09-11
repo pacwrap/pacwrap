@@ -103,6 +103,8 @@ pub struct AlpmConfiguration {
     check_space: bool,
     #[serde(default = "default_true")]
     download_timeout: bool,
+    #[serde(default)]
+    disable_sandbox: bool,
 }
 
 impl Configuration {
@@ -146,6 +148,7 @@ impl AlpmConfiguration {
             parallel_downloads: parallel_downloads(),
             check_space: true,
             download_timeout: true,
+            disable_sandbox: false,
         }
     }
 
@@ -163,6 +166,10 @@ impl AlpmConfiguration {
 
     pub fn check_space(&self) -> bool {
         self.check_space
+    }
+
+    pub fn disable_sandbox(&self) -> bool {
+        self.disable_sandbox
     }
 
     pub fn held(&self) -> Vec<&str> {

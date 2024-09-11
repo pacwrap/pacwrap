@@ -196,6 +196,7 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm
     let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").unwrap();
     let hook_dirs = vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"];
 
+    handle.set_disable_sandbox(config.alpm().disable_sandbox());
     handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
     handle.set_hookdirs(hook_dirs.iter()).unwrap();
     handle.set_cachedirs(vec!["/mnt/share/cache"].iter()).unwrap();
@@ -215,6 +216,7 @@ pub fn instantiate_alpm(inshandle: &ContainerHandle) -> Alpm {
 fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConfigData) -> Alpm {
     let mut handle = Alpm::new(insvars.root(), &db_path).unwrap();
 
+    handle.set_disable_sandbox(CONFIG.alpm().disable_sandbox());
     handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
     handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).unwrap();
     handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).unwrap();

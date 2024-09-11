@@ -17,4 +17,5 @@ alpm:
   sig_level_local: Optional
   #parallel_downloads: 5
   #check_space: true
-  #download_timeout: true"
+  #download_timeout: true
+  #disable_sandbox: false
