@@ -63,6 +63,7 @@ macro_rules! to_static_str {
 }
 
 lazy_static! {
+    pub static ref VERBOSE: bool = var("PACWRAP_VERBOSE").is_ok_and(|v| v == "1");
     pub static ref UID: u32 = geteuid().as_raw();
     pub static ref GID: u32 = getegid().as_raw();
     pub static ref HOME: &'static str = env("HOME");

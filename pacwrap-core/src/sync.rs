@@ -22,40 +22,31 @@ use std::{
     os::unix::fs::symlink,
     path::Path,
     process::exit,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
-use alpm::{Alpm, SigLevel, Usage};
+use alpm::{Alpm, LogLevel, SigLevel, Usage};
 use lazy_static::lazy_static;
 use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{
-        cache::ContainerCache,
-        global::ProgressKind,
-        ContainerHandle,
-        ContainerType::*,
-        ContainerVariables,
-        Global,
-        CONFIG,
-    },
-    constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET},
+    config::{global::ProgressKind, ContainerHandle, ContainerType::*, ContainerVariables, Global, CONFIG},
+    constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET, UNIX_TIMESTAMP, VERBOSE},
     err,
     error,
     exec::pacwrap_key,
     impl_error,
-    lock::Lock,
     sync::{
         event::download::{self, DownloadEvent},
-        filesystem::create_hard_link,
+        filesystem::{create_blank_state, create_hard_link},
+        transaction::{TransactionAggregator, TransactionFlags},
     },
     Error,
     ErrorGeneric,
     ErrorTrait,
     Result,
 };
-
-use self::filesystem::create_blank_state;
 
 pub mod event;
 pub mod filesystem;
@@ -123,7 +114,7 @@ impl Display for SyncError {
             Self::NothingToDo => write!(fmter, "Nothing to do."),
             _ => Ok(()),
         }?;
-        
+
         if let Self::TransactionFailure(_) = self {
             Ok(())
         } else if let Self::SignalInterrupt = self {
@@ -192,9 +183,26 @@ impl AlpmConfigData {
     }
 }
 
-pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm {
+fn alpm_log_callback(level: LogLevel, msg: &str, counter: &mut usize) {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let time = now.as_secs() as usize - *counter;
+    let nano = now.subsec_nanos().to_string();
+    let log_level = level.bits() / 4;
+    let verbosity = if *VERBOSE { 3 } else { 2 };
+
+    if log_level < verbosity {
+        eprint!("[{}.{:.6}] [ALPM] {}", time, nano, msg);
+    }
+}
+
+pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transflags: &TransactionFlags) -> Alpm {
     let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").unwrap();
     let hook_dirs = vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"];
+    let debug = transflags.intersects(TransactionFlags::DEBUG);
+
+    if debug {
+        handle.set_log_cb(*UNIX_TIMESTAMP as usize, alpm_log_callback);
+    }
 
     handle.set_disable_sandbox(config.alpm().disable_sandbox());
     handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
@@ -209,12 +217,17 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData) -> Alpm
     handle
 }
 
-pub fn instantiate_alpm(inshandle: &ContainerHandle) -> Alpm {
-    alpm_handle(inshandle.vars(), format!("{}/var/lib/pacman/", inshandle.vars().root()), &*DEFAULT_ALPM_CONF)
+pub fn instantiate_alpm(inshandle: &ContainerHandle, transflags: &TransactionFlags) -> Alpm {
+    alpm_handle(inshandle.vars(), &*DEFAULT_ALPM_CONF, transflags, format!("{}/var/lib/pacman/", inshandle.vars().root()))
 }
 
-fn alpm_handle(insvars: &ContainerVariables, db_path: String, remotes: &AlpmConfigData) -> Alpm {
+fn alpm_handle(insvars: &ContainerVariables, remotes: &AlpmConfigData, transflags: &TransactionFlags, db_path: String) -> Alpm {
     let mut handle = Alpm::new(insvars.root(), &db_path).unwrap();
+    let debug = transflags.intersects(TransactionFlags::DEBUG);
+
+    if debug {
+        handle.set_log_cb(*UNIX_TIMESTAMP as usize, alpm_log_callback);
+    }
 
     handle.set_disable_sandbox(CONFIG.alpm().disable_sandbox());
     handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
@@ -289,15 +302,16 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
     handle
 }
 
-fn synchronize_database(cache: &ContainerCache, force: bool, lock: &Lock) -> Result<()> {
-    let handle = match cache.obtain_base_handle() {
+fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<()> {
+    let handle = match ag.cache().obtain_base_handle() {
         Some(handle) => handle,
         None => err!(SyncError::NoCompatibleRemotes)?,
     };
+    let flags = ag.flags();
     let db_path = format!("{}/pacman/", *DATA_DIR);
-    let mut handle = alpm_handle(&handle.vars(), db_path, &*DEFAULT_ALPM_CONF);
+    let mut handle = alpm_handle(&handle.vars(), &*DEFAULT_ALPM_CONF, flags, db_path);
 
-    lock.assert()?;
+    ag.lock()?.assert()?;
     println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
     handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
 
@@ -306,9 +320,9 @@ fn synchronize_database(cache: &ContainerCache, force: bool, lock: &Lock) -> Res
     }
 
     Alpm::release(handle).expect("Release Alpm handle");
-    lock.assert()?;
+    ag.lock()?.assert()?;
 
-    for handle in cache.filter_handle(vec![Base, Slice, Aggregate]).iter() {
+    for handle in ag.cache().filter_handle(vec![Base, Slice, Aggregate]).iter() {
         for repo in PACMAN_CONF.repos.iter() {
             let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
             let dest = &format!("{}/var/lib/pacman/sync/{}.db", handle.vars().root(), repo.name);

@@ -19,7 +19,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    env,
     process::exit,
 };
 
@@ -30,7 +29,7 @@ use signal_hook::iterator::Signals;
 
 use crate::{
     config::{cache::ContainerCache, ContainerHandle, ContainerType::*},
-    constants::{ARROW_GREEN, IS_COLOR_TERMINAL, SIGNAL_LIST, UNIX_TIMESTAMP},
+    constants::{ARROW_GREEN, IS_COLOR_TERMINAL, SIGNAL_LIST, UNIX_TIMESTAMP, VERBOSE},
     err,
     error,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
@@ -100,9 +99,7 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn progress(mut self) -> Self {
-        if let (.., Remove(..)) | (.., Upgrade(false, true, ..)) | (false, ..) =
-            (*IS_COLOR_TERMINAL && !env::var("PACWRAP_VERBOSE").is_ok_and(|v| v == "1"), self.action)
-        {
+        if let (.., Remove(..)) | (.., Upgrade(false, true, ..)) | (false, ..) = (*IS_COLOR_TERMINAL && !*VERBOSE, self.action) {
             return self;
         }
 
@@ -148,7 +145,7 @@ impl<'a> TransactionAggregator<'a> {
                 }
 
                 if refresh {
-                    sync::synchronize_database(self.cache, force, self.lock()?)?;
+                    sync::synchronize_database(&mut self, force)?;
                 }
 
                 upgrade | self.targets.is_some()
@@ -243,7 +240,8 @@ impl<'a> TransactionAggregator<'a> {
             Some(some) => some.clone(),
             None => Vec::new(),
         };
-        let alpm = sync::instantiate_alpm(&inshandle);
+
+        let alpm = sync::instantiate_alpm(&inshandle, &self.flags());
         let mut meta = TransactionMetadata::new(queue);
         let mut handle = TransactionHandle::new(&mut meta).alpm_handle(alpm);
         let mut act: Box<dyn Transaction> = Prepare.from(self);

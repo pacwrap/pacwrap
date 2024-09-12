@@ -101,7 +101,7 @@ impl Transaction for Commit {
             ag.keyring_update(inshandle)?;
         }
 
-        handle.set_alpm(Some(sync::instantiate_alpm(inshandle)));
+        handle.set_alpm(Some(sync::instantiate_alpm(inshandle, &ag.flags())));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
         ag.logger().log(Info, &format!("container {instance}'s {state} transaction complete"))?;
         next_state(handle, ag.action(), &self.state, true)

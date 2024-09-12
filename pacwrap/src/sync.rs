@@ -170,6 +170,7 @@ fn engage_aggregator<'a>(
             Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
             Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
+            Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
             Op::Short('l') | Op::Long("lazy-load") => flags = flags | TransactionFlags::LAZY_LOAD_DB,
             Op::Short('o') | Op::Long("target-only") => flags = flags | TransactionFlags::TARGET_ONLY,
             Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,

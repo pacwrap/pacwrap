@@ -73,8 +73,10 @@ pub fn transact() -> Result<()> {
     let config: Global = deserialize(&mut file)?;
     let alpm_remotes: AlpmConfigData = deserialize(&mut file)?;
     let mut metadata: TransactionMetadata = deserialize(&mut file)?;
-    let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes);
-    let mut handle = TransactionHandle::new(&mut metadata).alpm_handle(alpm).config(&config).agent();
+    let handle = TransactionHandle::new(&mut metadata);
+    let (transflags, ..) = handle.metadata().retrieve_flags();
+    let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes, &transflags.expect("TransactionFlags"));
+    let mut handle = handle.alpm_handle(alpm).config(&config).agent();
 
     if let Err(err) = conduct_transaction(&config, &mut handle, params) {
         handle.release();

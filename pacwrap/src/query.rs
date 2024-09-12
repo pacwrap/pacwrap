@@ -24,7 +24,7 @@ use pacwrap_core::{
     constants::{BOLD_GREEN, RESET},
     err,
     error::*,
-    sync::instantiate_alpm,
+    sync::{instantiate_alpm, transaction::TransactionFlags},
     utils::{
         arguments::{Arguments, InvalidArgument, Operand},
         check_root,
@@ -32,6 +32,7 @@ use pacwrap_core::{
 };
 
 pub fn query(arguments: &mut Arguments) -> Result<()> {
+    let mut flags: TransactionFlags = TransactionFlags::NONE;
     let mut target = "";
     let mut explicit = false;
     let mut quiet = false;
@@ -40,6 +41,7 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = arguments.next() {
         match arg {
+            Operand::Long("debug") => flags = flags | TransactionFlags::DEBUG,
             Operand::Long("target") | Operand::Short('t') => continue,
             Operand::Short('e') | Operand::Long("explicit") => explicit = true,
             Operand::Short('q') | Operand::Long("quiet") => quiet = true,
@@ -53,7 +55,7 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
     }
 
     let handle = config::provide_handle(target)?;
-    let handle = instantiate_alpm(&handle);
+    let handle = instantiate_alpm(&handle, &flags);
 
     for pkg in handle.localdb().pkgs() {
         if explicit && pkg.reason() != PackageReason::Explicit {

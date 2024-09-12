@@ -97,16 +97,17 @@ pub trait Transaction {
 }
 
 bitflags! {
-    pub struct TransactionFlags: u8 {
+    pub struct TransactionFlags: u16 {
         const NONE = 0;
-        const TARGET_ONLY = 0b00000001;
-        const PREVIEW = 0b00000010;
-        const NO_CONFIRM = 0b00000100;
-        const FORCE_DATABASE = 0b00001000;
-        const DATABASE_ONLY = 0b00010000;
-        const CREATE = 0b00100000;
-        const FILESYSTEM_SYNC = 0b01000000;
-        const LAZY_LOAD_DB = 0b10000000;
+        const TARGET_ONLY = 0b000000001;
+        const PREVIEW = 0b000000010;
+        const NO_CONFIRM = 0b000000100;
+        const FORCE_DATABASE = 0b000001000;
+        const DATABASE_ONLY = 0b000010000;
+        const CREATE = 0b000100000;
+        const FILESYSTEM_SYNC = 0b001000000;
+        const LAZY_LOAD_DB = 0b010000000;
+        const DEBUG = 0b100000000;
     }
 }
 
@@ -127,7 +128,7 @@ pub struct TransactionMetadata<'a> {
     held_pkgs: HashSet<String>,
     queue: Vec<Cow<'a, str>>,
     mode: TransactionMode,
-    flags: (u8, u32),
+    flags: (u16, u32),
 }
 
 #[derive(Serialize, Deserialize)]

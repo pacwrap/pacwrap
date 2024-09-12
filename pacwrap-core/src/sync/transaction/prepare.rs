@@ -69,7 +69,7 @@ impl Transaction for Prepare {
                 if deps.len() > 0 {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
-                            Some(dep_handle) => handle.enumerate_package_lists(&sync::instantiate_alpm(dep_handle)),
+                            Some(dep_handle) => handle.enumerate_package_lists(&sync::instantiate_alpm(dep_handle, ag.flags())),
                             None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
                     }

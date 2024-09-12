@@ -94,6 +94,7 @@ fn engage_aggregator<'a>(
             | Op::Short('R')
             | Op::Short('c')
             | Op::Short('s') => continue,
+            Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
             Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
             Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,

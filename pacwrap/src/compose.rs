@@ -182,6 +182,7 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
     while let Some(arg) = args.next() {
         match arg {
             Op::Long("from-config") => continue,
+            Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
             Op::Long("reinitialize-all") =>
                 for instance in cache.registered() {
