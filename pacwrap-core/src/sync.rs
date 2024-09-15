@@ -196,23 +196,27 @@ fn alpm_log_callback(level: LogLevel, msg: &str, counter: &mut usize) {
 }
 
 pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transflags: &TransactionFlags) -> Alpm {
-    let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").unwrap();
+    let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").expect("Unable to acquire ALPM handle");
     let hook_dirs = vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"];
     let debug = transflags.intersects(TransactionFlags::DEBUG);
+    let disable_sandbox = config.alpm().disable_sandbox() || transflags.intersects(TransactionFlags::NO_ALPM_SANDBOX);
 
     if debug {
         handle.set_log_cb(*UNIX_TIMESTAMP as usize, alpm_log_callback);
     }
 
-    handle.set_disable_sandbox(config.alpm().disable_sandbox());
-    handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
-    handle.set_hookdirs(hook_dirs.iter()).unwrap();
-    handle.set_cachedirs(vec!["/mnt/share/cache"].iter()).unwrap();
-    handle.set_gpgdir("/mnt/share/gnupg").unwrap();
-    handle.set_logfile("/mnt/share/pacwrap.log").unwrap();
-    handle.set_check_space(false);
-    handle.set_disable_dl_timeout(config.alpm().download_timeout());
+    if disable_sandbox {
+        handle.set_disable_sandbox(true);
+        handle.set_sandbox_user(None::<&str>).expect("set sandbox user");
+    }
+
+    handle.set_logfile("/mnt/share/pacwrap.log").expect("set logfile");
+    handle.set_hookdirs(hook_dirs.iter()).expect("set hookdirs");
+    handle.set_gpgdir("/mnt/share/gnupg").expect("set gpgdir");
+    handle.set_cachedirs(vec!["/mnt/share/cache"].iter()).expect("set cachedirs");
     handle.set_parallel_downloads(config.alpm().parallel_downloads());
+    handle.set_disable_dl_timeout(config.alpm().download_timeout());
+    handle.set_check_space(false);
     handle = register_remote(handle, remotes);
     handle
 }
@@ -222,20 +226,25 @@ pub fn instantiate_alpm(inshandle: &ContainerHandle, transflags: &TransactionFla
 }
 
 fn alpm_handle(insvars: &ContainerVariables, remotes: &AlpmConfigData, transflags: &TransactionFlags, db_path: String) -> Alpm {
-    let mut handle = Alpm::new(insvars.root(), &db_path).unwrap();
+    let mut handle = Alpm::new(insvars.root(), &db_path).expect("Unable to acquire ALPM handle");
     let debug = transflags.intersects(TransactionFlags::DEBUG);
+    let disable_sandbox = CONFIG.alpm().disable_sandbox() || transflags.intersects(TransactionFlags::NO_ALPM_SANDBOX);
 
     if debug {
         handle.set_log_cb(*UNIX_TIMESTAMP as usize, alpm_log_callback);
     }
 
-    handle.set_disable_sandbox(CONFIG.alpm().disable_sandbox());
-    handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).unwrap();
-    handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).unwrap();
-    handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).unwrap();
+    if disable_sandbox {
+        handle.set_disable_sandbox(true);
+        handle.set_sandbox_user(None::<&str>).expect("set sandbox user");
+    }
+
+    handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).expect("set logfile");
+    handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).expect("set gpgdir");
+    handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).expect("set cachedirs");
     handle.set_parallel_downloads(CONFIG.alpm().parallel_downloads());
-    handle.set_check_space(CONFIG.alpm().check_space());
     handle.set_disable_dl_timeout(CONFIG.alpm().download_timeout());
+    handle.set_check_space(CONFIG.alpm().check_space());
     handle = register_remote(handle, remotes);
     handle
 }

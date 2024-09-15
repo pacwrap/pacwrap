@@ -19,6 +19,7 @@
 
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
+    io::ErrorKind as IOErrorKind,
     os::{fd::AsRawFd, unix::process::ExitStatusExt},
     process::{Child, Command, ExitStatus, Stdio},
 };
@@ -70,7 +71,7 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub enum ExecutionError {
-    InvalidPathVar(String, std::io::ErrorKind),
+    InvalidPathVar(String, IOErrorKind),
     ExecutableUnavailable(String),
     RuntimeArguments,
     UnabsolutePath(String),
@@ -116,9 +117,9 @@ pub enum ExecutionType {
 #[rustfmt::skip]
 pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: &ContainerHandle, arguments: Vec<&str>) -> Result<()> {
     let term_control = TermControl::new(0);
-    let info_pipe = os_pipe::pipe().unwrap();
-    let sec_pipe = os_pipe::pipe().unwrap();
-	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).unwrap();
+    let info_pipe = os_pipe::pipe().expect("bwrap pipe");
+    let sec_pipe = os_pipe::pipe().expect("eBPF pipe");
+	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).expect("eBPF program");
     let info_fd = info_pipe.1.as_raw_fd();  
     let fd_mappings = vec![
 	    FdMapping { 
@@ -198,10 +199,10 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
 
 #[rustfmt::skip]
 pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> {
-	let params_pipe = os_pipe::pipe().unwrap();
+	let params_pipe = os_pipe::pipe().expect("params pipe");
     let params_fd = agent_params(&params_pipe.0, &params_pipe.1, &params, metadata)?;	
-    let sec_pipe = os_pipe::pipe().unwrap();
-    let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).unwrap();
+    let sec_pipe = os_pipe::pipe().expect("eBPF pipe");
+    let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).expect("eBPF program");
 	let fd_mappings = vec![
 		FdMapping { 
 		    parent_fd: sec_fd, 

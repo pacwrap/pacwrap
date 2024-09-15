@@ -98,6 +98,7 @@ fn engage_aggregator<'a>(
             Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
             Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
+            Op::Long("disable-sandbox") => flags = flags | TransactionFlags::NO_ALPM_SANDBOX,
             Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
             Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
             Op::Short('t') | Op::Long("target") => match args.next() {

@@ -184,6 +184,7 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
             Op::Long("from-config") => continue,
             Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
             Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
+            Op::Long("disable-sandbox") => flags = flags | TransactionFlags::NO_ALPM_SANDBOX,
             Op::Long("reinitialize-all") =>
                 for instance in cache.registered() {
                     if let Some(handle) = cache.get_instance_option(instance) {

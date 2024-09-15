@@ -228,6 +228,13 @@ pub fn sync(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}--noconfirm{reset_bold}
 {tab}{tab}Override confirmation prompts and confirm all operations.
 
+{sub_bold}--disable-sandbox{reset_bold}
+{tab}{tab}Instruct libalpm to disable its own sandbox, utilizing landlock and seccomp, in order to mitigate potential
+{tab}{tab}issues with kernel compatibillity.
+
+{sub_bold}--debug{reset_bold}
+{tab}{tab}Use this option when reporting bugs.
+
 {sub_sect}EXAMPLES{reset_bold}
 {sub}`$ pacwrap init --base --target base`
 {tab}{tab}Synchronize remotes and create a base-type container named `base` with no additional packages.
@@ -294,6 +301,13 @@ pub fn remove(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}--noconfirm{reset_bold}
 {tab}{tab}Override confirmation prompts and confirm all operations.
 
+{sub_bold}--disable-sandbox{reset_bold}
+{tab}{tab}Instruct libalpm to disable its own sandbox, utilizing landlock and seccomp, in order to mitigate potential
+{tab}{tab}issues with kernel compatibillity.
+
+{sub_bold}--debug{reset_bold}
+{tab}{tab}Use this option when reporting bugs.
+
 {sub_sect}EXAMPLES{reset_bold}
 {sub}`$ pacwrap -Rt firefox firefox`
 {tab}{tab}Remove the target package firefox from target container firefox.
@@ -350,6 +364,13 @@ pub fn compose(buf: &mut String, layout: &HelpLayout) -> Result {
 
 {sub_bold}--noconfirm{reset_bold}
 {tab}{tab}Override confirmation prompts and confirm all operations.
+
+{sub_bold}--disable-sandbox{reset_bold}
+{tab}{tab}Instruct libalpm to disable its own sandbox, utilizing landlock and seccomp, in order to mitigate potential
+{tab}{tab}issues with kernel compatibillity.
+
+{sub_bold}--debug{reset_bold}
+{tab}{tab}Use this option when reporting bugs.
 
 {sub_sect}EXAMPLES{reset_bold}
 {sub}`$ pacwrap compose -rt element element.yml`

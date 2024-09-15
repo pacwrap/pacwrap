@@ -99,15 +99,16 @@ pub trait Transaction {
 bitflags! {
     pub struct TransactionFlags: u16 {
         const NONE = 0;
-        const TARGET_ONLY = 0b000000001;
-        const PREVIEW = 0b000000010;
-        const NO_CONFIRM = 0b000000100;
-        const FORCE_DATABASE = 0b000001000;
-        const DATABASE_ONLY = 0b000010000;
-        const CREATE = 0b000100000;
-        const FILESYSTEM_SYNC = 0b001000000;
-        const LAZY_LOAD_DB = 0b010000000;
-        const DEBUG = 0b100000000;
+        const TARGET_ONLY = 0b0000000001;
+        const PREVIEW = 0b0000000010;
+        const NO_CONFIRM = 0b0000000100;
+        const FORCE_DATABASE = 0b0000001000;
+        const DATABASE_ONLY = 0b0000010000;
+        const CREATE = 0b0000100000;
+        const FILESYSTEM_SYNC = 0b0001000000;
+        const LAZY_LOAD_DB = 0b0010000000;
+        const DEBUG = 0b0100000000;
+        const NO_ALPM_SANDBOX = 0b1000000000;
     }
 }
 
