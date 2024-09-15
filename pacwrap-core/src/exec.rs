@@ -142,7 +142,6 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
         .arg("--symlink").arg("usr/lib").arg("/lib64")
         .arg("--symlink").arg("usr/bin").arg("/bin")
         .arg("--symlink").arg("usr/bin").arg("/sbin")
-        .arg("--symlink").arg("usr/etc").arg("/etc")
         .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
         .arg("--dev").arg("/mnt/fs/dev")
         .arg("--unshare-all")
@@ -178,7 +177,7 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
             }
         } else {
             process.arg("--hostname").arg("FakeChroot")
-                .arg("--ro-bind").arg("/etc/resolv.conf").arg("/mnt/fs/etc/resolv.conf")
+                .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
                 .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/fs/etc/pacman.d/gnupg")
                 .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg")
                 .arg("--bind").arg(ins.vars().home()).arg("/mnt/fs/root")
