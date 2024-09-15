@@ -1,0 +1,10 @@
+[Trigger] 
+Operation = Install 
+Operation = Upgrade 
+Type = Package 
+Target = pacman
+
+[Action] 
+Description = Configuring pacman..
+When = PostTransaction 
+Exec = /usr/share/libalpm/scripts/pacwrap-dist pacman

@@ -94,6 +94,7 @@ populate_usr() {
 	ln -s /usr/lib/flatpak-xdg-utils/xdg-email "${DEST_DIR}/usr/local/bin/"
 
     install -Dm 644 "$DIST_SRC/0-pacwrap-dist.hook" "${DEST_DIR}/usr/share/libalpm/hooks/0-pacwrap-dist.hook" 
+    install -Dm 644 "$DIST_SRC/1-pacwrap-dist.hook" "${DEST_DIR}/usr/share/libalpm/hooks/1-pacwrap-dist.hook" 
     install -Dm 644 "$DIST_SRC/42-trust-permission.hook" "${DEST_DIR}/usr/share/libalpm/hooks/42-trust-permission.hook"
     # TODO: Perhaps identify ourselves as our own distribution of Arch Linux?
     # install -Dm 644 "$DIST_SRC/os-release" "${DEST_DIR}/usr/lib/os-release"
