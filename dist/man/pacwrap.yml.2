@@ -1,5 +1,5 @@
 .nh
-.TH pacwrap.yml 2 "21/04/2024" "pacwrap version_string_placeholder" "Pacwrap Configuration Directives"
+.TH pacwrap.yml 2 "14/09/2024" "pacwrap version_string_placeholder" "Pacwrap Configuration Directives"
 
 .SH
 NAME\fR
@@ -127,6 +127,11 @@ a \fBbool\fR.
 \fBparallel_downloads\fR: 1
 Instructs \fBlibalpm\fR(3) to parallelise the download queue with a maximum queue amount. Specify an 
 \fBinteger\fR to declare a maximum value.
+
+.TP
+\fBdisable_sandbox\fR: false
+Instructs \fBlibalpm\fR(3) to disable the landlock and seccomp sandbox for downloads. Specify a
+\fBbool\fR to declare a maximum value.
 
 .SH
 SEE ALSO\fR

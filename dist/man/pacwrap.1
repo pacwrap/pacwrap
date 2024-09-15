@@ -1,5 +1,5 @@
 .nh
-.TH pacwrap 1 "30/04/2024" "pacwrap version_string_placeholder" "User Manual"
+.TH pacwrap 1 "14/09/2024" "pacwrap version_string_placeholder" "User Manual"
 
 .SH
 NAME\fR
@@ -191,6 +191,15 @@ Transact on resident containers with a database-only transaction.
 \fB--noconfirm\fR
 Override confirmation prompts and confirm all operations.
 
+.TP
+\fB--disable-sandbox\fR
+Instruct libalpm to disable its own sandbox, utilizing landlock and seccomp, in order to mitigate potential
+issues with kernel compatibillity.
+
+.TP
+\fB--debug\fR
+Use this option when reporting bugs.
+
 .SS
 EXAMPLES\fR
 .TP
@@ -258,6 +267,15 @@ Transact on resident containers with a database-only transaction.
 \fB--noconfirm\fR
 Override confirmation prompts and confirm all operations.
 
+.TP
+\fB--disable-sandbox\fR
+Instruct libalpm to disable its own sandbox, utilizing landlock and seccomp, in order to mitigate potential
+issues with kernel compatibillity.
+
+.TP
+\fB--debug\fR
+Use this option when reporting bugs.
+
 .SS
 EXAMPLES\fR
 .TP
@@ -312,6 +330,15 @@ pathway to allow composition of dormant, uninitialized container configurations.
 .TP
 \fB--noconfirm\fR
 Override confirmation prompts and confirm all operations.
+
+.TP
+\fB--disable-sandbox\fR
+Instruct libalpm to disable its own sandbox, utilizing landlock and seccomp, in order to mitigate potential
+issues with kernel compatibillity.
+
+.TP
+\fB--debug\fR
+Use this option when reporting bugs.
 
 .SS
 EXAMPLES\fR
