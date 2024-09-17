@@ -171,7 +171,7 @@ fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> 
 pub fn handle_process(name: &'static str, result: std::result::Result<Child, std::io::Error>) -> Result<()> {
     match result {
         Ok(child) => wait_on_process(name, child),
-        Err(error) => err!(ErrorKind::ProcessInitFailure(name.into(), error.kind())),
+        Err(error) => err!(ErrorKind::ProcessInitFailure(name, error.kind())),
     }
 }
 

@@ -24,16 +24,16 @@ fn head() -> String {
     Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()
-        .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
-        .unwrap_or(String::new())
+        .map(|output| String::from_utf8(output.stdout).expect("Invalid UTF-8 value"))
+        .unwrap_or_default()
 }
 
 fn tag() -> String {
     Command::new("git")
         .args(["tag", "--points-at"])
         .output()
-        .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
-        .unwrap_or(String::new())
+        .map(|output| String::from_utf8(output.stdout).expect("Invalid UTF-8 value"))
+        .unwrap_or_default()
 }
 
 fn time(debug: bool) -> String {
@@ -41,13 +41,13 @@ fn time(debug: bool) -> String {
         false => Command::new("git")
             .args(["log", "-1", "--date=format:%d/%m/%Y", "--format=%cd"])
             .output()
-            .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
-            .and_then(|date| Ok(date.is_empty().then(|| mtime()).unwrap_or(date)))
+            .map(|output| String::from_utf8(output.stdout).expect("Invalid UTF-8 value"))
+            .map(|date| date.is_empty().then(mtime).unwrap_or(date))
             .unwrap_or(mtime()),
         true => Command::new("date")
             .args(["+%d/%m/%Y %T%:z"])
             .output()
-            .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
+            .map(|output| String::from_utf8(output.stdout).expect("Invalid UTF-8 value"))
             .expect("'date': executable not found in PATH"),
     }
 }
@@ -57,7 +57,7 @@ fn mtime() -> String {
         .args(["+%d/%m/%Y", "--utc", "--date"])
         .arg(format!("@{}", Path::new(".").metadata().expect("Metadata expected for src directory").mtime()))
         .output()
-        .and_then(|output| Ok(String::from_utf8(output.stdout).expect("Invalid UTF-8 value")))
+        .map(|output| String::from_utf8(output.stdout).expect("Invalid UTF-8 value"))
         .expect("'date': executable not found in PATH")
 }
 

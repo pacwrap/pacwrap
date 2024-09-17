@@ -41,10 +41,10 @@ impl ContainerVariables {
         Self {
             home: var("PACWRAP_HOME").unwrap_or(format!("{}/home/{ins}", *DATA_DIR)),
             root: var("PACWRAP_ROOT").unwrap_or(format!("{}/root/{ins}", *DATA_DIR)),
-            config: format!("{}/container/{ins}.yml", *CONFIG_DIR).into(),
-            pacman_gnupg: format!("{}/pacman/gnupg", *DATA_DIR).into(),
-            pacman_cache: format!("{}/pkg", *CACHE_DIR).into(),
-            home_mount: format!("/home/{ins}").into(),
+            config: format!("{}/container/{ins}.yml", *CONFIG_DIR),
+            pacman_gnupg: format!("{}/pacman/gnupg", *DATA_DIR),
+            pacman_cache: format!("{}/pkg", *CACHE_DIR),
+            home_mount: format!("/home/{ins}"),
             user: ins.into(),
             instance: ins.into(),
         }

@@ -35,7 +35,7 @@ use pacwrap_core::{
 
 use crate::utils::delete::remove_containers;
 
-pub fn remove(mut args: &mut Arguments) -> Result<()> {
+pub fn remove(args: &mut Arguments) -> Result<()> {
     check_root()?;
     init()?;
 
@@ -46,7 +46,7 @@ pub fn remove(mut args: &mut Arguments) -> Result<()> {
     let mut logger = Logger::new("pacwrap-sync").init().unwrap();
     let action = action(args);
     let lock = Lock::new().lock()?;
-    let result = engage_aggregator(action, &mut args, &mut logger, &lock);
+    let result = engage_aggregator(action, args, &mut logger, &lock);
 
     if let Err(error) = lock.unlock() {
         error.error();
@@ -59,7 +59,7 @@ fn action(args: &mut Arguments) -> TransactionType {
     let mut recursive = 0;
     let mut cascade = false;
 
-    while let Some(arg) = args.next() {
+    for arg in args.by_ref() {
         match arg {
             Op::Short('s') | Op::Long("recursive") => recursive += 1,
             Op::Short('c') | Op::Long("cascade") => cascade = true,
@@ -94,13 +94,13 @@ fn engage_aggregator<'a>(
             | Op::Short('R')
             | Op::Short('c')
             | Op::Short('s') => continue,
-            Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
-            Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
-            Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
-            Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
-            Op::Long("disable-sandbox") => flags = flags | TransactionFlags::NO_ALPM_SANDBOX,
-            Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
-            Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
+            Op::Long("debug") => flags |= TransactionFlags::DEBUG,
+            Op::Long("dbonly") => flags |= TransactionFlags::DATABASE_ONLY,
+            Op::Long("noconfirm") => flags |= TransactionFlags::NO_CONFIRM,
+            Op::Long("force-foreign") => flags |= TransactionFlags::FORCE_DATABASE,
+            Op::Long("disable-sandbox") => flags |= TransactionFlags::NO_ALPM_SANDBOX,
+            Op::Short('p') | Op::Long("preview") => flags |= TransactionFlags::PREVIEW,
+            Op::Short('f') | Op::Long("filesystem") => flags |= TransactionFlags::FILESYSTEM_SYNC,
             Op::Short('t') | Op::Long("target") => match args.next() {
                 Some(arg) => match arg {
                     Op::ShortPos('t', target) | Op::LongPos("target", target) => {
@@ -128,14 +128,14 @@ fn engage_aggregator<'a>(
         }
     }
 
-    if let None = current_target {
+    if current_target.is_none() {
         err!(TargetUnspecified)?
     }
 
-    Ok(TransactionAggregator::new(&cache, log, action_type)
+    TransactionAggregator::new(&cache, log, action_type)
         .assert_lock(lock)?
         .target(Some(targets))
         .flag(flags)
         .queue(queue)
-        .aggregate()?)
+        .aggregate()
 }

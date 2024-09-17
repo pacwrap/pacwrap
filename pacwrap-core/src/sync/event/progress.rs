@@ -41,6 +41,12 @@ pub struct ProgressEvent {
     bars: HashMap<String, ProgressBar>,
 }
 
+impl Default for ProgressEvent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProgressEvent {
     pub fn new() -> Self {
         Self {
@@ -113,7 +119,7 @@ pub fn simple(kind: Event, pkgname: &str, _: i32, howmany: usize, current: usize
         }
     }
 
-    if let None = this.current.as_deref() {
+    if this.current.as_deref().is_none() {
         let pos = current + this.offset;
         let total = howmany + this.offset;
         let progress_name: String = name(kind, pkgname);
@@ -165,11 +171,11 @@ fn name(progress: Event, pkgname: &str) -> String {
         Event::RemoveStart => format!("Removing {}", pkgname),
         Event::DowngradeStart => format!("Downgrading {}", pkgname),
         Event::ReinstallStart => format!("Reinstalling {}", pkgname),
-        Event::KeyringStart => format!("Loading keyring"),
-        Event::IntegrityStart => format!("Checking integrity"),
-        Event::LoadStart => format!("Loading packages"),
-        Event::ConflictsStart => format!("Checking conflicts"),
-        Event::DiskspaceStart => format!("Checking available diskspace"),
+        Event::KeyringStart => "Loading keyring".into(),
+        Event::IntegrityStart => "Checking integrity".into(),
+        Event::LoadStart => "Loading packages".into(),
+        Event::ConflictsStart => "Checking conflicts".into(),
+        Event::DiskspaceStart => "Checking available diskspace".into(),
     }
 }
 

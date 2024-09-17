@@ -30,6 +30,7 @@ use crate::{
     Result,
 };
 
+#[derive(Debug)]
 pub struct UpToDate;
 
 impl Transaction for UpToDate {
@@ -53,5 +54,9 @@ impl Transaction for UpToDate {
         }
 
         Ok(Skip)
+    }
+
+    fn debug(&self) -> String {
+        format!("{self:?}")
     }
 }

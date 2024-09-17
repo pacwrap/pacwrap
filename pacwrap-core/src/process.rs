@@ -62,11 +62,11 @@ impl ProcessList {
         self.list.iter().map(|a| a.1).collect()
     }
 
-    pub fn filter_by_target(&self, targets: &Vec<&str>) -> Vec<&Process> {
+    pub fn filter_by_target(&self, targets: &[&str]) -> Vec<&Process> {
         self.list.iter().filter(|a| targets.contains(&a.1.instance())).map(|a| a.1).collect()
     }
 
-    pub fn filter_by_pid(&self, targets: &Vec<i32>) -> Vec<&Process> {
+    pub fn filter_by_pid(&self, targets: &[i32]) -> Vec<&Process> {
         self.list.iter().filter(|a| targets.contains(&a.1.pid())).map(|a| a.1).collect()
     }
 
@@ -102,7 +102,7 @@ impl Process {
 
     pub fn exec(&self) -> &str {
         match self.cmd[0].char_indices().filter(|c| c.1 == '/').last() {
-            Some((index, ..)) => &self.cmd[0].split_at(index + 1).1,
+            Some((index, ..)) => self.cmd[0].split_at(index + 1).1,
             None => &self.cmd[0],
         }
     }
@@ -140,7 +140,7 @@ impl Process {
 
 impl ProcStat {
     fn new(pid: i32) -> Option<Self> {
-        let stat = match File::open(&format!("/proc/{}/stat", pid)) {
+        let stat = match File::open(format!("/proc/{}/stat", pid)) {
             Ok(file) => file,
             Err(_) => return None,
         };
@@ -196,7 +196,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
         match groups.get_mut(&ins) {
             Some(vec) => vec.push(pid),
             None => {
-                if let None = cache.get_instance_option(&ins) {
+                if cache.get_instance_option(&ins).is_none() {
                     print_warning(&format!("Container {ins} doesn't exist."));
                 }
 
@@ -229,7 +229,7 @@ fn procfs_meta(e: DirEntry) -> Result<Option<(OsString, u64)>, Box<dyn StdError>
 }
 
 fn cmdlist(pid: i32) -> Option<Vec<String>> {
-    let list = match File::open(&format!("/proc/{}/cmdline", pid)) {
+    let list = match File::open(format!("/proc/{}/cmdline", pid)) {
         Ok(file) => file,
         Err(_) => return None,
     };
@@ -271,7 +271,7 @@ fn cmdlist(pid: i32) -> Option<Vec<String>> {
     Some(cmdlist)
 }
 
-fn qualify_process(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32, Process>) -> Option<(String, u32, bool)> {
+fn qualify_process(cmdlist: &[String], parent_id: i32, map: &IndexMap<i32, Process>) -> Option<(String, u32, bool)> {
     if let Some(some) = map.get(&parent_id) {
         return Some((some.instance().into(), some.depth + 1, some.fork()));
     } else if cmdlist[0] == "pacwrap" {
@@ -279,7 +279,7 @@ fn qualify_process(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32, Pr
             if cmdlist[idx].contains("-E") || cmdlist[idx].contains("run") || cmdlist[idx].contains("shell") {
                 let mut pos = 0;
 
-                for idx in 1 .. cmdlist.len() {
+                for (idx, ..) in cmdlist.iter().enumerate().skip(1) {
                     if cmdlist[idx].starts_with("-") || cmdlist[idx] == "run" || cmdlist[idx] == "shell" {
                         continue;
                     }
@@ -299,7 +299,7 @@ fn qualify_process(cmdlist: &Vec<String>, parent_id: i32, map: &IndexMap<i32, Pr
         }
     } else if cmdlist[0] == "bwrap" {
         for idx in 0 .. cmdlist.len() {
-            if !cmdlist[idx].contains(&"--ro-bind") && !cmdlist[idx].contains("--bind") {
+            if !cmdlist[idx].contains("--ro-bind") && !cmdlist[idx].contains("--bind") {
                 continue;
             }
 

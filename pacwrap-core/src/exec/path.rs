@@ -28,8 +28,8 @@ use crate::{
     Result,
 };
 
-pub fn check_path(ins: &ContainerHandle, args: &Vec<&str>, path: Vec<&str>) -> Result<()> {
-    if let (Slice, true) = (ins.metadata().container_type(), args.len() > 0) {
+pub fn check_path(ins: &ContainerHandle, args: &[&str], path: Vec<&str>) -> Result<()> {
+    if let (Slice, true) = (ins.metadata().container_type(), !args.is_empty()) {
         if dest_exists(*DIST_IMG, "/bin", args[0])? {
             return Ok(());
         }
@@ -37,7 +37,7 @@ pub fn check_path(ins: &ContainerHandle, args: &Vec<&str>, path: Vec<&str>) -> R
         err!(ExecutionError::ExecutableUnavailable(args[0].into()))?
     }
 
-    if args.len() == 0 {
+    if args.is_empty() {
         err!(ExecutionError::RuntimeArguments)?
     }
 
@@ -82,7 +82,7 @@ fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool> {
 }
 
 fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf> {
-    match Path::canonicalize(&path) {
+    match Path::canonicalize(path) {
         Ok(path) => Ok(path),
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),

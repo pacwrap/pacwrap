@@ -52,7 +52,7 @@ pub fn print_error(message: &str) {
 }
 
 pub fn check_socket(socket: &String) -> bool {
-    UnixStream::connect(&Path::new(socket)).is_ok()
+    UnixStream::connect(Path::new(socket)).is_ok()
 }
 
 pub fn unix_time_as_seconds() -> u64 {

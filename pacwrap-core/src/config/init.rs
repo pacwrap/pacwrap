@@ -28,8 +28,8 @@ use crate::{
     Result,
 };
 
-static REPO_CONF_DEFAULT: &'static str = include_str!(env!("PACWRAP_DIST_REPO_CONF"));
-static PACWRAP_CONF_DEFAULT: &'static str = include_str!(env!("PACWRAP_DIST_CONF"));
+static REPO_CONF_DEFAULT: &str = include_str!(env!("PACWRAP_DIST_REPO_CONF"));
+static PACWRAP_CONF_DEFAULT: &str = include_str!(env!("PACWRAP_DIST_CONF"));
 
 pub struct DirectoryLayout {
     dirs: Vec<&'static str>,
@@ -80,7 +80,7 @@ fn initialize_file(location: &str, contents: &str) -> Result<()> {
         return Ok(());
     }
 
-    let mut f = match File::create(&location) {
+    let mut f = match File::create(location) {
         Ok(f) => f,
         Err(error) => err!(ErrorKind::IOError(location.into(), error.kind()))?,
     };

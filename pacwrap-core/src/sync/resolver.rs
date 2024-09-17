@@ -61,11 +61,11 @@ impl<'a> DependencyResolver<'a> {
         let mut synchronize: Vec<&'a str> = Vec::new();
 
         for pkg in packages {
-            if let Some(_) = self.resolved.get(pkg) {
+            if self.resolved.contains(*pkg) {
                 continue;
             }
 
-            if let Some(_) = self.ignored.get(*pkg) {
+            if self.ignored.contains(*pkg) {
                 continue;
             }
 
@@ -76,26 +76,23 @@ impl<'a> DependencyResolver<'a> {
                     pkg.depends()
                         .iter()
                         .filter_map(|p| match self.handle.get_local_package(p.name()) {
-                            None => match self.handle.get_package(p.name()) {
-                                Some(dep) => Some(dep.name()),
-                                None => None,
-                            },
+                            None => self.handle.get_package(p.name()).map(|dep| dep.name()),
                             Some(_) => None,
                         })
                         .collect::<Vec<&str>>(),
                 );
 
                 if self.depth > 0 {
-                    self.keys.push(pkg.name().into());
+                    self.keys.push(pkg.name());
                 }
             }
         }
 
-        if synchronize.len() > 0 {
+        if !synchronize.is_empty() {
             self.check_depth()?;
             self.enumerate(&synchronize)
         } else {
-            let keys = if self.keys.len() > 0 {
+            let keys = if !self.keys.is_empty() {
                 Some(self.keys.iter().map(|a| (*a).into()).collect())
             } else {
                 None

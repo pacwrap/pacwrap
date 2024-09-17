@@ -36,9 +36,9 @@ pub fn link(args: &mut Arguments) -> Result<()> {
     while let Some(arg) = args.next() {
         match arg {
             Operand::Value(val) | Operand::ShortPos(_, val) | Operand::LongPos(_, val) =>
-                if let None = dest {
+                if dest.is_none() {
                     dest = Some(val);
-                } else if let None = src {
+                } else if src.is_none() {
                     src = Some(val);
                 } else {
                     args.invalid_operand()?;

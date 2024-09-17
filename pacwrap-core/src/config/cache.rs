@@ -35,6 +35,12 @@ pub struct ContainerCache<'a> {
     instances: IndexMap<&'a str, ContainerHandle<'a>>,
 }
 
+impl<'a> Default for ContainerCache<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> ContainerCache<'a> {
     pub fn new() -> Self {
         Self {
@@ -43,37 +49,40 @@ impl<'a> ContainerCache<'a> {
     }
 
     pub fn add(&mut self, ins: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<()> {
-        if let Some(_) = self.instances.get(ins) {
+        if self.instances.get(ins).is_some() {
             err!(ConfigError::AlreadyExists(ins.into()))?
         }
 
         for dep in deps.iter() {
-            if let None = self.instances.get(dep) {
+            if self.instances.get(dep).is_none() {
                 err!(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
             }
         }
 
-        Ok(self.register(ins, provide_new_handle(ins, instype, deps.iter().map(|a| (*a).into()).collect())?))
+        self.register(ins, provide_new_handle(ins, instype, deps.to_vec())?);
+        Ok(())
     }
 
     pub fn replace(&mut self, ins: &'a str, handle: ContainerHandle<'a>) -> Result<()> {
-        Ok(self.register(ins, handle.default_vars()))
+        self.register(ins, handle.default_vars());
+        Ok(())
     }
 
     pub fn add_handle(&mut self, ins: &'a str, handle: ContainerHandle<'a>) -> Result<()> {
-        if let Some(_) = self.instances.get(ins) {
+        if self.instances.get(ins).is_some() {
             err!(ConfigError::AlreadyExists(ins.into()))?
         }
 
-        Ok(self.register(ins, handle.default_vars()))
+        self.register(ins, handle.default_vars());
+        Ok(())
     }
 
     fn map(&mut self, ins: &'a str) -> Result<()> {
-        if let Some(_) = self.instances.get(ins) {
+        if self.instances.get(ins).is_some() {
             err!(ConfigError::AlreadyExists(ins.to_owned()))?
         }
 
-        Ok(self.register(
+        self.register(
             ins,
             match provide_handle(ins) {
                 Ok(ins) => ins,
@@ -82,7 +91,8 @@ impl<'a> ContainerCache<'a> {
                     return Ok(());
                 }
             },
-        ))
+        );
+        Ok(())
     }
 
     fn register(&mut self, ins: &'a str, handle: ContainerHandle<'a>) {
@@ -97,7 +107,7 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().map(|a| a.1).collect()
     }
 
-    pub fn filter_target(&'a self, target: &Vec<&'a str>, filter: Vec<ContainerType>) -> Vec<&'a str> {
+    pub fn filter_target(&'a self, target: &[&'a str], filter: Vec<ContainerType>) -> Vec<&'a str> {
         self.instances
             .iter()
             .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
@@ -105,7 +115,7 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn filter_target_handle(&'a self, target: &Vec<&'a str>, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+    pub fn filter_target_handle(&'a self, target: &[&'a str], filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
         self.instances
             .iter()
             .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
@@ -152,11 +162,11 @@ impl<'a> ContainerCache<'a> {
     }
 }
 
-pub fn populate_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>> {
+pub fn populate_from<'a>(vec: &[&'a str]) -> Result<ContainerCache<'a>> {
     let mut cache = ContainerCache::new();
 
     for name in vec {
-        cache.map(&name)?;
+        cache.map(name)?;
     }
 
     Ok(cache)
@@ -166,7 +176,7 @@ pub fn populate_config_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>
     let mut cache = ContainerCache::new();
 
     for name in vec {
-        cache.add_handle(&name, handle(ContainerVariables::new(name))?)?;
+        cache.add_handle(name, handle(ContainerVariables::new(name))?)?;
     }
 
     Ok(cache)
@@ -178,14 +188,14 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
             .prepend_io(|| CONTAINER_DIR.to_string())?
             .filter_map(StdResult::ok)
             .filter(|e| e.metadata().is_ok_and(|f| f.is_dir() || f.is_symlink()))
-            .filter_map(|e| e.file_name().to_str().and_then(|f| Some(f.to_string().leak() as &'a str)))
-            .collect(),
+            .filter_map(|e| e.file_name().to_str().map(|f| f.to_string().leak() as &'a str))
+            .collect::<Vec<&str>>(),
     )
 }
 
 pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
     populate_config_from(
-        &read_dir(&format!("{}/container", *CONFIG_DIR))
+        &read_dir(format!("{}/container", *CONFIG_DIR))
             .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
             .filter_map(StdResult::ok)
             .filter(|e| e.metadata().is_ok_and(|f| f.is_file() && !f.is_symlink()))

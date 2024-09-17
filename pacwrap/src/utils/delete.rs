@@ -83,7 +83,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
 
     if instances.len() != targets.len() {
         for target in &targets {
-            if !instances.contains(&target) {
+            if !instances.contains(target) {
                 err!(ErrorKind::InstanceNotFound(target.to_string()))?;
             }
         }
@@ -91,7 +91,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
 
     let lock = Lock::new().lock()?;
 
-    if let (true, _) | (_, Ok(_)) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
+    if let (true, _) | (_, true) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
         if let Err(err) = delete_roots(&cache, &lock, &mut logger, &instances, force) {
             err.error();
         }
@@ -100,18 +100,12 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
     lock.unlock()
 }
 
-pub fn delete_roots(
-    cache: &ContainerCache<'_>,
-    lock: &Lock,
-    logger: &mut Logger,
-    targets: &Vec<&str>,
-    force: bool,
-) -> Result<()> {
-    let process = process::list(&cache)?;
-    let processes = process.filter_by_target(&targets);
-    let containers = cache.filter_target_handle(&targets, vec![]);
+pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger, targets: &[&str], force: bool) -> Result<()> {
+    let process = process::list(cache)?;
+    let processes = process.filter_by_target(targets);
+    let containers = cache.filter_target_handle(targets, vec![]);
 
-    if processes.len() > 0 && !force {
+    if !processes.is_empty() && !force {
         for process in processes {
             err!(DeleteError::ContainerRunning(process.instance().to_string()))?;
         }

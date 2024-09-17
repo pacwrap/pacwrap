@@ -59,7 +59,7 @@ impl<'a> TryFrom<ContainerShadow<'a>> for Container<'a> {
     type Error = &'static str;
 
     fn try_from(value: ContainerShadow<'a>) -> StdResult<Self, Self::Error> {
-        if value.metadata.container_type == ContainerType::Base && value.metadata.dependencies.len() > 0 {
+        if value.metadata.container_type == ContainerType::Base && !value.metadata.dependencies.is_empty() {
             Err("Dependencies cannot be specified for Base type containers.")?;
         }
 
@@ -166,6 +166,12 @@ pub struct ContainerRuntime {
     permissions: Vec<Box<dyn Permission>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     dbus: Vec<Box<dyn Dbus>>,
+}
+
+impl Default for ContainerRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContainerRuntime {

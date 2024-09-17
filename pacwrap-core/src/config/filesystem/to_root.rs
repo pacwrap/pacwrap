@@ -47,18 +47,16 @@ struct Mount {
 #[typetag::serde(name = "to_root")]
 impl Filesystem for ToRoot {
     fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
-        if self.mounts.len() == 0 {
-            Err(BindError::Warn(format!("Mount volumes undeclared.")))?
+        if self.mounts.is_empty() {
+            Err(BindError::Warn("Mount volumes undeclared.".into()))?
         }
 
         for m in self.mounts.iter() {
-            if m.path.len() == 0 {
-                Err(BindError::Warn(format!("Mount volumes undeclared.")))?
+            if m.path.is_empty() {
+                Err(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
-            if let Err(e) = check_mount(&m.permission, &m.path) {
-                return Err(e);
-            }
+            check_mount(&m.permission, &m.path)?
         }
 
         Ok(())
@@ -95,7 +93,7 @@ fn check_mount(permission: &String, path: &String) -> Result<(), BindError> {
     }
 
     if !Path::new(path).exists() {
-        Err(BindError::Fail(format!("Source path not found.")))?
+        Err(BindError::Fail("Source path not found.".into()))?
     }
 
     Ok(())

@@ -49,7 +49,7 @@ use pacwrap_core::{
 
 use crate::error::AgentError;
 
-const AGENT_PARAMS: &'static str = "/mnt/agent_params";
+const AGENT_PARAMS: &str = "/mnt/agent_params";
 
 pub fn transact() -> Result<()> {
     let mut header = ByteBuffer::with_capacity(7).read();
@@ -96,10 +96,10 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
     let files = agent.files();
 
     if let Err(error) = handle.alpm_mut().trans_init(flags.1.unwrap()) {
-        err!(SyncError::InitializationFailure(error.to_string().into()))?
+        err!(SyncError::InitializationFailure(error.to_string()))?
     }
 
-    handle.ignore();
+    handle.ignore(&mut None);
 
     if let TransactionType::Upgrade(upgrade, downgrade, _) = action {
         if upgrade {

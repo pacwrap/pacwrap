@@ -36,8 +36,8 @@ pub struct Dir {
 #[typetag::serde(name = "dir")]
 impl Filesystem for Dir {
     fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
-        if self.path.len() == 0 {
-            Err(BindError::Fail(format!("Path not specified.")))?
+        if self.path.is_empty() {
+            Err(BindError::Fail("Path not specified.".into()))?
         }
 
         Ok(())

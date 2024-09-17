@@ -64,11 +64,11 @@ impl<'a> LocalDependencyResolver<'a> {
         let mut synchronize: Vec<&'a str> = Vec::new();
 
         for pkg in packages {
-            if let Some(_) = self.resolved.get(pkg) {
+            if self.resolved.contains(*pkg) {
                 continue;
             }
 
-            if let Some(_) = self.ignored.get(*pkg) {
+            if self.ignored.contains(*pkg) {
                 continue;
             }
 
@@ -79,7 +79,7 @@ impl<'a> LocalDependencyResolver<'a> {
                         continue;
                     }
 
-                    if let Some(_) = pkg.required_by().iter().find(|p| self.resolved.get(p).is_none()) {
+                    if pkg.required_by().iter().any(|p| self.resolved.contains(p)) {
                         continue;
                     }
                 }
@@ -98,14 +98,14 @@ impl<'a> LocalDependencyResolver<'a> {
                 }
 
                 for package in self.handle.localdb().pkgs() {
-                    if let Some(_) = package.depends().iter().find_map(|d| self.resolved.get(d.name())) {
+                    if package.depends().iter().find_map(|d| self.resolved.get(d.name())).is_some() {
                         synchronize.push(package.name());
                     }
                 }
             }
         }
 
-        if synchronize.len() > 0 && self.flags.0 {
+        if !synchronize.is_empty() && self.flags.0 {
             self.check_depth()?;
             self.enumerate(&synchronize)
         } else {

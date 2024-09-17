@@ -181,6 +181,12 @@ impl AlpmConfiguration {
     }
 }
 
+impl Default for Global {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Global {
     fn load() -> Self {
         match config() {
@@ -205,7 +211,7 @@ impl Global {
     }
 
     pub fn save(&self) -> Result<()> {
-        save(&self, &*CONFIG_FILE)
+        save(&self, &CONFIG_FILE)
     }
 }
 

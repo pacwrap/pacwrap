@@ -79,12 +79,6 @@ impl Display for ConfigError {
     }
 }
 
-impl From<ConfigError> for String {
-    fn from(value: ConfigError) -> Self {
-        value.into()
-    }
-}
-
 pub fn provide_handle(instance: &str) -> Result<ContainerHandle> {
     let vars = ContainerVariables::new(instance);
 
@@ -115,13 +109,11 @@ pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: V
             Ok(handle.create())
         }
         Err(err) => {
-            if let Ok(err) = err.downcast::<ConfigError>() {
-                if let ConfigError::ConfigNotFound(..) = err {
-                    let cfg = Container::new(instype, deps, vec![]);
-                    let vars = ContainerVariables::new(instance);
+            if let Ok(ConfigError::ConfigNotFound(..)) = err.downcast::<ConfigError>() {
+                let cfg = Container::new(instype, deps, vec![]);
+                let vars = ContainerVariables::new(instance);
 
-                    return Ok(ContainerHandle::new(cfg, vars).create());
-                }
+                return Ok(ContainerHandle::new(cfg, vars).create());
             }
 
             Err(err)?

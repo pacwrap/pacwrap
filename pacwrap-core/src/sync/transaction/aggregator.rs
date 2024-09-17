@@ -34,7 +34,7 @@ use crate::{
     error,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
     lock::{Lock, LockError},
-    log::Logger,
+    log::{Level, Logger},
     sync::{
         self,
         filesystem::{validate_fs_states, FilesystemSync},
@@ -55,10 +55,10 @@ use crate::{
 };
 
 lazy_static! {
-    pub static ref BAR_CYAN_STYLE: ProgressStyle = ProgressStyle::with_template(&("{spinner:.bold.cyan} {msg}"))
+    pub static ref BAR_CYAN_STYLE: ProgressStyle = ProgressStyle::with_template("{spinner:.bold.cyan} {msg}")
         .unwrap()
         .tick_strings(&["::", ":.", ".:", "::"]);
-    pub static ref BAR_GREEN_STYLE: ProgressStyle = ProgressStyle::with_template(&("{spinner:.bold.green} {msg}"))
+    pub static ref BAR_GREEN_STYLE: ProgressStyle = ProgressStyle::with_template("{spinner:.bold.green} {msg}")
         .unwrap()
         .tick_strings(&["::", ":.", ".:", "::"]);
 }
@@ -108,6 +108,10 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn flag(mut self, flags: TransactionFlags) -> Self {
+        if flags.intersects(TransactionFlags::DEBUG) {
+            self.logger.set_verbosity(4);
+        }
+
         self.flags = flags;
         self
     }
@@ -185,7 +189,7 @@ impl<'a> TransactionAggregator<'a> {
         }
 
         if are_downstream {
-            if !preview && (filesystem_sync || self.updated.len() > 0) {
+            if !preview && (filesystem_sync || !self.updated.is_empty()) {
                 linker.filesystem_state();
                 linker.prepare(self.cache.registered().len(), self.progress.as_ref());
                 linker.engage(&self.cache.registered())?;
@@ -203,7 +207,7 @@ impl<'a> TransactionAggregator<'a> {
         Ok(())
     }
 
-    pub fn transaction(&mut self, containers: &Vec<&'a str>) -> Result<()> {
+    pub fn transaction(&mut self, containers: &[&'a str]) -> Result<()> {
         for ins in containers.iter() {
             if self.queried.contains(ins) {
                 continue;
@@ -222,8 +226,8 @@ impl<'a> TransactionAggregator<'a> {
                     .dependencies()
                     .iter()
                     .filter(|a| containers.contains(a))
-                    .map(|a| *a)
-                    .collect(),
+                    .copied()
+                    .collect::<Vec<&str>>(),
             )?;
             self.transact(inshandle)?;
         }
@@ -241,7 +245,7 @@ impl<'a> TransactionAggregator<'a> {
             None => Vec::new(),
         };
 
-        let alpm = sync::instantiate_alpm(&inshandle, &self.flags());
+        let alpm = sync::instantiate_alpm(inshandle, self.flags());
         let mut meta = TransactionMetadata::new(queue);
         let mut handle = TransactionHandle::new(&mut meta).alpm_handle(alpm);
         let mut act: Box<dyn Transaction> = Prepare.from(self);
@@ -250,30 +254,33 @@ impl<'a> TransactionAggregator<'a> {
         self.action().begin_message(inshandle, self.progress.as_ref());
 
         loop {
+            self.logger().log(Level::Debug, &format!("Transaction state: {}", act.debug()))?;
             act = match act.engage(self, &mut handle, inshandle) {
-                Ok(result) => {
+                Ok(state) => {
                     self.signal(&mut handle.alpm)?;
 
-                    if let Skip = result {
+                    if let Skip = state {
+                        self.logger().log(Level::Debug, &format!("Transaction state: {}", act.debug()))?;
                         handle.release();
                         return Ok(());
-                    } else if let Complete(updated) = result {
+                    } else if let Complete(updated) = state {
                         if updated {
                             self.updated.insert(inshandle.vars().instance());
 
-                            if let Some(_) = &self.progress {
+                            if self.progress.is_some() {
                                 println!();
                             }
                         }
 
+                        self.logger().log(Level::Debug, &format!("Transaction state: {}", act.debug()))?;
                         self.tracted = !updated;
                         handle.release();
                         return Ok(());
-                    } else if let UpdateSchema(_) = result {
+                    } else if let UpdateSchema(_) = state {
                         self.updated.insert(inshandle.vars().instance());
                     }
 
-                    result
+                    state
                 }
                 Err(err) => {
                     if let Some(progress) = self.progress.as_ref() {
@@ -283,8 +290,14 @@ impl<'a> TransactionAggregator<'a> {
 
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
-                        SyncError::TransactionAgentFailure => exit(err.kind().code()),
-                        _ => Err(err),
+                        SyncError::TransactionAgentFailure => {
+                            self.logger().log(Level::Fatal, &format!("Transaction error: {:?}", err))?;
+                            exit(err.kind().code())
+                        }
+                        _ => {
+                            self.logger().log(Level::Error, &format!("Transaction error: {:?}", err))?;
+                            Err(err)
+                        }
                     };
                 }
             }
@@ -293,25 +306,23 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     fn print_complete(&mut self, filesystem_sync: bool, target_amount: u64, target: Option<&&str>) {
-        if let Some(_) = &self.progress {
+        if self.progress.is_some() {
             let are_multiple = target_amount > 1;
             let flagged = self.flags.intersects(TransactionFlags::PREVIEW | TransactionFlags::CREATE);
             let container = if filesystem_sync && self.queried.is_empty() || flagged || self.tracted {
                 None
             } else if are_multiple {
                 Some("Containers")
-            } else if let Some(target) = target {
-                Some(*target)
             } else {
-                None
+                target.copied()
             };
             let message = if self.updated.is_empty() {
                 container.map_or_else(
-                    || format!("Transaction complete."),
+                    || "Transaction complete.".to_string(),
                     |c| format!("{} {} up-to-date.", c, if are_multiple { "are" } else { "is" }),
                 )
             } else {
-                format!("Transaction complete.")
+                "Transaction complete.".to_string()
             };
 
             println!("{} {}", *ARROW_GREEN, message);
@@ -339,11 +350,11 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn lock(&mut self) -> Result<&Lock> {
-        self.lock.map_or_else(|| err!(LockError::NotAcquired), |f| Ok(f))
+        self.lock.map_or_else(|| err!(LockError::NotAcquired), Ok)
     }
 
     pub fn cache(&self) -> &ContainerCache {
-        &self.cache
+        self.cache
     }
 
     pub fn action(&self) -> &TransactionType {
@@ -367,6 +378,6 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn logger(&mut self) -> &mut Logger {
-        &mut self.logger
+        self.logger
     }
 }

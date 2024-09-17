@@ -164,8 +164,8 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
 
         if let ContainerType::Slice = ins.metadata().container_type() {
             process.arg("--dir").arg("/root")  
-                .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
-                .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
+                .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
+                .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
                 .arg("--dir").arg("/mnt/fs/root") ;
 
             if arguments[0] == "ash" {
@@ -216,8 +216,8 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
 	match Command::new(BWRAP_EXECUTABLE).env_clear()
         .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
         .arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
-        .arg("--ro-bind").arg(&format!("{}/bin", *DIST_IMG)).arg("/bin")
-        .arg("--ro-bind").arg(&format!("{}/lib", *DIST_IMG)).arg("/lib64")
+        .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/bin")
+        .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/lib64")
         .arg("--symlink").arg("lib").arg("/lib")
         .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
         .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 

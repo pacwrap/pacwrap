@@ -46,8 +46,8 @@ use self::SchemaStatus::*;
 static SCHEMA_STATE: OnceLock<SchemaState> = OnceLock::new();
 
 const MAGIC_NUMBER: u32 = 659933704;
-const ARCHIVE_PATH: &'static str = env!("PACWRAP_DIST_FS");
-const SCHEMA_META: &'static str = ".container_schema";
+const ARCHIVE_PATH: &str = env!("PACWRAP_DIST_FS");
+const SCHEMA_META: &str = ".container_schema";
 
 pub enum SchemaStatus {
     UpToDate,
@@ -62,7 +62,7 @@ enum NodeType {
     Other,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SchemaState {
     magic: u32,
     major: u32,
@@ -71,7 +71,7 @@ pub struct SchemaState {
     files: IndexSet<SchemaNode>,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct SchemaNode {
     node_path: String,
     node_type: NodeType,
@@ -160,7 +160,7 @@ pub fn extract(inshandle: &ContainerHandle, old_schema: &Option<SchemaState>) ->
 pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
     let mut header = ByteBuffer::with_capacity(16).read();
     let schema: &str = &format!("{}/{}", inshandle.vars().root(), SCHEMA_META);
-    let mut file = match File::open(&schema) {
+    let mut file = match File::open(schema) {
         Ok(file) => file,
         Err(err) => {
             if err.kind() == std::io::ErrorKind::NotFound {
@@ -223,7 +223,7 @@ fn deserialize() -> Result<SchemaState> {
     let schema = env!("PACWRAP_DIST_META");
     let file = File::open(schema).prepend_io(|| schema.into())?;
 
-    Ok(bincode::deserialize_from::<&File, SchemaState>(&file).prepend(|| format!("Schema deserialization failure '{schema}'"))?)
+    bincode::deserialize_from::<&File, SchemaState>(&file).prepend(|| format!("Schema deserialization failure '{schema}'"))
 }
 
 fn access_archive<'a>(path: &str) -> Result<Archive<Decoder<'a, BufReader<File>>>> {
@@ -232,16 +232,16 @@ fn access_archive<'a>(path: &str) -> Result<Archive<Decoder<'a, BufReader<File>>
 
 fn remove_file(path: &str) -> Result<()> {
     if Path::new(&format!("{}.pacnew", &path)).exists() {
-        fs::remove_file(&path).prepend(|| format!("Failed to remove '{path}'"))?;
+        fs::remove_file(path).prepend(|| format!("Failed to remove '{path}'"))?;
     } else {
-        fs::copy(&format!("{}.pacnew", &path), &path).prepend(|| format!("Failed to copy '{path}'"))?;
+        fs::copy(format!("{}.pacnew", &path), path).prepend(|| format!("Failed to copy '{path}'"))?;
     }
 
     Ok(())
 }
 
 fn remove_symlink(path: &str) -> Result<()> {
-    if let Ok(_) = fs::read_link(path) {
+    if fs::read_link(path).is_ok() {
         fs::remove_file(path).prepend(|| format!("Failed to remove symlink '{path}'"))?;
     }
 
@@ -253,7 +253,7 @@ fn remove_directory(path: &str) -> Result<()> {
         return Ok(());
     }
 
-    fs::remove_dir(&path).prepend(|| format!("Failed to remove directory '{path}'"))
+    fs::remove_dir(path).prepend(|| format!("Failed to remove directory '{path}'"))
 }
 
 fn is_directory_occupied(path: &str) -> Result<bool> {

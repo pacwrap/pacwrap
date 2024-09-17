@@ -30,7 +30,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let pkg_b = x.conflict().package2().name();
             let prompt_string = format!("Conflict between {pkg_a} and {pkg_b}; Remove {pkg_b}?");
 
-            if let Ok(_) = prompt("->", prompt_string, false) {
+            if prompt("->", prompt_string, false) {
                 x.set_remove(true);
             }
         }
@@ -39,7 +39,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let new = x.newpkg().name();
             let prompt_string = format!("Replace package {old} with {new}?");
 
-            if let Ok(_) = prompt("->", prompt_string, false) {
+            if prompt("->", prompt_string, false) {
                 x.set_replace(true);
             }
         }
@@ -49,7 +49,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let reason = x.reason();
             let prompt_string = format!("'{filename}': {reason}. Remove package?");
 
-            if let Ok(_) = prompt("::", prompt_string, true) {
+            if prompt("::", prompt_string, true) {
                 x.set_remove(true);
             }
         }
@@ -58,7 +58,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let name = x.uid();
             let prompt_string = format!("Import key {fingerprint}, \"{name}\" to keyring?");
 
-            if let Ok(_) = prompt("->", prompt_string, true) {
+            if prompt("->", prompt_string, true) {
                 x.set_import(true);
             }
         }

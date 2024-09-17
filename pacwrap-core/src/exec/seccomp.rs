@@ -52,7 +52,7 @@ static ENOSYS: Action = Action::Errno(libc::ENOSYS);
 static PERSONALITY: u64 = if cfg!(target_pointer_width = "64") {
     0x0000
 } else {
-    0x0000 | 0x0800000
+    0x0800000
 };
 
 /*
@@ -66,7 +66,7 @@ static PERSONALITY: u64 = if cfg!(target_pointer_width = "64") {
  *
  * This encumbers a great responsibility upon the user when exercising this great power.
  */
-static RULES: [(FilterType, &'static str, Action); 28] = [
+static RULES: [(FilterType, &str, Action); 28] = [
     (Standard, "syslog", EPERM),
     (Standard, "uselib", EPERM),
     (Standard, "acct", EPERM),
@@ -96,7 +96,7 @@ static RULES: [(FilterType, &'static str, Action); 28] = [
     (Namespaces, "pivot_root", EPERM),
     (Namespaces, "chroot", EPERM),
 ];
-static RULES_COND: [(FilterType, &'static str, Action, Compare); 4] = [
+static RULES_COND: [(FilterType, &str, Action, Compare); 4] = [
     (TtyControl, "ioctl", EPERM, Compare::new(1, Op::MaskedEqual(libc::TIOCLINUX), libc::TIOCLINUX)),
     (TtyControl, "ioctl", EPERM, Compare::new(1, Op::MaskedEqual(libc::TIOCSTI), libc::TIOCSTI)),
     (Namespaces, "clone", EPERM, Compare::new(0, Op::MaskedEqual(libc::CLONE_NEWUSER as u64), libc::CLONE_NEWUSER as u64)),

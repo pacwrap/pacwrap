@@ -68,8 +68,8 @@ impl Display for ErrorKind {
     }
 }
 
-pub fn help(mut args: &mut Arguments) -> Result<()> {
-    let help = ascertain_help(&mut args)?;
+pub fn help(args: &mut Arguments) -> Result<()> {
+    let help = ascertain_help(args)?;
     let mut buffer = String::new();
 
     for topic in help.0 {

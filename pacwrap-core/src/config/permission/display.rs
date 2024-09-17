@@ -59,8 +59,8 @@ impl Permission for Display {
             Err(e) => Err(e)?,
         }
 
-        if let None = bound {
-            Err(Fail(format!("Expected environment variables were not found.")))
+        if bound.is_none() {
+            Err(Fail("Expected environment variables were not found.".into()))
         } else {
             Ok(bound)
         }
@@ -87,7 +87,7 @@ fn validate_wayland_socket() -> Result<Option<Condition>, PermError> {
             Err(Fail(format!("Wayland socket '{}' not found.", &*WAYLAND_SOCKET)))?
         }
 
-        if !check_socket(&*WAYLAND_SOCKET) {
+        if !check_socket(&WAYLAND_SOCKET) {
             Err(Fail(format!("'{}' is not a valid UNIX socket.", &*WAYLAND_SOCKET)))?
         }
 
@@ -103,7 +103,7 @@ fn validate_xorg_socket() -> Result<Option<Condition>, PermError> {
         let xorg_socket = format!("/tmp/.X11-unix/X{}", display[1]);
 
         if XAUTHORITY.is_empty() {
-            Err(Fail(format!("XAUTHORITY environment variable unspecified.")))?
+            Err(Fail("XAUTHORITY environment variable unspecified.".into()))?
         }
 
         if !Path::new(*XAUTHORITY).exists() {

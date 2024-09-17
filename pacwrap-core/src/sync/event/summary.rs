@@ -63,6 +63,12 @@ enum TableColumns {
     Version,
 }
 
+impl Default for Summary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Summary {
     pub fn new() -> Self {
         Self {
@@ -233,7 +239,7 @@ impl Summary {
             pkglist.push_str(&format!("{}-{}{}{} ", pkg.0, *DIM, ver, *RESET));
         }
 
-        write!(fmt, "{}\n", pkglist)?;
+        writeln!(fmt, "{}", pkglist)?;
         self.footer(fmt)
     }
 

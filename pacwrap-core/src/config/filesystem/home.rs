@@ -36,7 +36,7 @@ pub struct Home;
 impl Filesystem for Home {
     fn check(&self, vars: &ContainerVariables) -> Result<(), BindError> {
         if !Path::new(vars.home()).exists() {
-            Err(BindError::Fail(format!("Specified home directory not found.")))?
+            Err(BindError::Fail("Specified home directory not found.".into()))?
         }
         Ok(())
     }

@@ -46,14 +46,14 @@ pub trait AlpmUtils {
 }
 
 impl AlpmUtils for Alpm {
-    fn get_local_package<'a>(&self, pkg: &'a str) -> Option<&Package> {
+    fn get_local_package(&self, pkg: &str) -> Option<&Package> {
         match self.localdb().pkg(pkg) {
             Ok(pkg) => Some(pkg),
             Err(_) => self
                 .localdb()
                 .pkgs()
                 .iter()
-                .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).and_then(|_| Some(f))),
+                .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).map(|_| f)),
         }
     }
 
@@ -62,12 +62,9 @@ impl AlpmUtils for Alpm {
             if let Ok(pkg) = sync.pkg(pkg) {
                 return Some(pkg);
             } else {
-                let package = sync
-                    .pkgs()
-                    .iter()
-                    .find_map(|f| f.provides().iter().find(|d| pkg == d.name()).and_then(|_| Some(f)));
+                let package = sync.pkgs().iter().find_map(|f| f.provides().iter().find(|d| pkg == d.name()).map(|_| f));
 
-                if let None = package {
+                if package.is_none() {
                     continue;
                 }
 
@@ -79,7 +76,7 @@ impl AlpmUtils for Alpm {
     }
 }
 
-pub fn erroneous_transaction<'a>(error: CommitError) -> Result<()> {
+pub fn erroneous_transaction(error: CommitError) -> Result<()> {
     /*
      * Qualify error type to ensure no segfault for error conditions of which are
      * unhandled by the upstream data function provided by the CommitError impl.
@@ -125,7 +122,7 @@ pub fn erroneous_transaction<'a>(error: CommitError) -> Result<()> {
     err!(SyncError::TransactionFailure(error.to_string()))
 }
 
-pub fn erroneous_preparation<'a>(error: PrepareError) -> Result<()> {
+pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
     /*
      * Qualify error type to ensure no segfault for error conditions of which are
      * unhandled by the upstream data function provided by the PrepareError impl.
@@ -193,7 +190,7 @@ pub fn signal_trap() {
     let mut count = 0;
 
     Builder::new()
-        .name(format!("pacwrap-signal"))
+        .name("pacwrap-signal".to_string())
         .spawn(move || {
             for _ in signals.forever() {
                 count += 1;

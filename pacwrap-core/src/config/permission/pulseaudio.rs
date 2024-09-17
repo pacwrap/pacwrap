@@ -41,7 +41,7 @@ struct Pulseaudio {
 impl Permission for Pulseaudio {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         if !Path::new(&self.socket).exists() {
-            Err(Warn(format!("Pulseaudio socket not found.")))?
+            Err(Warn("Pulseaudio socket not found.".into()))?
         }
 
         if !check_socket(&self.socket) {

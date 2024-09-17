@@ -64,7 +64,7 @@ fn action(args: &mut Arguments) -> (TransactionType, bool) {
         (y, u, i) = (1, 1, true);
     }
 
-    while let Some(arg) = args.next() {
+    for arg in args.by_ref() {
         match arg {
             Op::Short('y') | Op::Long("refresh") => y += 1,
             Op::Short('u') | Op::Long("upgrade") => u += 1,
@@ -95,11 +95,11 @@ fn instantiate<'a>(
     }
 
     for (container, (container_type, deps)) in targets.iter() {
-        if let (ContainerType::Base, true) = (container_type, deps.len() > 0) {
+        if let (ContainerType::Base, true) = (container_type, !deps.is_empty()) {
             err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
         } else if let (ContainerType::Aggregate | ContainerType::Slice, true) = (container_type, deps.is_empty()) {
             err!(ErrorKind::Message("Dependencies not specified."))?
-        } else if let Some(_) = cache.get_instance_option(container) {
+        } else if cache.get_instance_option(container).is_some() {
             err!(AlreadyExists(container.to_string()))?;
         }
     }
@@ -145,7 +145,7 @@ fn acquire_targets<'a>(
 }
 
 fn engage_aggregator<'a>(
-    mut cache: &mut ContainerCache<'a>,
+    cache: &mut ContainerCache<'a>,
     log: &'a mut Logger,
     args: &'a mut Arguments,
     lock: &'a Lock,
@@ -167,15 +167,15 @@ fn engage_aggregator<'a>(
     while let Some(arg) = args.next() {
         match arg {
             Op::Short('y') | Op::Short('u') | Op::Long("refresh") | Op::Long("upgrade") => continue,
-            Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
-            Op::Long("dbonly") => flags = flags | TransactionFlags::DATABASE_ONLY,
-            Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
-            Op::Long("force-foreign") => flags = flags | TransactionFlags::FORCE_DATABASE,
-            Op::Long("disable-sandbox") => flags = flags | TransactionFlags::NO_ALPM_SANDBOX,
-            Op::Short('l') | Op::Long("lazy-load") => flags = flags | TransactionFlags::LAZY_LOAD_DB,
-            Op::Short('o') | Op::Long("target-only") => flags = flags | TransactionFlags::TARGET_ONLY,
-            Op::Short('f') | Op::Long("filesystem") => flags = flags | TransactionFlags::FILESYSTEM_SYNC,
-            Op::Short('p') | Op::Long("preview") => flags = flags | TransactionFlags::PREVIEW,
+            Op::Long("debug") => flags |= TransactionFlags::DEBUG,
+            Op::Long("dbonly") => flags |= TransactionFlags::DATABASE_ONLY,
+            Op::Long("noconfirm") => flags |= TransactionFlags::NO_CONFIRM,
+            Op::Long("force-foreign") => flags |= TransactionFlags::FORCE_DATABASE,
+            Op::Long("disable-sandbox") => flags |= TransactionFlags::NO_ALPM_SANDBOX,
+            Op::Short('l') | Op::Long("lazy-load") => flags |= TransactionFlags::LAZY_LOAD_DB,
+            Op::Short('o') | Op::Long("target-only") => flags |= TransactionFlags::TARGET_ONLY,
+            Op::Short('f') | Op::Long("filesystem") => flags |= TransactionFlags::FILESYSTEM_SYNC,
+            Op::Short('p') | Op::Long("preview") => flags |= TransactionFlags::PREVIEW,
             Op::Short('b') | Op::Long("base") => container_type = Some(ContainerType::Base),
             Op::Short('s') | Op::Long("slice") => container_type = Some(ContainerType::Slice),
             Op::Short('a') | Op::Long("aggregate") => container_type = Some(ContainerType::Aggregate),
@@ -215,7 +215,7 @@ fn engage_aggregator<'a>(
 
                         if let (true, Some(container_type)) = (create, container_type) {
                             if let ContainerType::Base = container_type {
-                                queue.insert(target.into(), vec!["base"]);
+                                queue.insert(target, vec!["base"]);
                             }
 
                             create_targets.insert(target, (container_type, vec![]));
@@ -233,7 +233,7 @@ fn engage_aggregator<'a>(
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(current_target) = current_target {
                     if let Some(vec) = queue.get_mut(current_target) {
-                        vec.push(package.into());
+                        vec.push(package);
                     } else {
                         queue.insert(current_target, vec![package]);
                     }
@@ -248,21 +248,21 @@ fn engage_aggregator<'a>(
         print_warning("See `--help sync` or the pacwrap(1) man page for further information.");
     }
 
-    if create_targets.len() > 0 || init {
+    if !create_targets.is_empty() || init {
         if flags.intersects(TransactionFlags::PREVIEW) {
             err!(ErrorKind::Message("Container creation cannot be previewed."))?;
         }
 
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;
         instantiate_trust()?;
-        instantiate(&mut cache, lock, log, &action_type, create_targets)?;
+        instantiate(cache, lock, log, &action_type, create_targets)?;
     }
 
-    Ok(TransactionAggregator::new(cache, log, action_type)
+    TransactionAggregator::new(cache, log, action_type)
         .assert_lock(lock)?
         .target(acquire_targets(cache, &flags, targets)?)
         .queue(queue)
         .flag(flags)
         .progress()
-        .aggregate()?)
+        .aggregate()
 }

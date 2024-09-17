@@ -48,18 +48,16 @@ struct Mount {
 #[typetag::serde(name = "to_home")]
 impl Filesystem for ToHome {
     fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
-        if self.mounts.len() == 0 {
-            Err(BindError::Warn(format!("Mount volumes undeclared.")))?
+        if self.mounts.is_empty() {
+            Err(BindError::Warn("Mount volumes undeclared.".into()))?
         }
 
         for m in self.mounts.iter() {
-            if m.path.len() == 0 {
-                Err(BindError::Warn(format!("Mount volumes undeclared.")))?
+            if m.path.is_empty() {
+                Err(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
-            if let Err(e) = check_mount(&m.permission, &m.path) {
-                return Err(e);
-            }
+            check_mount(&m.permission, &m.path)?
         }
 
         Ok(())

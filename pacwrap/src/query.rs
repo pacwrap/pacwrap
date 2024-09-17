@@ -41,7 +41,7 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = arguments.next() {
         match arg {
-            Operand::Long("debug") => flags = flags | TransactionFlags::DEBUG,
+            Operand::Long("debug") => flags |= TransactionFlags::DEBUG,
             Operand::Long("target") | Operand::Short('t') => continue,
             Operand::Short('e') | Operand::Long("explicit") => explicit = true,
             Operand::Short('q') | Operand::Long("quiet") => quiet = true,

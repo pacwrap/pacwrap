@@ -117,7 +117,7 @@ fn summary(args: &mut Arguments) -> Result<()> {
     let col = (exec > 0, exec > 1 || cmd > 0, (exec > 0) as usize);
     let cache = cache::populate()?;
     let list = process::list(&cache)?;
-    let list: Vec<_> = match instances.len() > 0 {
+    let list: Vec<_> = match !instances.is_empty() {
         true => list
             .list()
             .iter()
@@ -126,10 +126,10 @@ fn summary(args: &mut Arguments) -> Result<()> {
                 false => None,
             })
             .collect(),
-        false => list.list().iter().filter(|a| a.depth() <= max_depth || all).map(|a| *a).collect(),
+        false => list.list().iter().filter(|a| a.depth() <= max_depth || all).copied().collect(),
     };
 
-    if list.len() == 0 {
+    if list.is_empty() {
         err!(ProcError::NotEnumerable)?
     }
 
@@ -141,13 +141,13 @@ fn summary(args: &mut Arguments) -> Result<()> {
     };
     let mut table = if let (true, false, _) | (true, true, _) = col {
         Table::new()
-            .header(&table_header)
+            .header(table_header)
             .col_attribute(0, ColumnAttribute::AlignRight)
             .col_attribute(1, ColumnAttribute::AlignLeftMax(15))
             .col_attribute(2, ColumnAttribute::AlignLeftMax(15))
     } else {
         Table::new()
-            .header(&table_header)
+            .header(table_header)
             .col_attribute(0, ColumnAttribute::AlignRight)
             .col_attribute(1, ColumnAttribute::AlignLeftMax(15))
     };
@@ -188,18 +188,18 @@ fn process_id(args: &mut Arguments) -> Result<()> {
         }
     }
 
-    if instance.len() == 0 && !all {
+    if instance.is_empty() && !all {
         err!(InvalidArgument::TargetUnspecified)?
     }
 
     let cache = cache::populate()?;
     let list = process::list(&cache)?;
     let list: Vec<_> = match all {
-        false => list.list().iter().filter(|a| instance.contains(&a.instance())).map(|a| *a).collect(),
+        false => list.list().iter().filter(|a| instance.contains(&a.instance())).copied().collect(),
         true => list.list(),
     };
 
-    if list.len() == 0 {
+    if list.is_empty() {
         err!(ProcError::NotEnumerable)?
     }
 
@@ -260,7 +260,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
         true => list.list(),
     };
 
-    if list.len() == 0 {
+    if list.is_empty() {
         err!(ProcError::SpecifiedNotEnumerable)?
     }
 
@@ -276,9 +276,9 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     }
 
     let instances: Vec<String> = instances.iter().map(|a| format!("{} ({}{}{})", a.0, *DIM, a.1, *RESET)).collect();
-    let instances = &instances.iter().map(|a| a.as_ref()).collect();
+    let instances: Vec<&str> = instances.iter().map(|a| a.as_ref()).collect();
 
-    match no_confirm || prompt_targets(instances, "Kill container processes?", false).is_ok() {
+    match no_confirm || prompt_targets(&instances, "Kill container processes?", false) {
         true => kill_processes(&list, sigint),
         false => Ok(()),
     }

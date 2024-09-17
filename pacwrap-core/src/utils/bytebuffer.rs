@@ -68,6 +68,12 @@ impl From<Vec<u8>> for ByteBuffer {
     }
 }
 
+impl Default for ByteBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ByteBuffer {
     pub fn new() -> Self {
         Self {
@@ -133,7 +139,7 @@ impl ByteBuffer {
     pub fn write_byte(&mut self, value: u8) {
         self.check_write().unwrap();
         self.reserve_position(1);
-        self.buffer.push(value as u8)
+        self.buffer.push(value)
     }
 
     pub fn read_byte(&mut self) -> u8 {

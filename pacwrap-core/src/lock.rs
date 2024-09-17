@@ -54,6 +54,12 @@ pub struct Lock {
     time: i64,
 }
 
+impl Default for Lock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Lock {
     pub fn new() -> Self {
         Self {
@@ -90,7 +96,7 @@ impl Lock {
     }
 
     pub fn unlock(&self) -> Result<()> {
-        Ok(remove_file(self.lock).prepend(|| format!("Failed to remove lock file '{}'", self.lock))?)
+        remove_file(self.lock).prepend(|| format!("Failed to remove lock file '{}'", self.lock))
     }
 
     pub fn exists(&self) -> bool {

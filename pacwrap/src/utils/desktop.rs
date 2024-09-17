@@ -39,7 +39,7 @@ pub fn file(args: &mut Arguments) -> Result<()> {
         Operand::Short('l') | Operand::Long("list") | Operand::Value("ls") => list_desktop_entries(args),
         Operand::Short('r') | Operand::Long("remove") | Operand::Value("rm") => remove_desktop_entry(args),
         Operand::Short('c') | Operand::Long("create") | Operand::Value("create") => create_desktop_entry(args),
-        _ => return args.invalid_operand(),
+        _ => args.invalid_operand(),
     }
 }
 
@@ -50,7 +50,7 @@ fn list_desktop_entries(args: &mut Arguments) -> Result<()> {
         Ok(instance) => (false, format!("{}/usr/share/applications", provide_handle(instance)?.vars().root())),
         Err(_) => (true, format!("{}/.local/share/applications", *HOME)),
     };
-    let dir = read_dir(&app_dir).prepend_io(|| app_dir.into())?;
+    let dir = read_dir(app_dir).prepend_io(|| app_dir.into())?;
 
     for entry in dir {
         if let Some(file) = entry.prepend(|| format!("Failure acquiring entry in '{app_dir}'"))?.file_name().to_str() {
@@ -69,7 +69,7 @@ fn list_desktop_entries(args: &mut Arguments) -> Result<()> {
 fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
     let target = args.target()?;
     let app_dir = &format!("{}/usr/share/applications", provide_handle(target)?.vars().root());
-    let dir = read_dir(&app_dir).prepend_io(|| app_dir.into())?;
+    let dir = read_dir(app_dir).prepend_io(|| app_dir.into())?;
     let name = &match args.next().unwrap_or_default() {
         Operand::Value(val) | Operand::ShortPos(_, val) | Operand::LongPos(_, val) => val,
         _ => return args.invalid_operand(),
@@ -102,11 +102,11 @@ fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
         .prepend_io(|| desktop_file.into())?;
     contents = Regex::new("Exec=*")
         .unwrap()
-        .replace_all(&mut contents, format!("Exec=pacwrap run {} ", target))
+        .replace_all(&contents, format!("Exec=pacwrap run {} ", target))
         .to_string();
 
     let desktop_file = &format!("{}/.local/share/applications/pacwrap.{}", *HOME, file_name);
-    let mut output = File::create(&desktop_file).prepend_io(|| desktop_file.into())?;
+    let mut output = File::create(desktop_file).prepend_io(|| desktop_file.into())?;
 
     write!(output, "{}", contents).prepend_io(|| desktop_file.into())?;
     eprintln!("{} Created '{}'.", *ARROW_GREEN, file_name);
@@ -115,7 +115,7 @@ fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
 
 fn remove_desktop_entry(args: &mut Arguments) -> Result<()> {
     let app_dir = &format!("{}/.local/share/applications", *HOME);
-    let dir = read_dir(&app_dir).prepend_io(|| app_dir.into())?;
+    let dir = read_dir(app_dir).prepend_io(|| app_dir.into())?;
     let name = &match args.next().unwrap_or_default() {
         Operand::Value(val) | Operand::ShortPos(_, val) | Operand::LongPos(_, val) => val,
         _ => return args.invalid_operand(),
@@ -141,7 +141,7 @@ fn remove_desktop_entry(args: &mut Arguments) -> Result<()> {
     };
     let desktop_file = &format!("{}/.local/share/applications/{}", *HOME, file_name);
 
-    remove_file(&desktop_file).prepend_io(|| desktop_file.into())?;
+    remove_file(desktop_file).prepend_io(|| desktop_file.into())?;
     eprintln!("{} Removed '{file_name}'.", *ARROW_GREEN);
     Ok(())
 }

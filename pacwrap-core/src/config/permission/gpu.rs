@@ -44,16 +44,16 @@ impl Permission for Graphics {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         let gpu_dev = populate_dev().map_err(|f| {
             f.error();
-            Fail(format!("No graphics devices are available."))
+            Fail("No graphics devices are available.".into())
         })?;
         let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
 
         if GPU_DEV.get_or_init(|| gpu_dev).is_empty() {
-            Err(Fail(format!("No graphics devices are available.")))?
+            Err(Fail("No graphics devices are available.".into()))?
         }
 
         if nvidia && !Path::new("/sys/module/nvidia").exists() {
-            return Ok(Some(SuccessWarn(format!("'/sys/module/nvidia': Device module unavailable."))));
+            return Ok(Some(SuccessWarn("'/sys/module/nvidia': Device module unavailable.".into())));
         }
 
         Ok(Some(Success))
@@ -79,8 +79,7 @@ impl Permission for Graphics {
 
 fn populate_dev() -> Result<Vec<String>, Error> {
     Ok(read_dir("/dev/")
-        .prepend_io(|| format!("/dev"))?
-        .into_iter()
+        .prepend_io(|| "/dev".into())?
         .filter_map(|f| {
             f.map_or_else(
                 |_| None,

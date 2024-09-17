@@ -33,6 +33,7 @@ use crate::{
     Result,
 };
 
+#[derive(Debug)]
 pub struct Schema {
     state: TransactionState,
 }
@@ -58,5 +59,9 @@ impl Transaction for Schema {
         println!("{} {instance}'s schema updated.", *CHECKMARK);
         ag.logger().log(Info, &format!("container {instance}'s filesystem schema updated.")).ok();
         Ok(TransactionState::Prepare)
+    }
+
+    fn debug(&self) -> String {
+        format!("{self:?}")
     }
 }

@@ -83,6 +83,12 @@ pub struct Table<'a> {
     built: bool,
 }
 
+impl<'a> Default for Table<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Table<'a> {
     pub fn new() -> Self {
         let width = Term::size(&Term::stdout()).1 as usize;
@@ -101,7 +107,7 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn header(mut self, vec: &'a Vec<&'a str>) -> Self {
+    pub fn header(mut self, vec: &[&'a str]) -> Self {
         self.rows.push(vec.iter().map(|a| a.to_string()).collect());
         self.dimensions = (self.rows.len(), vec.len());
 
@@ -148,7 +154,7 @@ impl<'a> Table<'a> {
     }
 
     pub fn marked(&self) -> bool {
-        self.marker.len() > 0
+        !self.marker.is_empty()
     }
 
     pub fn build(&'a mut self) -> Result<&Self, Error> {
@@ -267,7 +273,7 @@ impl<'a> Display for Table<'a> {
             }
 
             for col in 0 .. self.dimensions.1 {
-                if let None = self.columns.get(col) {
+                if self.columns.get(col).is_none() {
                     continue;
                 }
 
@@ -290,8 +296,8 @@ impl<'a> Display for Table<'a> {
 mod test {
     use super::*;
 
-    static RESULT: &'static str = "[1mLorem              ipsum     dolor                        sit[0m\nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \n";
-    static TEST_DATA: [&'static str; 5] = [
+    static RESULT: &str = "[1mLorem              ipsum     dolor                        sit[0m\nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \nLorem ipsum dolor  sit amet  consectetur adipiscing elit  sed do eiusmod tempor \n";
+    static TEST_DATA: [&str; 5] = [
         "Lorem ipsum dolor",
         "sit amet",
         "consectetur adipiscing elit",

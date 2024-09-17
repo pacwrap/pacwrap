@@ -38,7 +38,7 @@ pub mod list;
 mod edit;
 mod symlink;
 
-const GIO: &'static str = "gio";
+const GIO: &str = "gio";
 
 pub fn engage_utility(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {

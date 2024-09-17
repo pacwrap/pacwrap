@@ -244,11 +244,11 @@ impl<'a> FilesystemSync<'a> {
                     self.linked.insert(ins);
                 }
                 SyncMessage::SaveState(container, fs_state) => {
-                    if let Some(_) = self.state_map.get(&container) {
+                    if self.state_map.contains_key(&container) {
                         continue;
                     }
 
-                    if fs_state.files.len() == 0 {
+                    if fs_state.files.is_empty() {
                         continue;
                     }
 
@@ -295,7 +295,7 @@ impl<'a> FilesystemSync<'a> {
             err!(FilesystemSyncError::MagicMismatch(path.into(), magic))?
         } else if version != VERSION {
             let state = match version {
-                1 => deserialize::<File, FileSystemState>(&instance, file)?,
+                1 => deserialize::<File, FileSystemState>(instance, file)?,
                 _ => err!(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
             };
 
@@ -309,7 +309,7 @@ impl<'a> FilesystemSync<'a> {
             }
 
             let buf_reader = BufReader::new(state_buffer.as_slice());
-            let state = deserialize::<BufReader<&[u8]>, FileSystemState>(&instance, buf_reader)?;
+            let state = deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?;
 
             self.state_map_prev.insert(instance.clone(), Some(state.clone()));
             Ok(Some(state))
@@ -330,14 +330,15 @@ impl<'a> FilesystemSync<'a> {
             err.warn();
         }
 
-        Ok(self.pool()?.spawn(move || {
+        self.pool()?.spawn(move || {
             let mut state = FileSystemState::new();
 
             obtain_state(root, &mut state);
 
             tx.send(SyncMessage::SaveState(instance.clone(), state)).unwrap();
             tx.send(SyncMessage::LinkComplete(instance)).unwrap();
-        }))
+        });
+        Ok(())
     }
 
     fn link_instance(&mut self, handle: &ContainerHandle, tx: Sender<SyncMessage>) -> Result<()> {
@@ -349,8 +350,8 @@ impl<'a> FilesystemSync<'a> {
 
         for dep in handle.metadata().dependencies() {
             let dephandle = self.cache.get_instance(dep).unwrap();
-            let state = self.state_map.get(dep).map_or_else(|| FileSystemState::new(), |s| s.clone());
-            let dep = &Arc::from(dep.as_ref());
+            let state = self.state_map.get(dep).map_or_else(FileSystemState::new, |s| s.clone());
+            let dep = &Arc::from(dep);
             let prev_state = match self.previous_state(dep) {
                 Ok(state) => state,
                 Err(err) => {
@@ -363,7 +364,7 @@ impl<'a> FilesystemSync<'a> {
             map.push((dephandle.vars().root().into(), state));
         }
 
-        Ok(self.pool()?.spawn(move || {
+        self.pool()?.spawn(move || {
             let state = filesystem_state(state, map);
             let state_prev = previous_state(prev);
 
@@ -372,15 +373,16 @@ impl<'a> FilesystemSync<'a> {
             link_filesystem(&state, &root);
 
             tx.send(SyncMessage::LinkComplete(instance)).unwrap();
-        }))
+        });
+        Ok(())
     }
 
     fn pool(&self) -> Result<&ThreadPool> {
-        self.pool.as_ref().map_or_else(|| err!(ErrorKind::ThreadPoolUninitialized), |p| Ok(p))
+        self.pool.as_ref().map_or_else(|| err!(ErrorKind::ThreadPoolUninitialized), Ok)
     }
 
     fn lock(&self) -> Result<&Lock> {
-        self.lock.map_or_else(|| err!(LockError::NotAcquired), |f| Ok(f))
+        self.lock.map_or_else(|| err!(LockError::NotAcquired), Ok)
     }
 
     fn signal(&mut self) -> Result<()> {
@@ -399,7 +401,7 @@ impl<'a> FilesystemSync<'a> {
 
     fn discard_state(&mut self) -> Result<()> {
         for (data, ..) in &self.state_map {
-            remove_file(&format!("{}/state/{data}.dat.new", *DATA_DIR)).ok();
+            remove_file(format!("{}/state/{data}.dat.new", *DATA_DIR)).ok();
         }
 
         self.lock()?.unlock()?;
@@ -546,18 +548,18 @@ fn serialize(path: &str, ds: FileSystemState) -> Result<()> {
     Ok(())
 }
 
-fn decode_state<'a, R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
+fn decode_state<R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
     let mut header_buffer = ByteBuffer::with_capacity(10).read();
 
-    stream.read_exact(&mut header_buffer.as_slice_mut())?;
+    stream.read_exact(header_buffer.as_slice_mut())?;
 
     let hash_length = header_buffer.read_le_16();
     let state_length = header_buffer.read_le_64();
 
     if state_length == 0 {
-        Err(IOError::new(IOErrorKind::InvalidInput, format!("Data length provided is zero")))?;
+        Err(IOError::new(IOErrorKind::InvalidInput, "Data length provided is zero".to_string()))?;
     } else if hash_length != 32 {
-        Err(IOError::new(IOErrorKind::InvalidInput, format!("Hash length provided is invalid.")))?;
+        Err(IOError::new(IOErrorKind::InvalidInput, "Hash length provided is invalid.".to_string()))?;
     } else if state_length >= BYTE_LIMIT {
         Err(IOError::new(IOErrorKind::InvalidInput, format!("Data length exceeded maximum {state_length} >= {BYTE_LIMIT}")))?;
     }
@@ -584,8 +586,8 @@ fn encode_state(path: &str, state_data: Vec<u8>, hash: Vec<u8>) -> IOResult<u64>
     header.write_le_32(VERSION);
     header.write_le_16(hash.len() as u16);
     header.write_le_64(state_data.len() as u64);
-    output.write(header.as_slice())?;
-    output.write(&hash)?;
+    output.write_all(header.as_slice())?;
+    output.write_all(&hash)?;
     copy(&mut state_data.as_slice(), &mut Encoder::new(output, 3)?.auto_finish())
 }
 
@@ -605,10 +607,8 @@ fn check(instance: &str) -> Result<bool> {
 fn previous_state(map: Vec<Option<FileSystemState>>) -> FileSystemState {
     let mut state = FileSystemState::new();
 
-    for ins_state in map {
-        if let Some(ins_state) = ins_state {
-            state.files.extend(ins_state.files);
-        }
+    for ins_state in map.into_iter().flatten() {
+        state.files.extend(ins_state.files);
     }
 
     state
@@ -616,7 +616,7 @@ fn previous_state(map: Vec<Option<FileSystemState>>) -> FileSystemState {
 
 fn filesystem_state(mut state: FileSystemState, map: Vec<(Arc<str>, FileSystemState)>) -> FileSystemState {
     for ins_state in map {
-        if ins_state.1.files.len() == 0 {
+        if ins_state.1.files.is_empty() {
             obtain_state(ins_state.0, &mut state);
         } else {
             state.files.extend(ins_state.1.files);
@@ -634,7 +634,7 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
         let src: Arc<str> = entry.path().to_str().unwrap().into();
         let src_tr: Arc<str> = src.split_at(len).1.into();
 
-        if let Some(_) = state.files.get(&src_tr) {
+        if state.files.get(&src_tr).is_some() {
             continue;
         }
 
@@ -674,7 +674,7 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
     state_res.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
         let _ = tx_clone;
 
-        if let None = state.files.get(file.0) {
+        if state.files.get(file.0).is_none() {
             let path_str = &format!("{}{}", root, file.0);
             let path = Path::new(path_str);
 
@@ -701,7 +701,7 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
     state_res.files.par_iter().for_each(move |file| {
         let _ = tx_clone;
 
-        if let None = state.files.get(file.0) {
+        if state.files.get(file.0).is_none() {
             let path: &str = &format!("{}{}", root, file.0);
             let path = Path::new(path);
 
@@ -739,7 +739,7 @@ fn create_soft_link(src: &str, dest: &str) -> IOResult<()> {
 
     if let Some(path) = dest_path.parent() {
         if !path.exists() {
-            create_dir_all(&path)?;
+            create_dir_all(path)?;
         }
     }
 
@@ -757,16 +757,16 @@ pub fn create_hard_link(src: &str, dest: &str) -> IOResult<()> {
     if !dest_path.exists() {
         if let Some(path) = dest_path.parent() {
             if !path.exists() {
-                remove_symlink(&path)?;
-                create_dir_all(&path)?;
+                remove_symlink(path)?;
+                create_dir_all(path)?;
             }
         }
 
         remove_symlink(dest_path)?;
         hard_link(src_path, dest_path)
     } else {
-        let meta_dest = metadata(&dest_path)?;
-        let meta_src = metadata(&src_path)?;
+        let meta_dest = metadata(dest_path)?;
+        let meta_src = metadata(src_path)?;
 
         if meta_src.ino() != meta_dest.ino() {
             if meta_dest.is_dir() {
@@ -784,7 +784,7 @@ pub fn create_hard_link(src: &str, dest: &str) -> IOResult<()> {
 
 #[inline]
 fn remove_symlink(path: &Path) -> IOResult<()> {
-    if let Ok(_) = fs::read_link(path) {
+    if fs::read_link(path).is_ok() {
         remove_file(path)?
     }
 
@@ -798,7 +798,7 @@ fn queue_status(sync_type: &SyncType, queue: &HashSet<&str>, compare: &str, max_
     let mut strs: Vec<&str> = Vec::new();
 
     for contrast in queue {
-        let contrast: &str = contrast.as_ref();
+        let contrast: &str = contrast;
 
         if compare == contrast {
             continue;
@@ -820,7 +820,7 @@ fn queue_status(sync_type: &SyncType, queue: &HashSet<&str>, compare: &str, max_
         if idx > 0 {
             string.push_str(format!(", {str}").as_str());
         } else {
-            string.push_str(format!("{str}").as_str());
+            string.push_str(str.to_string().as_str());
         }
     }
 
@@ -828,7 +828,7 @@ fn queue_status(sync_type: &SyncType, queue: &HashSet<&str>, compare: &str, max_
         string.push_str(format!(", and {diff} more..").as_str());
     }
 
-    if string.len() == 0 {
+    if string.is_empty() {
         string.push_str(sync_type.progress());
     }
 

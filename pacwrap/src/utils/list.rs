@@ -65,14 +65,14 @@ impl Hash for Display {
 
 impl PartialEq for Display {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Summary(_), Self::Summary(_)) => true,
-            (Self::Total(_), Self::Total(_)) => true,
-            (Self::Organic(_), Self::Organic(_)) => true,
-            (Self::Name, Self::Name) => true,
-            (Self::Type, Self::Type) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (Self::Summary(_), Self::Summary(_))
+                | (Self::Total(_), Self::Total(_))
+                | (Self::Organic(_), Self::Organic(_))
+                | (Self::Name, Self::Name)
+                | (Self::Type, Self::Type)
+        )
     }
 }
 
@@ -101,7 +101,7 @@ fn parse_arguments(args: &mut Arguments) -> Result<(bool, IndexSet<Display>)> {
         }
     }
 
-    Ok((vec.len() > 2, IndexSet::from_iter(vec.into_iter())))
+    Ok((vec.len() > 2, IndexSet::from_iter(vec)))
 }
 
 pub fn list_containers(args: &mut Arguments) -> Result<()> {
@@ -179,7 +179,7 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
         table.insert(row);
     }
 
-    Ok(if let Some(sum) = table_type.get(&Display::Summary(None)) {
+    if let Some(sum) = table_type.get(&Display::Summary(None)) {
         let mut max_len = 0;
         let difference = total_size - actual_size;
         let equation = match sum.bytes() {
@@ -213,7 +213,8 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
         )
     } else {
         println!("{}", table.build()?)
-    })
+    };
+    Ok(())
 }
 
 //There might be some value in threading this routine in future.
@@ -222,7 +223,7 @@ fn directory_size(dir: &str) -> Result<(i64, i64, i64)> {
     let mut total = 0;
     let mut unique = 0;
 
-    for entry in read_dir(&dir).prepend_io(|| dir.into())? {
+    for entry in read_dir(dir).prepend_io(|| dir.into())? {
         let entry = entry.prepend(|| format!("Failure acquiring entry in '{dir}'"))?;
         let name = entry.file_name().to_str().unwrap().to_string();
         let meta = entry.metadata().prepend(|| format!("Failure to acquire metadata in '{dir}/{name}'"))?;
@@ -237,13 +238,11 @@ fn directory_size(dir: &str) -> Result<(i64, i64, i64)> {
             len += l;
             unique += u;
             total += t;
+        } else if meta.nlink() == 1 {
+            unique += meta.len() as i64;
         } else {
-            if meta.nlink() == 1 {
-                unique += meta.len() as i64;
-            } else {
-                len += (meta.len() / meta.nlink()) as i64;
-                total += meta.len() as i64;
-            }
+            len += (meta.len() / meta.nlink()) as i64;
+            total += meta.len() as i64;
         }
     }
 

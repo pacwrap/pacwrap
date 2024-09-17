@@ -48,6 +48,7 @@ use crate::{
 
 use super::SyncState;
 
+#[derive(Debug)]
 pub struct Commit {
     state: TransactionState,
     keyring: bool,
@@ -72,7 +73,7 @@ impl Transaction for Commit {
         let instance = inshandle.vars().instance();
         let state = self.state.as_str();
 
-        if let SyncState::NotRequired = handle.trans_ready(&ag.action(), ag.flags())? {
+        if let SyncState::NotRequired = handle.trans_ready(ag.action(), ag.flags())? {
             match ready_state(handle, ag.action(), &self.state) {
                 Some(result) => return result,
                 None => return Ok(TransactionState::Complete(false)),
@@ -101,10 +102,14 @@ impl Transaction for Commit {
             ag.keyring_update(inshandle)?;
         }
 
-        handle.set_alpm(Some(sync::instantiate_alpm(inshandle, &ag.flags())));
+        handle.set_alpm(Some(sync::instantiate_alpm(inshandle, ag.flags())));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
         ag.logger().log(Info, &format!("container {instance}'s {state} transaction complete"))?;
         next_state(handle, ag.action(), &self.state, true)
+    }
+
+    fn debug(&self) -> String {
+        format!("{self:?}")
     }
 }
 
@@ -136,7 +141,7 @@ fn confirm(
             let action = ag.action().as_str();
             let query = format!("Proceed with {action}?");
 
-            if let Err(_) = prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
+            if !prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
                 Err(next_state(handle, ag.action(), state, false))?
             }
         }
@@ -146,7 +151,7 @@ fn confirm(
     Ok(sum.download())
 }
 
-fn next_state<'a>(
+fn next_state(
     handle: &mut TransactionHandle,
     action: &TransactionType,
     state: &TransactionState,
@@ -168,7 +173,7 @@ fn next_state<'a>(
     }
 }
 
-fn ready_state<'a>(
+fn ready_state(
     handle: &mut TransactionHandle,
     action: &TransactionType,
     state: &TransactionState,
@@ -202,10 +207,10 @@ fn wait_on_agent(mut agent: Child) -> Result<()> {
             _ =>
                 if let Some(code) = status.code() {
                     err!(SyncError::TransactionFailure(format!("General agent fault: Exit code {}", code)))
-                } else if let Some(_) = status.signal() {
+                } else if status.signal().is_some() {
                     err!(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))
                 } else {
-                    err!(SyncError::TransactionFailure(format!("General agent fault")))
+                    err!(SyncError::TransactionFailure("General agent fault".to_string()))
                 },
         },
         Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,

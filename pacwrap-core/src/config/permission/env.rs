@@ -54,7 +54,7 @@ impl Permission for Environment {
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        if self.var != "" {
+        if !self.var.is_empty() {
             let set = env_var(&self.var, &self.set);
             args.env(&self.var, &set);
         }
@@ -71,11 +71,11 @@ impl Permission for Environment {
 }
 
 fn env_var(var: &String, set: &String) -> String {
-    if set != "" {
+    if !set.is_empty() {
         return set.to_owned();
     }
 
-    match env::var(&var) {
+    match env::var(var) {
         Ok(env) => env,
         Err(_) => {
             print_warning(&format!("Environment variable {} is unset.", var));

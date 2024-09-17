@@ -33,7 +33,7 @@ use crate::{
     utils::print_warning,
 };
 
-pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
+pub fn register_filesystems(per: &[Box<dyn Filesystem>], vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
     for p in per.iter() {
         match p.check(vars) {
             Ok(_) => p.register(args, vars),
@@ -47,7 +47,7 @@ pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVari
     Ok(())
 }
 
-pub fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut ExecutionArgs) -> Result<()> {
+pub fn register_permissions(per: &[Box<dyn Permission>], args: &mut ExecutionArgs) -> Result<()> {
     for p in per.iter() {
         match p.check() {
             Ok(condition) => match condition {
@@ -70,7 +70,7 @@ pub fn register_permissions(per: &Vec<Box<dyn Permission>>, args: &mut Execution
     Ok(())
 }
 
-pub fn register_dbus(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<()> {
+pub fn register_dbus(per: &[Box<dyn Dbus>], args: &mut ExecutionArgs) -> Result<()> {
     for p in per.iter() {
         p.register(args);
     }

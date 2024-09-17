@@ -37,6 +37,7 @@ use crate::{
     Result,
 };
 
+#[derive(Debug)]
 pub struct Stage {
     state: TransactionState,
     mode: TransactionMode,
@@ -53,7 +54,7 @@ impl Transaction for Stage {
             flag = TransFlag::NO_DEP_VERSION;
 
             if ag.flags().contains(TransactionFlags::DATABASE_ONLY) {
-                flag = flag | TransFlag::DB_ONLY;
+                flag |= TransFlag::DB_ONLY;
             }
         } else {
             modeset = Foreign;
@@ -74,12 +75,12 @@ impl Transaction for Stage {
         inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         if let Err(error) = handle.alpm().trans_init(self.flags) {
-            err!(SyncError::InitializationFailure(error.to_string().into()))?
+            err!(SyncError::InitializationFailure(error.to_string()))?
         }
 
         ag.action().action_message(self.mode);
         handle.set_mode(self.mode);
-        handle.ignore();
+        handle.ignore(&mut ag.flags().contains(TransactionFlags::DEBUG).then_some(ag.logger()));
         handle.meta.set_flags(ag.flags(), &self.flags);
 
         match ag.action() {
@@ -97,12 +98,16 @@ impl Transaction for Stage {
             }
         }
     }
+
+    fn debug(&self) -> String {
+        format!("{self:?}")
+    }
 }
 
 fn check_keyring(ag: &TransactionAggregator, handle: &TransactionHandle, inshandle: &ContainerHandle) -> bool {
     inshandle.metadata().container_type() == &Base
         && !ag.is_keyring_synced()
-        && handle.alpm().trans_add().iter().find(|a| a.name() == "archlinux-keyring").is_some()
+        && handle.alpm().trans_add().iter().any(|a| a.name() == "archlinux-keyring")
 }
 
 fn next_state(state: &TransactionState, option: bool) -> Result<TransactionState> {

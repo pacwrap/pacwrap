@@ -39,6 +39,7 @@ use crate::{
     Result,
 };
 
+#[derive(Debug)]
 pub struct Prepare {
     state: TransactionState,
 }
@@ -66,7 +67,7 @@ impl Transaction for Prepare {
                     }
                 }
 
-                if deps.len() > 0 {
+                if !deps.is_empty() {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
                             Some(dep_handle) => handle.enumerate_package_lists(&sync::instantiate_alpm(dep_handle, ag.flags())),
@@ -125,5 +126,9 @@ impl Transaction for Prepare {
             }
             _ => unreachable!(),
         }
+    }
+
+    fn debug(&self) -> String {
+        format!("{self:?}")
     }
 }

@@ -55,6 +55,12 @@ pub struct DownloadEvent {
     style: Option<ProgressStyle>,
 }
 
+impl Default for DownloadEvent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DownloadEvent {
     pub fn new() -> Self {
         Self {
@@ -147,8 +153,8 @@ impl DownloadEvent {
     fn insert(&mut self, file: &str) {
         let pb = match self.total_bar.as_mut() {
             Some(total) => match self.condensed {
-                true => self.progress.insert_after(&total, ProgressBar::new(0)),
-                false => self.progress.insert_before(&total, ProgressBar::new(0)),
+                true => self.progress.insert_after(total, ProgressBar::new(0)),
+                false => self.progress.insert_before(total, ProgressBar::new(0)),
             },
             None => self.progress.add(ProgressBar::new(0)),
         };

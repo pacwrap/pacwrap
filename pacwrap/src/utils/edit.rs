@@ -146,7 +146,7 @@ fn edit_file(file: &str, temporary_file: &str, lock: Option<&Lock>, edit: bool) 
 }
 
 fn hash_file(file_path: &str) -> Result<Vec<u8>> {
-    let mut file = File::open(&file_path).prepend_io(|| file_path.into())?;
+    let mut file = File::open(file_path).prepend_io(|| file_path.into())?;
     let mut hasher = Sha256::new();
 
     copy_io(&mut file, &mut hasher).prepend_io(|| file_path.into())?;

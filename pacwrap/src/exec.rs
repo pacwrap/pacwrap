@@ -111,7 +111,7 @@ enum ExecParams<'a> {
 impl<'a> ExecParams<'a> {
     fn parse(args: &'a mut Arguments) -> Result<Self> {
         let mut verbosity: i8 = 0;
-        let mut shell = if let Op::Value("shell") = args[0] { true } else { false };
+        let mut shell = matches!(args[0], Op::Value("shell"));
         let mut root = false;
         let mut container = None;
         let mut pos = 1;
@@ -131,7 +131,7 @@ impl<'a> ExecParams<'a> {
                 Op::Long("shell") | Op::Short('s') => shell = true,
                 Op::Long("verbose") | Op::Short('v') => verbosity += 1,
                 Op::LongPos(_, str) | Op::ShortPos(_, str) | Op::Value(str) =>
-                    if let None = container {
+                    if container.is_none() {
                         container = Some(str);
                         break;
                     },
@@ -166,12 +166,12 @@ pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
     }
 }
 
-fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, verbosity: i8) -> Result<()> {
+fn execute_container(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, verbosity: i8) -> Result<()> {
     let mut exec = ExecutionArgs::new();
     let mut jobs: Vec<Child> = Vec::new();
     let cfg = ins.config();
     let vars = ins.vars();
-    let dbus = cfg.dbus().len() > 0;
+    let dbus = !cfg.dbus().is_empty();
 
     if !cfg.allow_forking() {
         exec.push_env(Argument::DieWithParent);
@@ -196,12 +196,12 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
         jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec)?);
     }
 
-    exec.env("XDG_RUNTIME_DIR", &*XDG_RUNTIME_DIR);
-    register_filesystems(cfg.filesystem(), &vars, &mut exec)?;
+    exec.env("XDG_RUNTIME_DIR", &XDG_RUNTIME_DIR);
+    register_filesystems(cfg.filesystem(), vars, &mut exec)?;
     register_permissions(cfg.permissions(), &mut exec)?;
 
     let path = match exec.obtain_env("PATH") {
-        Some(var) => &var,
+        Some(var) => var,
         None => {
             exec.env("PATH", DEFAULT_PATH);
             DEFAULT_PATH
@@ -250,10 +250,10 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
             .unwrap()
     };
 
-    if verbosity == 1 {
-        eprintln!("Arguments:\t     {arguments:?}\n{ins:?}");
-    } else if verbosity > 1 {
-        eprintln!("Arguments:\t     {arguments:?}\n{ins:?}\n{exec:?}");
+    match verbosity {
+        0 => (),
+        1 => eprintln!("Arguments:\t     {arguments:?}\n{ins:?}"),
+        _ => eprintln!("Arguments:\t     {arguments:?}\n{ins:?}\n{exec:?}"),
     }
 
     check_path(ins, &arguments, path_vec)?;
@@ -264,7 +264,7 @@ fn execute_container<'a>(ins: &ContainerHandle, arguments: Vec<&str>, shell: boo
             term_control,
             decode_info_json(info_pipe)?,
             *cfg.allow_forking(),
-            match jobs.len() > 0 {
+            match !jobs.is_empty() {
                 true => Some(jobs),
                 false => None,
             },
@@ -293,7 +293,7 @@ fn signal_trap(bwrap_pid: i32) {
     let mut signals = Signals::new(*SIGNAL_LIST).unwrap();
 
     thread::Builder::new()
-        .name(format!("pacwrap-signal"))
+        .name("pacwrap-signal".to_string())
         .spawn(move || {
             let proc: &str = &format!("/proc/{}/", bwrap_pid);
             let proc = Path::new(proc);
@@ -307,12 +307,12 @@ fn signal_trap(bwrap_pid: i32) {
         .unwrap();
 }
 
-fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) -> Result<Child> {
+fn instantiate_dbus_proxy(per: &[Box<dyn Dbus>], args: &mut ExecutionArgs) -> Result<Child> {
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
     let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS")?;
 
     register_dbus(per, args)?;
-    create_placeholder(&*DBUS_SOCKET)?;
+    create_placeholder(&DBUS_SOCKET)?;
 
     match Command::new(DBUS_PROXY_EXECUTABLE)
         .arg(dbus_session)
@@ -323,7 +323,7 @@ fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) ->
         Ok(mut child) => {
             let mut increment: u8 = 0;
 
-            args.robind(&*DBUS_SOCKET, &dbus_socket_path);
+            args.robind(&DBUS_SOCKET, &dbus_socket_path);
             args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
             args.env("DBUS_SESSION_BUS_ADDRESS", &format!("unix:path={dbus_socket_path}"));
 
@@ -338,7 +338,7 @@ fn instantiate_dbus_proxy(per: &Vec<Box<dyn Dbus>>, args: &mut ExecutionArgs) ->
              * to wait on a FD prior to instantiating the filesystem bindings.
              */
 
-            while !check_socket(&*DBUS_SOCKET, &increment, &mut child)? {
+            while !check_socket(&DBUS_SOCKET, &increment, &mut child)? {
                 increment += 1;
             }
 
@@ -361,7 +361,10 @@ fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> R
 
 fn create_placeholder(path: &str) -> Result<()> {
     match File::create(path) {
-        Ok(file) => Ok(drop(file)),
+        Ok(file) => {
+            drop(file);
+            Ok(())
+        }
         Err(error) => err!(ErrorKind::IOError(path.into(), error.kind())),
     }
 }

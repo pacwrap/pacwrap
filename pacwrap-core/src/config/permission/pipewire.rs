@@ -41,7 +41,7 @@ struct Pipewire {
 impl Permission for Pipewire {
     fn check(&self) -> Result<Option<Condition>, PermError> {
         if !Path::new(&self.socket).exists() {
-            Err(Warn(format!("Pipewire socket not found.")))?
+            Err(Warn("Pipewire socket not found.".to_string()))?
         }
 
         if !check_socket(&self.socket) {

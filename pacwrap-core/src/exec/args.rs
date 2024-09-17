@@ -65,6 +65,12 @@ impl Argument {
     }
 }
 
+impl Default for ExecutionArgs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionArgs {
     pub fn new() -> Self {
         Self {
@@ -122,9 +128,7 @@ impl ExecutionArgs {
     }
 
     pub fn arguments(&self) -> Vec<&str> {
-        let mut vec = Vec::new();
-
-        vec.reserve((self.sys.len() + self.bind.len() + self.env.len()) * 4);
+        let mut vec = Vec::with_capacity((self.sys.len() + self.bind.len() + self.env.len()) * 4);
 
         for values in self.bind.iter().chain(self.sys.iter()).chain(self.env.iter()) {
             vec.extend(values.to_vec());
@@ -143,7 +147,7 @@ impl Debug for ExecutionArgs {
             writeln!(fmter, "sys:  {:?}", self.sys)?;
         }
 
-        if self.dbus.len() > 0 {
+        if !self.dbus.is_empty() {
             writeln!(fmter, "dbus: {:?}", self.dbus)?;
         }
 

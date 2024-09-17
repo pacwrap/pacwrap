@@ -67,6 +67,12 @@ impl Display for InvalidArgument {
     }
 }
 
+impl<'a> Default for Arguments<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Arguments<'a> {
     pub fn new() -> Self {
         Self {
@@ -100,7 +106,7 @@ impl<'a> Arguments<'a> {
                 _ => self.operands.push(match self.operands.last() {
                     Some(last) => match last {
                         Operand::Short(c) => Operand::ShortPos(*c, string),
-                        Operand::Long(s) => Operand::LongPos(*s, string),
+                        Operand::Long(s) => Operand::LongPos(s, string),
                         _ => Operand::Value(string),
                     },
                     None => Operand::Value(string),
@@ -134,12 +140,16 @@ impl<'a> Arguments<'a> {
         }
     }
 
-    pub fn inner(&self) -> &Vec<&'a str> {
+    pub fn inner(&self) -> &[&'a str] {
         &self.inner
     }
 
     pub fn into_inner(&self, skip: usize) -> Vec<&'a str> {
-        self.inner.iter().map(|f| *f).skip(skip).collect()
+        self.inner.iter().copied().skip(skip).collect()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.operands.is_empty()
     }
 
     pub fn len(&self) -> usize {

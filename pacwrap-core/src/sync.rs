@@ -133,12 +133,6 @@ impl From<&Error> for SyncError {
     }
 }
 
-impl From<SyncError> for String {
-    fn from(error: SyncError) -> Self {
-        error.into()
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct AlpmRepository {
     name: String,
@@ -197,7 +191,7 @@ fn alpm_log_callback(level: LogLevel, msg: &str, counter: &mut usize) {
 
 pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transflags: &TransactionFlags) -> Alpm {
     let mut handle = Alpm::new("/mnt/fs", "/mnt/fs/var/lib/pacman/").expect("Unable to acquire ALPM handle");
-    let hook_dirs = vec!["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"];
+    let hook_dirs = ["/mnt/fs/usr/share/libalpm/hooks/", "/mnt/fs/etc/pacman.d/hooks/"];
     let debug = transflags.intersects(TransactionFlags::DEBUG);
     let disable_sandbox = config.alpm().disable_sandbox() || transflags.intersects(TransactionFlags::NO_ALPM_SANDBOX);
 
@@ -213,7 +207,7 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transfl
     handle.set_logfile("/mnt/share/pacwrap.log").expect("set logfile");
     handle.set_hookdirs(hook_dirs.iter()).expect("set hookdirs");
     handle.set_gpgdir("/mnt/share/gnupg").expect("set gpgdir");
-    handle.set_cachedirs(vec!["/mnt/share/cache"].iter()).expect("set cachedirs");
+    handle.set_cachedirs(["/mnt/share/cache"].iter()).expect("set cachedirs");
     handle.set_parallel_downloads(config.alpm().parallel_downloads());
     handle.set_disable_dl_timeout(config.alpm().download_timeout());
     handle.set_check_space(false);
@@ -222,7 +216,7 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transfl
 }
 
 pub fn instantiate_alpm(inshandle: &ContainerHandle, transflags: &TransactionFlags) -> Alpm {
-    alpm_handle(inshandle.vars(), &*DEFAULT_ALPM_CONF, transflags, format!("{}/var/lib/pacman/", inshandle.vars().root()))
+    alpm_handle(inshandle.vars(), &DEFAULT_ALPM_CONF, transflags, format!("{}/var/lib/pacman/", inshandle.vars().root()))
 }
 
 fn alpm_handle(insvars: &ContainerVariables, remotes: &AlpmConfigData, transflags: &TransactionFlags, db_path: String) -> Alpm {
@@ -241,7 +235,7 @@ fn alpm_handle(insvars: &ContainerVariables, remotes: &AlpmConfigData, transflag
 
     handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).expect("set logfile");
     handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).expect("set gpgdir");
-    handle.set_cachedirs(vec![format!("{}/pkg", *CACHE_DIR)].iter()).expect("set cachedirs");
+    handle.set_cachedirs([format!("{}/pkg", *CACHE_DIR)].iter()).expect("set cachedirs");
     handle.set_parallel_downloads(CONFIG.alpm().parallel_downloads());
     handle.set_disable_dl_timeout(CONFIG.alpm().download_timeout());
     handle.set_check_space(CONFIG.alpm().check_space());
@@ -318,7 +312,7 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
     };
     let flags = ag.flags();
     let db_path = format!("{}/pacman/", *DATA_DIR);
-    let mut handle = alpm_handle(&handle.vars(), &*DEFAULT_ALPM_CONF, flags, db_path);
+    let mut handle = alpm_handle(handle.vars(), &DEFAULT_ALPM_CONF, flags, db_path);
 
     ag.lock()?.assert()?;
     println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
@@ -353,17 +347,16 @@ fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
     let mut sig = SigLevel::empty();
 
     for level in sigs {
-        sig = sig
-            | match level.as_ref() {
-                "TrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_UNKNOWN_OK,
-                "DatabaseTrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK,
-                "PackageTrustAll" => SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK,
-                "DatabaseRequired" | "DatabaseTrustedOnly" => SigLevel::DATABASE,
-                "PackageRequired" | "Required" => SigLevel::PACKAGE,
-                "PackageOptional" => SigLevel::PACKAGE_OPTIONAL,
-                "DatabaseOptional" => SigLevel::DATABASE_OPTIONAL,
-                _ => SigLevel::empty(),
-            }
+        sig |= match level.as_ref() {
+            "TrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_UNKNOWN_OK,
+            "DatabaseTrustAll" => SigLevel::DATABASE_UNKNOWN_OK | SigLevel::PACKAGE_MARGINAL_OK,
+            "PackageTrustAll" => SigLevel::PACKAGE_UNKNOWN_OK | SigLevel::DATABASE_MARGINAL_OK,
+            "DatabaseRequired" | "DatabaseTrustedOnly" => SigLevel::DATABASE,
+            "PackageRequired" | "Required" => SigLevel::PACKAGE,
+            "PackageOptional" => SigLevel::PACKAGE_OPTIONAL,
+            "DatabaseOptional" => SigLevel::DATABASE_OPTIONAL,
+            _ => SigLevel::empty(),
+        }
     }
 
     sig

@@ -62,7 +62,7 @@ fn delete_containers<'a>(
     cache: &'a ContainerCache<'a>,
     lock: &'a Lock,
     logger: &mut Logger,
-    delete: &Vec<&str>,
+    delete: &[&str],
     flags: &TransactionFlags,
     force: bool,
 ) -> Result<()> {
@@ -71,7 +71,7 @@ fn delete_containers<'a>(
     if flags.contains(TransactionFlags::NO_CONFIRM) {
         println!("{} {}{}...{}", *BAR_GREEN, *BOLD, &message, *RESET);
         delete_roots(cache, lock, logger, delete, force)?;
-    } else if let Ok(_) = prompt_targets(&delete, &message, false) {
+    } else if prompt_targets(delete, &message, false) {
         delete_roots(cache, lock, logger, delete, force)?;
     }
 
@@ -94,7 +94,7 @@ fn compose_handles<'a>(
                 err!(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
             }
         } else if let Base = container_type {
-            if depends.len() > 0 {
+            if !depends.is_empty() {
                 err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
             }
         }
@@ -158,7 +158,7 @@ fn acquire_targets<'a>(
     Ok(())
 }
 
-fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
+fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     let mut cache = match args.into_iter().find(|a| *a == Op::Long("from-config")) {
         Some(_) => cache::populate_config(),
         None => cache::populate(),
@@ -182,9 +182,9 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
     while let Some(arg) = args.next() {
         match arg {
             Op::Long("from-config") => continue,
-            Op::Long("debug") => flags = flags | TransactionFlags::DEBUG,
-            Op::Long("noconfirm") => flags = flags | TransactionFlags::NO_CONFIRM,
-            Op::Long("disable-sandbox") => flags = flags | TransactionFlags::NO_ALPM_SANDBOX,
+            Op::Long("debug") => flags |= TransactionFlags::DEBUG,
+            Op::Long("noconfirm") => flags |= TransactionFlags::NO_CONFIRM,
+            Op::Long("disable-sandbox") => flags |= TransactionFlags::NO_ALPM_SANDBOX,
             Op::Long("reinitialize-all") =>
                 for instance in cache.registered() {
                     if let Some(handle) = cache.get_instance_option(instance) {
@@ -195,7 +195,7 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
                         compose.insert(instance, None);
                     }
                 },
-            Op::Short('l') | Op::Long("lazy-load") => flags = flags | TransactionFlags::LAZY_LOAD_DB,
+            Op::Short('l') | Op::Long("lazy-load") => flags |= TransactionFlags::LAZY_LOAD_DB,
             Op::Short('f') | Op::Long("force") => force = true,
             Op::Short('r') | Op::Long("reinitialize") => reinitialize = true,
             Op::Short('t') | Op::Long("target") => match args.next() {
@@ -222,10 +222,7 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
 
                     Path::new(target).try_exists().prepend_io(|| target.into())?;
 
-                    match current_target {
-                        Some(_) => Some(config),
-                        None => None,
-                    }
+                    current_target.map(|_| config)
                 } else {
                     Some(config)
                 };
@@ -238,11 +235,11 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
         }
     }
 
-    if compose.len() == 0 {
+    if compose.is_empty() {
         err!(ErrorKind::Message("Composition targets not specified."))?
     }
 
-    if delete.len() > 0 {
+    if !delete.is_empty() {
         delete_containers(&cache, lock, &mut logger, &delete, &flags, force)?;
     }
 
@@ -255,11 +252,11 @@ fn engage_aggregator<'a>(args: &mut Arguments, lock: &'a Lock) -> Result<()> {
     cache = instantiate(compose_handles(&cache, compose)?, cache, lock, &mut logger)?;
     acquire_targets(&cache, &mut targets, &mut queue)?;
     instantiate_trust()?;
-    Ok(TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
+    TransactionAggregator::new(&cache, &mut logger, TransactionType::Upgrade(true, true, false))
         .assert_lock(lock)?
         .target(Some(targets))
         .flag(flags)
         .queue(queue)
         .progress()
-        .aggregate()?)
+        .aggregate()
 }

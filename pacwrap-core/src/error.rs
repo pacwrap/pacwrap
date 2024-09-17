@@ -100,6 +100,7 @@ impl Error {
         eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, self.kind);
     }
 
+    #[allow(clippy::borrowed_box)]
     pub fn kind(&self) -> &Box<dyn ErrorTrait> {
         &self.kind
     }
@@ -155,11 +156,5 @@ where
 {
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-impl From<&Box<dyn ErrorTrait>> for String {
-    fn from(value: &Box<dyn ErrorTrait>) -> Self {
-        value.into()
     }
 }
