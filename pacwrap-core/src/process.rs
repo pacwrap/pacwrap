@@ -214,10 +214,10 @@ fn procfs() -> Result<Vec<(i32, u64)>, Error> {
     Ok(read_dir("/proc/")
         .prepend_io(|| "/proc/".into())?
         .filter_map(StdResult::ok)
-        .filter_map(|s| procfs_meta(s).expect("Unable to obtain procfs metadata"))
+        .filter_map(|s| procfs_meta(s).map_or_else(|_| None, |x| x))
         .filter_map(|(name, mtime)| {
             name.to_str()
-                .expect("Invalid UTF-8 filename in procfs")
+                .expect("UTF-8 filename in procfs")
                 .parse()
                 .map_or_else(|_| None, |v| Some((v, mtime)))
         })
