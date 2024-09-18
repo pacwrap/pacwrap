@@ -483,7 +483,16 @@ impl<'a> TransactionHandle<'a> {
     fn apply_configuration(&mut self, instance: &ContainerHandle, create: bool) -> Result<()> {
         let depends = instance.metadata().dependencies();
         let explicit_packages: Vec<&str> = instance.metadata().explicit_packages();
-        let pkgs = self.alpm.as_mut().expect("ALPM").localdb().pkgs().iter().map(|p| p.name()).collect();
+        let pkgs = self
+            .alpm
+            .as_mut()
+            .expect("ALPM handle")
+            .localdb()
+            .pkgs()
+            .iter()
+            .filter(|p| p.reason() == PackageReason::Explicit && !self.meta.foreign_pkgs.contains(p.name()))
+            .map(|p| p.name())
+            .collect();
 
         if pkgs != explicit_packages || create {
             let mut instance = instance.clone();
