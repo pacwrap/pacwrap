@@ -214,7 +214,7 @@ fn procfs() -> Result<Vec<(i32, u64)>, Error> {
     Ok(read_dir("/proc/")
         .prepend_io(|| "/proc/".into())?
         .filter_map(StdResult::ok)
-        .filter_map(|s| procfs_meta(s).map_or_else(|_| None, |x| x))
+        .filter_map(|s| procfs_meta(s).unwrap_or(None))
         .filter_map(|(name, mtime)| {
             name.to_str()
                 .expect("UTF-8 filename in procfs")
