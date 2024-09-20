@@ -80,7 +80,7 @@ impl Transaction for Stage {
 
         ag.action().action_message(self.mode);
         handle.set_mode(self.mode);
-        handle.ignore(&mut ag.flags().contains(TransactionFlags::DEBUG).then_some(ag.logger()));
+        handle.ignore(&mut ag.flags().contains(TransactionFlags::DEBUG).then_some(ag.logger()))?;
         handle.meta.set_flags(ag.flags(), &self.flags);
 
         match ag.action() {

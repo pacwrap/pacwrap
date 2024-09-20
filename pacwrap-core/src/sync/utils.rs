@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{process::exit, thread::Builder};
+use std::thread::Builder;
 
 use alpm::{
     Alpm,
@@ -197,7 +197,7 @@ pub fn signal_trap() {
                 println!();
 
                 if count == 3 {
-                    exit(error!(SyncError::SignalInterrupt).error());
+                    error!(SyncError::SignalInterrupt).error()
                 }
             }
         })

@@ -62,12 +62,20 @@ pub trait Downcast {
 }
 
 pub trait ErrorGeneric<R, E> {
-    fn prepend<F>(self, f: F) -> StdResult<R, Error>
+    fn prepend<F>(self, f: F) -> Result<R>
     where
         F: FnOnce() -> String;
-    fn prepend_io<F>(self, f: F) -> StdResult<R, Error>
+    fn prepend_io<F>(self, f: F) -> Result<R>
     where
         F: FnOnce() -> String;
+    fn generic(self) -> Result<R>;
+}
+
+#[derive(Debug)]
+pub enum ErrorType<'a> {
+    Error(&'a Error),
+    Warn(&'a Error),
+    Fatal(&'a Error),
 }
 
 #[derive(Debug)]
@@ -86,18 +94,18 @@ impl Error {
         Self { kind: err }
     }
 
-    pub fn handle(&self) {
-        eprintln!("{}error:{} {}", *BOLD_RED, *RESET, self.kind);
-        exit(self.kind.code());
+    pub fn fatal(&self) -> ! {
+        eprintln!("{}", ErrorType::Fatal(self));
+        exit(self.kind.code())
     }
 
-    pub fn error(&self) -> i32 {
-        eprintln!("{}error:{} {}", *BOLD_RED, *RESET, self.kind);
-        self.kind.code()
+    pub fn error(&self) -> ! {
+        eprintln!("{}", ErrorType::Error(self));
+        exit(self.kind.code())
     }
 
     pub fn warn(&self) {
-        eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, self.kind);
+        eprintln!("{}", ErrorType::Warn(self))
     }
 
     #[allow(clippy::borrowed_box)]
@@ -113,13 +121,21 @@ impl Error {
     }
 }
 
-impl_error!(GenericError);
+impl Display for ErrorType<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Fatal(e) => write!(f, "{}fatal:{} {}", *BOLD_RED, *RESET, e.kind),
+            Self::Error(e) => write!(f, "{}error:{} {}", *BOLD_RED, *RESET, e.kind),
+            Self::Warn(e) => write!(f, "{}warning:{} {}", *BOLD_YELLOW, *RESET, e.kind),
+        }
+    }
+}
 
 impl<R, E> ErrorGeneric<R, E> for StdResult<R, E>
 where
     E: Display,
 {
-    fn prepend<F>(self, f: F) -> StdResult<R, Error>
+    fn prepend<F>(self, f: F) -> Result<R>
     where
         F: FnOnce() -> String, {
         match self {
@@ -131,13 +147,23 @@ where
         }
     }
 
-    fn prepend_io<F>(self, f: F) -> StdResult<R, Error>
+    fn prepend_io<F>(self, f: F) -> Result<R>
     where
         F: FnOnce() -> String, {
         match self {
             Ok(f) => Ok(f),
             Err(err) => err!(GenericError {
                 prepend: format!("'{}'", f()),
+                error: err.to_string(),
+            }),
+        }
+    }
+
+    fn generic(self) -> Result<R> {
+        match self {
+            Ok(f) => Ok(f),
+            Err(err) => err!(GenericError {
+                prepend: "An error has occurred".into(),
                 error: err.to_string(),
             }),
         }
@@ -149,6 +175,8 @@ impl Display for GenericError {
         write!(f, "{}: {}", self.prepend, self.error)
     }
 }
+
+impl_error!(GenericError);
 
 impl<T> Downcast for T
 where

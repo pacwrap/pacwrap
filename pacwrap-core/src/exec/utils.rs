@@ -31,15 +31,15 @@ use serde::Serialize;
 use serde_yaml::Value;
 
 use crate::{
-    config::CONFIG,
+    config::global,
     constants::BWRAP_EXECUTABLE,
     err,
     error::*,
     exec::{ExecutionError, ExecutionType},
     sync::{
+        alpm_config,
         transaction::{TransactionMetadata, TransactionParameters},
         SyncError,
-        DEFAULT_ALPM_CONF,
     },
     utils::TermControl,
     ErrorKind,
@@ -155,8 +155,8 @@ pub fn agent_params(
     metadata: &TransactionMetadata,
 ) -> Result<i32> {
     serialize(params, writer)?;
-    serialize(&*CONFIG, writer)?;
-    serialize(&*DEFAULT_ALPM_CONF, writer)?;
+    serialize(global()?, writer)?;
+    serialize(alpm_config()?, writer)?;
     serialize(metadata, writer)?;
     Ok(reader.as_raw_fd())
 }

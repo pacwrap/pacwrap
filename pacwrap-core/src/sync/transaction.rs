@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use self::{SyncState::*, TransactionMode::*, TransactionType::*};
 use crate::{
-    config::{ContainerHandle, Global, CONFIG},
+    config::{global, ContainerHandle, Global},
     constants::{ARROW_CYAN, BAR_CYAN, BOLD, BOLD_GREEN, BOLD_YELLOW, RESET},
     err,
     log::{Level, Logger},
@@ -326,11 +326,11 @@ impl<'a> TransactionHandle<'a> {
             .extend(self.meta.foreign_pkgs.iter().map(|p| p.to_owned().into()).collect::<Vec<_>>());
     }
 
-    pub fn ignore(&mut self, log: &mut Option<&mut Logger>) {
+    pub fn ignore(&mut self, log: &mut Option<&mut Logger>) -> Result<()> {
         let alpm = self.alpm.as_mut().unwrap();
         let config = match self.config {
             Some(config) => config,
-            None => &*CONFIG,
+            None => global()?,
         };
         let local = match self.meta.mode {
             Local => &self.meta.resident_pkgs,
@@ -391,6 +391,8 @@ impl<'a> TransactionHandle<'a> {
                 *BOLD, *RESET, *BOLD_YELLOW, *RESET, *BOLD_GREEN, *RESET
             ));
         }
+
+        Ok(())
     }
 
     pub fn prepare(&mut self, trans_type: &TransactionType, flags: &TransactionFlags) -> Result<()> {
@@ -402,7 +404,7 @@ impl<'a> TransactionHandle<'a> {
         let queue = self.meta.queue.iter().map(|i| i.as_ref()).collect::<Vec<_>>();
         let config = match self.config {
             Some(config) => config,
-            None => &*CONFIG,
+            None => global()?,
         };
 
         if let Local = self.meta.mode {

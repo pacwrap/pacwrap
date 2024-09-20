@@ -17,10 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{
-    collections::{HashMap, HashSet},
-    process::exit,
-};
+use std::collections::{HashMap, HashSet};
 
 use alpm::Alpm;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
@@ -245,7 +242,7 @@ impl<'a> TransactionAggregator<'a> {
             None => Vec::new(),
         };
 
-        let alpm = sync::instantiate_alpm(inshandle, self.flags());
+        let alpm = sync::instantiate_alpm(inshandle, self.flags())?;
         let mut meta = TransactionMetadata::new(queue);
         let mut handle = TransactionHandle::new(&mut meta).alpm_handle(alpm);
         let mut act: Box<dyn Transaction> = Prepare.from(self);
@@ -292,7 +289,7 @@ impl<'a> TransactionAggregator<'a> {
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
                         SyncError::TransactionAgentFailure => {
                             self.logger().log(Level::Fatal, &format!("Transaction error: {:?}", err))?;
-                            exit(err.kind().code())
+                            err.fatal()
                         }
                         _ => {
                             self.logger().log(Level::Error, &format!("Transaction error: {:?}", err))?;

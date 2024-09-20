@@ -47,6 +47,6 @@ fn main() {
     };
 
     if let Err(error) = result {
-        error.handle();
+        error.error();
     }
 }

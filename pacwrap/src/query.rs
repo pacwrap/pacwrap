@@ -55,7 +55,7 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
     }
 
     let handle = config::provide_handle(target)?;
-    let handle = instantiate_alpm(&handle, &flags);
+    let handle = instantiate_alpm(&handle, &flags)?;
 
     for pkg in handle.localdb().pkgs() {
         if explicit && pkg.reason() != PackageReason::Explicit {

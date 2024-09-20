@@ -21,20 +21,18 @@ use std::{
     fs::{create_dir, create_dir_all},
     os::unix::fs::symlink,
     path::Path,
-    process::exit,
+    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use alpm::{Alpm, LogLevel, SigLevel, Usage};
-use lazy_static::lazy_static;
 use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{global::ProgressKind, ContainerHandle, ContainerType::*, ContainerVariables, Global, CONFIG},
+    config::{global, global::ProgressKind, ContainerHandle, ContainerType::*, ContainerVariables, Global},
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET, UNIX_TIMESTAMP, VERBOSE},
     err,
-    error,
     exec::pacwrap_key,
     impl_error,
     sync::{
@@ -57,11 +55,8 @@ pub mod utils;
 mod resolver;
 mod resolver_local;
 
-lazy_static! {
-    pub static ref DEFAULT_ALPM_CONF: AlpmConfigData = AlpmConfigData::new();
-    static ref PACMAN_CONF: pacmanconf::Config = load_repositories();
-    static ref DEFAULT_SIGLEVEL: SigLevel = default_signature();
-}
+static PACMAN_CONFIG: OnceLock<pacmanconf::Config> = OnceLock::new();
+static ALPM_CONFIG_DATA: OnceLock<AlpmConfigData> = OnceLock::new();
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum SyncError {
@@ -145,7 +140,7 @@ impl From<&Repository> for AlpmRepository {
         Self {
             name: repo.name.clone(),
             mirrors: repo.servers.clone(),
-            sig_lvl: signature(&repo.sig_level, *DEFAULT_SIGLEVEL).bits(),
+            sig_lvl: signature(&repo.sig_level, default_signature()).bits(),
         }
     }
 }
@@ -170,23 +165,33 @@ pub struct AlpmConfigData {
 }
 
 impl AlpmConfigData {
-    fn new() -> Self {
-        Self {
-            repos: PACMAN_CONF.repos.iter().map(|a| a.into()).collect(),
-        }
+    fn new() -> Result<Self> {
+        Ok(Self {
+            repos: pacman_conf()?.repos.iter().map(|a| a.into()).collect(),
+        })
     }
 }
 
-fn alpm_log_callback(level: LogLevel, msg: &str, counter: &mut usize) {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let time = now.as_secs() as usize - *counter;
-    let nano = now.subsec_nanos().to_string();
-    let log_level = level.bits() / 4;
-    let verbosity = if *VERBOSE { 3 } else { 2 };
+pub fn alpm_config() -> Result<&'static AlpmConfigData> {
+    Ok(match ALPM_CONFIG_DATA.get() {
+        Some(data) => data,
+        None => {
+            let data = AlpmConfigData::new()?;
 
-    if log_level < verbosity {
-        eprint!("[{}.{:.6}] [ALPM] {}", time, nano, msg);
-    }
+            ALPM_CONFIG_DATA.get_or_init(|| data)
+        }
+    })
+}
+
+fn pacman_conf() -> Result<&'static Config> {
+    Ok(match PACMAN_CONFIG.get() {
+        Some(c) => c,
+        None => {
+            let cfg = load_pacman_conf()?;
+
+            PACMAN_CONFIG.get_or_init(|| cfg)
+        }
+    })
 }
 
 pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transflags: &TransactionFlags) -> Alpm {
@@ -215,14 +220,20 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transfl
     handle
 }
 
-pub fn instantiate_alpm(inshandle: &ContainerHandle, transflags: &TransactionFlags) -> Alpm {
-    alpm_handle(inshandle.vars(), &DEFAULT_ALPM_CONF, transflags, format!("{}/var/lib/pacman/", inshandle.vars().root()))
+pub fn instantiate_alpm(inshandle: &ContainerHandle, transflags: &TransactionFlags) -> Result<Alpm> {
+    alpm_handle(inshandle.vars(), alpm_config()?, transflags, format!("{}/var/lib/pacman/", inshandle.vars().root()))
 }
 
-fn alpm_handle(insvars: &ContainerVariables, remotes: &AlpmConfigData, transflags: &TransactionFlags, db_path: String) -> Alpm {
+fn alpm_handle(
+    insvars: &ContainerVariables,
+    remotes: &AlpmConfigData,
+    transflags: &TransactionFlags,
+    db_path: String,
+) -> Result<Alpm> {
+    let config = global()?;
     let mut handle = Alpm::new(insvars.root(), &db_path).expect("Unable to acquire ALPM handle");
     let debug = transflags.intersects(TransactionFlags::DEBUG);
-    let disable_sandbox = CONFIG.alpm().disable_sandbox() || transflags.intersects(TransactionFlags::NO_ALPM_SANDBOX);
+    let disable_sandbox = config.alpm().disable_sandbox() || transflags.intersects(TransactionFlags::NO_ALPM_SANDBOX);
 
     if debug {
         handle.set_log_cb(*UNIX_TIMESTAMP as usize, alpm_log_callback);
@@ -236,11 +247,23 @@ fn alpm_handle(insvars: &ContainerVariables, remotes: &AlpmConfigData, transflag
     handle.set_logfile(format!("{}/pacwrap.log", *DATA_DIR)).expect("set logfile");
     handle.set_gpgdir(format!("{}/pacman/gnupg", *DATA_DIR)).expect("set gpgdir");
     handle.set_cachedirs([format!("{}/pkg", *CACHE_DIR)].iter()).expect("set cachedirs");
-    handle.set_parallel_downloads(CONFIG.alpm().parallel_downloads());
-    handle.set_disable_dl_timeout(CONFIG.alpm().download_timeout());
-    handle.set_check_space(CONFIG.alpm().check_space());
+    handle.set_parallel_downloads(config.alpm().parallel_downloads());
+    handle.set_disable_dl_timeout(config.alpm().download_timeout());
+    handle.set_check_space(global()?.alpm().check_space());
     handle = register_remote(handle, remotes);
-    handle
+    Ok(handle)
+}
+
+fn alpm_log_callback(level: LogLevel, msg: &str, counter: &mut usize) {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let time = now.as_secs() as usize - *counter;
+    let nano = now.subsec_nanos().to_string();
+    let log_level = level.bits() / 4;
+    let verbosity = if *VERBOSE { 3 } else { 2 };
+
+    if log_level < verbosity {
+        eprint!("[{}.{:.6}] [ALPM] {}", time, nano, msg);
+    }
 }
 
 pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> {
@@ -312,7 +335,7 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
     };
     let flags = ag.flags();
     let db_path = format!("{}/pacman/", *DATA_DIR);
-    let mut handle = alpm_handle(handle.vars(), &DEFAULT_ALPM_CONF, flags, db_path);
+    let mut handle = alpm_handle(handle.vars(), alpm_config()?, flags, db_path)?;
 
     ag.lock()?.assert()?;
     println!("{} {}Synchronizing package databases...{}", *BAR_GREEN, *BOLD, *RESET);
@@ -326,7 +349,7 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
     ag.lock()?.assert()?;
 
     for handle in ag.cache().filter_handle(vec![Base, Slice, Aggregate]).iter() {
-        for repo in PACMAN_CONF.repos.iter() {
+        for repo in pacman_conf()?.repos.iter() {
             let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
             let dest = &format!("{}/var/lib/pacman/sync/{}.db", handle.vars().root(), repo.name);
 
@@ -363,13 +386,13 @@ fn signature(sigs: &Vec<String>, default: SigLevel) -> SigLevel {
 }
 
 fn default_signature() -> SigLevel {
-    signature(&CONFIG.alpm().sig_level(), SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL)
+    signature(&global().expect("pacwrap.yml").alpm().sig_level(), SigLevel::PACKAGE | SigLevel::DATABASE_OPTIONAL)
 }
 
-fn load_repositories() -> Config {
+fn load_pacman_conf() -> Result<Config> {
     let path = format!("{}/repositories.conf", *CONFIG_DIR);
 
-    match Config::from_file(&path) {
+    Ok(match Config::from_file(&path) {
         Ok(config) => config,
         Err(error) => {
             //The following code is ugly, precisely because, the pacman_conf library does not
@@ -377,9 +400,8 @@ fn load_repositories() -> Config {
 
             let error = error.to_string();
             let error = error.split("error: ").collect::<Vec<_>>()[1].split("\n").collect::<Vec<&str>>()[0];
-            let error = error!(SyncError::RepoConfError(path, error.to_string()));
 
-            exit(error.error());
+            err!(SyncError::RepoConfError(path, error.to_string()))?
         }
-    }
+    })
 }

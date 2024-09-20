@@ -39,6 +39,7 @@ use pacwrap_core::{
     Error,
     ErrorGeneric,
     ErrorKind,
+    ErrorType,
     Result,
 };
 
@@ -52,7 +53,7 @@ pub fn compose(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(args, &lock);
 
     if let Err(error) = lock.unlock() {
-        error.error();
+        eprintln!("{}", ErrorType::Error(&error));
     }
 
     result

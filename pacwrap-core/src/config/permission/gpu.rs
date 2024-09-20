@@ -32,6 +32,7 @@ use crate::{
     exec::args::ExecutionArgs,
     Error,
     ErrorGeneric,
+    ErrorType,
 };
 
 static GPU_DEV: OnceLock<Vec<String>> = OnceLock::new();
@@ -42,8 +43,8 @@ struct Graphics;
 #[typetag::serde(name = "gpu")]
 impl Permission for Graphics {
     fn check(&self) -> Result<Option<Condition>, PermError> {
-        let gpu_dev = populate_dev().map_err(|f| {
-            f.error();
+        let gpu_dev = populate_dev().map_err(|error| {
+            eprintln!("{}", ErrorType::Error(&error));
             Fail("No graphics devices are available.".into())
         })?;
         let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();

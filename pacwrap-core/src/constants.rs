@@ -17,11 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{
-    env::var,
-    process::{exit, id},
-    time::Duration,
-};
+use std::{env::var, process::id, time::Duration};
 
 use lazy_static::lazy_static;
 use nix::unistd::{getegid, geteuid};
@@ -109,7 +105,7 @@ lazy_static! {
 }
 
 fn env(env: &'static str) -> &'static str {
-    var(env).map_or_else(|_| exit(error!(ErrorKind::EnvVarUnset(env)).error()), |var| var.leak())
+    var(env).map_or_else(|_| error!(ErrorKind::EnvVarUnset(env)).fatal(), |var| var.leak())
 }
 
 fn env_opt(env: &str) -> &'static str {

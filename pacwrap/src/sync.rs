@@ -51,7 +51,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(&mut cache, &mut logger, args, &lock, action, create);
 
     if let Err(error) = lock.unlock() {
-        error.error();
+        eprintln!("{}", ErrorType::Error(&error));
     }
 
     result

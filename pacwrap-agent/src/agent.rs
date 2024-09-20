@@ -99,7 +99,7 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
         err!(SyncError::InitializationFailure(error.to_string()))?
     }
 
-    handle.ignore(&mut None);
+    handle.ignore(&mut None)?;
 
     if let TransactionType::Upgrade(upgrade, downgrade, _) = action {
         if upgrade {

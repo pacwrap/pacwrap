@@ -49,7 +49,7 @@ pub fn remove(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(action, args, &mut logger, &lock);
 
     if let Err(error) = lock.unlock() {
-        error.error();
+        eprintln!("{}", ErrorType::Error(&error));
     }
 
     result

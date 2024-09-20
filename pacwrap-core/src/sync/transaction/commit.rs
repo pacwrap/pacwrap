@@ -20,7 +20,10 @@
 use std::{os::unix::process::ExitStatusExt, process::Child, result::Result as StdResult};
 
 use crate::{
-    config::{ContainerHandle, CONFIG},
+    config::{
+        global::{global, Global},
+        ContainerHandle,
+    },
     constants::{BOLD, RESET},
     err,
     exec::transaction_agent,
@@ -84,7 +87,7 @@ impl Transaction for Commit {
             erroneous_preparation(error)?
         }
 
-        let result = confirm(&self.state, ag, handle);
+        let result = confirm(&self.state, ag, handle, global()?);
         let result = match result {
             Err(result) => return result,
             Ok(result) => result,
@@ -102,7 +105,7 @@ impl Transaction for Commit {
             ag.keyring_update(inshandle)?;
         }
 
-        handle.set_alpm(Some(sync::instantiate_alpm(inshandle, ag.flags())));
+        handle.set_alpm(Some(sync::instantiate_alpm(inshandle, ag.flags())?));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
         ag.logger().log(Info, &format!("container {instance}'s {state} transaction complete"))?;
         next_state(handle, ag.action(), &self.state, true)
@@ -117,6 +120,7 @@ fn confirm(
     state: &TransactionState,
     ag: &TransactionAggregator,
     handle: &mut TransactionHandle,
+    global: &'static Global,
 ) -> StdResult<(u64, u64), Result<TransactionState>> {
     let database = ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE);
     let foreign = !handle.get_mode().bool();
@@ -126,7 +130,7 @@ fn confirm(
     };
     let confirm = foreign || database && !create;
     let sum = Summary::new()
-        .kind(CONFIG.config().summary(), confirm)
+        .kind(global.config().summary(), confirm)
         .mode(handle.get_mode())
         .generate(handle.alpm());
 

@@ -17,21 +17,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::process::exit;
+use std::sync::OnceLock;
 
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{config, save},
+    config::{load_config, save},
     constants::CONFIG_FILE,
     sync::event::summary::SummaryKind,
     Result,
 };
 
-lazy_static! {
-    pub static ref CONFIG: Global = Global::load();
-}
+static CONFIG: OnceLock<Global> = OnceLock::new();
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Verbosity {
@@ -188,13 +185,6 @@ impl Default for Global {
 }
 
 impl Global {
-    fn load() -> Self {
-        match config() {
-            Ok(config) => config,
-            Err(error) => exit(error.error()),
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             config: Configuration::new(),
@@ -213,6 +203,20 @@ impl Global {
     pub fn save(&self) -> Result<()> {
         save(&self, &CONFIG_FILE)
     }
+}
+
+pub fn global() -> Result<&'static Global> {
+    Ok(match CONFIG.get() {
+        Some(f) => f,
+        None => {
+            let cfg = match load_config() {
+                Ok(config) => Ok(config),
+                Err(error) => error.fatal(),
+            }?;
+
+            CONFIG.get_or_init(|| cfg)
+        }
+    })
 }
 
 fn ignore_pkg() -> Vec<String> {

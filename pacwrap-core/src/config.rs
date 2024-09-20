@@ -39,7 +39,7 @@ pub use self::{
     container::{Container, ContainerHandle, ContainerType},
     dbus::Dbus,
     filesystem::{BindError, Filesystem},
-    global::{Global, CONFIG},
+    global::{global, Global},
     permission::{PermError, Permission},
     vars::ContainerVariables,
 };
@@ -149,7 +149,7 @@ fn handle<'a>(vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
     }
 }
 
-fn config() -> Result<Global> {
+fn load_config() -> Result<Global> {
     match serde_yaml::from_reader(File::open(*CONFIG_FILE).prepend_io(|| CONFIG_FILE.to_string())?) {
         Ok(file) => Ok(file),
         Err(error) => err!(ConfigError::Load(CONFIG_FILE.to_string(), error.to_string()))?,

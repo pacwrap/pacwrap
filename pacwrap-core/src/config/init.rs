@@ -20,7 +20,6 @@
 use std::{fs::File, io::Write, path::Path};
 
 use crate::{
-    config::global::CONFIG,
     constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
     err,
     Error,
@@ -97,9 +96,5 @@ pub fn init() -> Result<()> {
     data_layout().instantiate()?;
     cache_layout().instantiate()?;
     initialize_file(&format!("{}/repositories.conf", *CONFIG_DIR), REPO_CONF_DEFAULT)?;
-    initialize_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)?;
-
-    let _ = *CONFIG;
-
-    Ok(())
+    initialize_file(&format!("{}/pacwrap.yml", *CONFIG_DIR), PACWRAP_CONF_DEFAULT)
 }
