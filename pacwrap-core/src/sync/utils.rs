@@ -20,13 +20,7 @@
 use std::thread::Builder;
 
 use alpm::{
-    Alpm,
-    CommitData,
-    CommitError,
-    Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps},
-    Package,
-    PrepareData,
-    PrepareError,
+    Alpm, CommitData, CommitError, Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps}, FileConflictType, Package, PrepareData, PrepareError
 };
 use signal_hook::iterator::Signals;
 
@@ -98,16 +92,24 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
         match error.data() {
             CommitData::FileConflict(file) => {
                 for conflict in file {
-                    print_warning(&format!(
-                        "Conflict between {}{}{} and {}{}{}: {}",
-                        *BOLD,
-                        conflict.package1().name(),
-                        *RESET,
-                        *BOLD,
-                        conflict.package2().name(),
-                        *RESET,
-                        conflict.reason()
-                    ));
+                    match conflict.conflict_type() {
+                        FileConflictType::Filesystem => {
+                            let file = conflict.file();
+                            let target = conflict.target();
+                            print_warning(&format!("{}: '{}' already exists.", target, file));
+                        }
+                        FileConflictType::Target => {
+                            let file = conflict.file();
+                            let target = format!("{}{}{}", *BOLD_WHITE, conflict.target(), *RESET);
+                            if let Some(conflicting) = conflict.conflicting_target() {
+                                let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
+                                print_warning(&format!("{conflicting}: '{target}' is owned by {file}"));
+                            } else {
+                                print_warning(&format!("{target}: '{file}' is owned by foreign target"));
+                            }
+                        }
+                    }
+
                 }
 
                 err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
