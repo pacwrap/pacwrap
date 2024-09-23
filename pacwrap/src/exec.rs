@@ -193,7 +193,7 @@ fn execute_container(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, v
     }
 
     if dbus {
-        jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec)?);
+        jobs.push(instantiate_dbus_proxy(cfg.dbus(), &mut exec, verbosity)?);
     }
 
     exec.env("XDG_RUNTIME_DIR", &XDG_RUNTIME_DIR);
@@ -307,19 +307,20 @@ fn signal_trap(bwrap_pid: i32) {
         .unwrap();
 }
 
-fn instantiate_dbus_proxy(per: &[Box<dyn Dbus>], args: &mut ExecutionArgs) -> Result<Child> {
+fn instantiate_dbus_proxy(per: &[Box<dyn Dbus>], args: &mut ExecutionArgs, verbosity: i8) -> Result<Child> {
     let dbus_socket_path = format!("/run/user/{}/bus", nix::unistd::geteuid());
     let dbus_session = env_var("DBUS_SESSION_BUS_ADDRESS")?;
+    let mut dbus = Command::new(DBUS_PROXY_EXECUTABLE);
 
     register_dbus(per, args)?;
     create_placeholder(&DBUS_SOCKET)?;
+    dbus.arg(dbus_session).arg(&*DBUS_SOCKET);
 
-    match Command::new(DBUS_PROXY_EXECUTABLE)
-        .arg(dbus_session)
-        .arg(&*DBUS_SOCKET)
-        .args(args.get_dbus())
-        .spawn()
-    {
+    if verbosity > 1 {
+        dbus.arg("--log");
+    }
+
+    match dbus.arg("--filter").args(args.get_dbus()).spawn() {
         Ok(mut child) => {
             let mut increment: u8 = 0;
 
