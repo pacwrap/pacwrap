@@ -49,7 +49,7 @@ use crate::{
         seccomp::{provide_bpf_program, FilterType::*},
         utils::{agent_params, decode_info_json, wait_on_fakeroot, wait_on_process},
     },
-    sync::transaction::{TransactionMetadata, TransactionParameters},
+    sync::transaction::{TransactionFlags, TransactionMetadata, TransactionParameters},
     to_static_str,
     utils::TermControl,
     Error,
@@ -162,34 +162,34 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
         .arg("--info-fd")
         .arg(info_fd.to_string());
 
-        if let ContainerType::Slice = ins.metadata().container_type() {
-            process.arg("--dir").arg("/root")  
-                .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
-                .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
-                .arg("--dir").arg("/mnt/fs/root") ;
+    if let ContainerType::Slice = ins.metadata().container_type() {
+        process.arg("--dir").arg("/root")  
+            .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
+            .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/mnt/fs/lib64")
+            .arg("--dir").arg("/mnt/fs/root") ;
 
-            if arguments[0] == "ash" {
-                process.arg("--hostname").arg("BusyBox")
-                    .arg("--setenv").arg("ENV").arg("/etc/profile") 
-            } else {
-                process.arg("--hostname").arg("FakeChroot")
-                    .arg("fakeroot").arg("chroot").arg("/mnt/fs")
-            }
+        if arguments[0] == "ash" {
+            process.arg("--hostname").arg("BusyBox")
+                .arg("--setenv").arg("ENV").arg("/etc/profile") 
         } else {
             process.arg("--hostname").arg("FakeChroot")
-                .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
-                .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/fs/etc/pacman.d/gnupg")
-                .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg")
-                .arg("--bind").arg(ins.vars().home()).arg("/mnt/fs/root")
-                .arg("--setenv").arg("EUID").arg("0") 
-                .arg("--setenv").arg("PATH").arg(DEFAULT_PATH)
                 .arg("fakeroot").arg("chroot").arg("/mnt/fs")
-        };
+        }
+    } else {
+        process.arg("--hostname").arg("FakeChroot")
+            .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
+            .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/fs/etc/pacman.d/gnupg")
+            .arg("--bind").arg(ins.vars().pacman_cache()).arg("/mnt/fs/var/cache/pacman/pkg")
+            .arg("--bind").arg(ins.vars().home()).arg("/mnt/fs/root")
+            .arg("--setenv").arg("EUID").arg("0") 
+            .arg("--setenv").arg("PATH").arg(DEFAULT_PATH)
+            .arg("fakeroot").arg("chroot").arg("/mnt/fs")
+    };
 
-        match process.args(arguments)
-            .fd_mappings(fd_mappings)
-            .unwrap()
-            .spawn() 
+    match process.args(arguments)
+        .fd_mappings(fd_mappings)
+        .expect("FD Mappings")
+        .spawn() 
 	{
 		Ok(child) => wait_on_fakeroot(exec_type, child, term_control, decode_info_json(info_pipe)?, trap),
 		Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
@@ -197,30 +197,35 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
 }
 
 #[rustfmt::skip]
-pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, metadata: &TransactionMetadata) -> Result<Child> {
-	let params_pipe = os_pipe::pipe().expect("params pipe");
+pub fn transaction_agent(
+    ins: &ContainerHandle,
+    flags: &TransactionFlags,
+    params: TransactionParameters,
+    metadata: &TransactionMetadata,
+) -> Result<Child> {	
+    let params_pipe = os_pipe::pipe().expect("params pipe");
     let params_fd = agent_params(&params_pipe.0, &params_pipe.1, &params, metadata)?;	
     let sec_pipe = os_pipe::pipe().expect("eBPF pipe");
     let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).expect("eBPF program");
-	let fd_mappings = vec![
-		FdMapping { 
-		    parent_fd: sec_fd, 
-		    child_fd: sec_fd 
-		}, 
-		FdMapping { 
-		    parent_fd: params_fd, 
-		    child_fd: params_fd 
-		},
-	];
-	
-	match Command::new(BWRAP_EXECUTABLE).env_clear()
-        .arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
+    let fd_mappings = vec![
+        FdMapping { 
+            parent_fd: sec_fd, 
+            child_fd: sec_fd 
+        }, 
+        FdMapping { 
+            parent_fd: params_fd, 
+            child_fd: params_fd 
+        },
+    ]; 
+    let mut process = Command::new(BWRAP_EXECUTABLE);
+
+    process.arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
         .arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
         .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/bin")
         .arg("--ro-bind").arg(format!("{}/lib", *DIST_IMG)).arg("/lib64")
         .arg("--symlink").arg("lib").arg("/lib")
         .arg("--ro-bind").arg("/etc/resolv.conf").arg("/etc/resolv.conf")
-        .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime") 
+        .arg("--ro-bind").arg("/etc/localtime").arg("/etc/localtime")
         .arg("--ro-bind").arg(*DIST_TLS).arg("/etc/ssl/certs/ca-certificates.crt")
         .arg("--bind").arg(*LOG_LOCATION).arg("/mnt/share/pacwrap.log") 
         .arg("--bind").arg(ins.vars().pacman_gnupg()).arg("/mnt/share/gnupg")
@@ -228,6 +233,7 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
         .arg("--dev").arg("/dev")
         .arg("--dev").arg("/mnt/fs/dev")
         .arg("--proc").arg("/mnt/fs/proc")
+        .arg("--proc").arg("/proc")
         .arg("--unshare-all")
         .arg("--share-net")
         .arg("--hostname").arg("pacwrap-agent")
@@ -241,7 +247,6 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
         .arg("--setenv").arg("LD_PRELOAD").arg("/lib64/libfakechroot.so")
         .arg("--setenv").arg("PACWRAP_REAL_UID").arg(ID.0)
         .arg("--setenv").arg("PACWRAP_REAL_GID").arg(ID.1)
-        .arg("--setenv").arg("RUST_BACKTRACE").arg("1")
         .arg("--die-with-parent")
         .arg("--unshare-user")
         .arg("--disable-userns")
@@ -249,15 +254,20 @@ pub fn transaction_agent(ins: &ContainerHandle, params: TransactionParameters, m
         .arg(sec_fd.to_string())
         .arg("--ro-bind-data")
         .arg(params_fd.to_string())
-        .arg("/mnt/agent_params")
-        .arg("agent")
+        .arg("/mnt/agent_params");
+
+    if flags.contains(TransactionFlags::DEBUG) {
+        process.arg("--setenv").arg("RUST_BACKTRACE").arg("full");
+    }
+
+    match process.arg("agent")
         .arg("transact")
         .fd_mappings(fd_mappings)
-        .unwrap()
+        .expect("FD Mappings")
         .spawn() 
     {
-		Ok(child) => Ok(child),
-		Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
+        Ok(child) => Ok(child),
+        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
     }
 }
 

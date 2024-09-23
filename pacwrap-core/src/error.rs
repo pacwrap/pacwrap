@@ -121,6 +121,12 @@ impl Error {
     }
 }
 
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.kind)
+    }
+}
+
 impl Display for ErrorType<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {

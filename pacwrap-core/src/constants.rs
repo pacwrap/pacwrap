@@ -25,7 +25,7 @@ use signal_hook::consts::*;
 
 use crate::{
     error,
-    utils::{ansi::*, unix_time_as_seconds},
+    utils::{ansi::*, unix_epoch_time},
     Error,
     ErrorKind,
 };
@@ -83,7 +83,7 @@ lazy_static! {
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", *UID, &id());
     pub static ref WAYLAND_SOCKET: String = format!("{}{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
     pub static ref LOG_LOCATION: &'static str = format_str!("{}/pacwrap.log", *DATA_DIR);
-    pub static ref UNIX_TIMESTAMP: u64 = unix_time_as_seconds();
+    pub static ref UNIX_TIMESTAMP: u64 = unix_epoch_time().as_secs();
     pub static ref IS_COLOR_TERMINAL: bool = is_color_terminal();
     pub static ref IS_TRUECOLOR_TERMINLAL: bool = is_truecolor_terminal();
     pub static ref BOLD: &'static str = bold();

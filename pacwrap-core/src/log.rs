@@ -22,7 +22,6 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
@@ -31,8 +30,9 @@ use crate::{
     constants::{LOG_LOCATION, UNIX_TIMESTAMP},
     err,
     impl_error,
+    utils::unix_epoch_time,
     Error,
-    ErrorKind,
+    ErrorGeneric,
     ErrorTrait,
     Result,
 };
@@ -107,7 +107,7 @@ impl From<i8> for Level {
 }
 
 impl Display for Level {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         write!(fmter, "{}", self.to_str())
     }
 }
@@ -126,11 +126,15 @@ impl Logger {
          * between libalpm and the time crate, cache the offset during the
          * initalisation of this struct.
          */
-        let ofs = OffsetDateTime::now_local()
-            .unwrap_or(OffsetDateTime::now_utc())
-            .format(UTC_OFFSET)
-            .unwrap();
-        let ofs = UtcOffset::parse(ofs.as_str(), UTC_OFFSET).unwrap();
+        let ofs = UtcOffset::parse(
+            OffsetDateTime::now_local()
+                .unwrap_or(OffsetDateTime::now_utc())
+                .format(UTC_OFFSET)
+                .expect("Format UTC offset")
+                .as_str(),
+            UTC_OFFSET,
+        )
+        .expect("Parse UTC offset");
 
         Self {
             verbosity: 3,
@@ -140,14 +144,16 @@ impl Logger {
         }
     }
 
-    pub fn init(mut self) -> Result<Self> {
-        let path = Path::new(*LOG_LOCATION);
+    pub fn location(mut self, location: &str) -> Result<Self> {
+        let path = Path::new(location);
         let file = OpenOptions::new().create(true).append(true).truncate(false).open(path);
 
-        self.file = Some(match file {
-            Ok(file) => file,
-            Err(error) => err!(ErrorKind::IOError(LOG_LOCATION.to_string(), error.kind()))?,
-        });
+        self.file = Some(file.prepend_io(|| location.into())?);
+        Ok(self)
+    }
+
+    pub fn init(mut self) -> Result<Self> {
+        self = self.location(*LOG_LOCATION)?;
         Ok(self)
     }
 
@@ -155,9 +161,10 @@ impl Logger {
         self.verbosity = verbosity
     }
 
-    pub fn log(&mut self, level: Level, msg: &str) -> Result<()> {
+    pub fn log(&mut self, level: Level, msg: &str) -> Result<usize> {
+        // Check message verbosity against logger verbosity
         if level.verbosity() > self.verbosity {
-            return Ok(());
+            return Ok(0);
         }
 
         /*
@@ -168,27 +175,27 @@ impl Logger {
          * time offset if a change were to occur whilst this application is running.
          */
         if let Ok(local) = OffsetDateTime::now_local() {
-            self.offset = UtcOffset::parse(local.format(UTC_OFFSET).unwrap().as_str(), UTC_OFFSET).unwrap();
-        }
+            let local_time = local.format(UTC_OFFSET).expect("Format localtime");
 
-        let time: OffsetDateTime = OffsetDateTime::now_utc().to_offset(self.offset);
-        let write = if let Some(file) = self.file.as_mut() {
-            file.write(format!("[{}] [{}] [{}] {}\n", time.format(DATE_FORMAT).unwrap(), self.module, level, msg).as_bytes())
-        } else {
-            err!(LoggerError::Uninitialized)?
-        };
+            self.offset = UtcOffset::parse(&local_time, UTC_OFFSET).expect("Offset localtime");
+        }
 
         if let Level::Debug = level {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime now");
+            let now = unix_epoch_time();
+            let nano = format!("{:.6}", now.subsec_nanos().to_string());
             let time = now.as_secs() as usize - *UNIX_TIMESTAMP as usize;
-            let nano = now.subsec_nanos().to_string();
 
-            eprintln!("[{}.{:.6}] [{}] {}", time, nano, self.module, msg);
+            eprintln!("[{}.{}] [{}] {}", time, nano, self.module, msg);
         }
 
-        match write {
-            Ok(_) => Ok(()),
-            Err(error) => err!(ErrorKind::IOError(LOG_LOCATION.to_string(), error.kind())),
+        match self.file.as_mut() {
+            Some(file) => {
+                let time = OffsetDateTime::now_utc().to_offset(self.offset).format(DATE_FORMAT).expect("Format time");
+                let log = format!("[{}] [{}] [{}] {}\n", time, self.module, level, msg);
+
+                file.write(log.as_bytes()).generic()
+            }
+            None => err!(LoggerError::Uninitialized)?,
         }
     }
 }

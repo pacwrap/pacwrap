@@ -29,6 +29,7 @@ use pacwrap_core::{
     config::Global,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     err,
+    log::{Level, Logger},
     sync::{
         self,
         event::{
@@ -77,16 +78,23 @@ pub fn transact() -> Result<()> {
     let (transflags, ..) = handle.metadata().retrieve_flags();
     let alpm = sync::instantiate_alpm_agent(&config, &alpm_remotes, &transflags.expect("TransactionFlags"));
     let mut handle = handle.alpm_handle(alpm).config(&config).agent();
+    let mut logger = Logger::new("pacwrap-agent").location("/mnt/share/pacwrap.log")?;
 
-    if let Err(err) = conduct_transaction(&config, &mut handle, params) {
+    if let Err(err) = conduct_transaction(&config, &mut logger, &mut handle, params) {
         handle.release();
+        logger.log(Level::Error, &format!("Transaction Error: {}", err))?;
         return Err(err);
     }
 
     Ok(())
 }
 
-fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: TransactionParameters) -> Result<()> {
+fn conduct_transaction(
+    config: &Global,
+    logger: &mut Logger,
+    handle: &mut TransactionHandle,
+    agent: TransactionParameters,
+) -> Result<()> {
     let flags = handle.metadata().retrieve_flags();
     let mode = agent.mode();
     let action = agent.action();
@@ -95,7 +103,7 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
     let bytes = agent.bytes();
     let files = agent.files();
 
-    if let Err(error) = handle.alpm_mut().trans_init(flags.1.unwrap()) {
+    if let Err(error) = handle.alpm_mut().trans_init(flags.1.expect("ALPM TransFlag")) {
         err!(SyncError::InitializationFailure(error.to_string()))?
     }
 
@@ -103,11 +111,11 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
 
     if let TransactionType::Upgrade(upgrade, downgrade, _) = action {
         if upgrade {
-            handle.alpm().sync_sysupgrade(downgrade).unwrap();
+            handle.alpm().sync_sysupgrade(downgrade).expect("ALPM sync_sysupgrade")
         }
     }
 
-    handle.prepare(&action, &flags.0.unwrap())?;
+    handle.prepare(&action, &flags.0.expect("TransactionFlags"))?;
 
     if let Err(error) = handle.alpm_mut().trans_prepare() {
         erroneous_preparation(error)?
@@ -124,12 +132,15 @@ fn conduct_transaction(config: &Global, handle: &mut TransactionHandle, agent: T
         erroneous_transaction(error)?
     }
 
-    handle.alpm_mut().trans_release().unwrap();
+    handle.alpm_mut().trans_release().expect("ALPM trans_release");
     handle.mark_depends();
 
     if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/fs/etc/ld.so.cache") {
         if error.kind() != NotFound {
-            print_warning(&format!("Failed to propagate ld.so.cache: {}", error));
+            let message = &format!("Failed to propagate ld.so.cache: {}", error);
+
+            print_warning(message);
+            logger.log(Level::Warn, message)?;
         }
     }
 

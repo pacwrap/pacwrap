@@ -287,12 +287,18 @@ impl<'a> TransactionAggregator<'a> {
 
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
-                        SyncError::TransactionAgentFailure => {
-                            self.logger().log(Level::Fatal, &format!("Transaction error: {:?}", err))?;
+                        SyncError::TransactionAgentFailure
+                        | SyncError::ParameterAcquisitionFailure
+                        | SyncError::DeserializationFailure => {
+                            self.logger().log(Level::Fatal, &format!("Transaction error: {}", err))?;
                             err.fatal()
                         }
+                        SyncError::AgentVersionMismatch | SyncError::InvalidMagicNumber => {
+                            self.logger().log(Level::Error, &format!("Transaction error: {}", err))?;
+                            err.error()
+                        }
                         _ => {
-                            self.logger().log(Level::Error, &format!("Transaction error: {:?}", err))?;
+                            self.logger().log(Level::Error, &format!("Transaction error: {}", err))?;
                             Err(err)
                         }
                     };

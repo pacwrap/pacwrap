@@ -21,7 +21,7 @@ use std::{
     env::var,
     os::unix::net::UnixStream,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
@@ -55,8 +55,8 @@ pub fn check_socket(socket: &String) -> bool {
     UnixStream::connect(Path::new(socket)).is_ok()
 }
 
-pub fn unix_time_as_seconds() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+pub fn unix_epoch_time() -> Duration {
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime")
 }
 
 pub fn whitespace(amt: usize) -> String {

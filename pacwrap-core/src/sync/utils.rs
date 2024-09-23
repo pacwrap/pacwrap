@@ -20,7 +20,14 @@
 use std::thread::Builder;
 
 use alpm::{
-    Alpm, CommitData, CommitError, Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps}, FileConflictType, Package, PrepareData, PrepareError
+    Alpm,
+    CommitData,
+    CommitError,
+    Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps},
+    FileConflictType,
+    Package,
+    PrepareData,
+    PrepareError,
 };
 use signal_hook::iterator::Signals;
 
@@ -109,7 +116,6 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
                             }
                         }
                     }
-
                 }
 
                 err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?

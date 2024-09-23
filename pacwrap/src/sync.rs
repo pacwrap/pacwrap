@@ -44,7 +44,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     check_root()?;
     init()?;
 
-    let mut logger = Logger::new("pacwrap-sync").init().unwrap();
+    let mut logger = Logger::new("pacwrap-sync").init()?;
     let mut cache = cache::populate()?;
     let (action, create) = action(args);
     let lock = Lock::new().lock()?;

@@ -87,19 +87,15 @@ impl Transaction for Commit {
             erroneous_preparation(error)?
         }
 
-        let result = confirm(&self.state, ag, handle, global()?);
-        let result = match result {
-            Err(result) => return result,
-            Ok(result) => result,
+        let trans_state = match confirm(&self.state, ag, handle, global()?) {
+            Err(error) => return error,
+            Ok(state) => state,
         };
+        let params = TransactionParameters::new(*ag.action(), *handle.get_mode(), trans_state);
 
         handle.set_alpm(None);
         ag.lock()?.assert()?;
-        wait_on_agent(transaction_agent(
-            inshandle,
-            TransactionParameters::new(*ag.action(), *handle.get_mode(), result),
-            handle.meta,
-        )?)?;
+        wait_on_agent(transaction_agent(inshandle, ag.flags(), params, handle.meta)?)?;
 
         if self.keyring {
             ag.keyring_update(inshandle)?;
@@ -203,7 +199,7 @@ fn wait_on_agent(mut agent: Child) -> Result<()> {
         Ok(status) => match status.code().unwrap_or(-1) {
             0 => Ok(()),
             1 => err!(SyncError::TransactionAgentError),
-            2 => err!(SyncError::TransactionAgentFailure),
+            2 | 101 => err!(SyncError::TransactionAgentFailure),
             3 => err!(SyncError::ParameterAcquisitionFailure),
             4 => err!(SyncError::DeserializationFailure),
             5 => err!(SyncError::InvalidMagicNumber),

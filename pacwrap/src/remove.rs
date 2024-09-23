@@ -43,7 +43,7 @@ pub fn remove(args: &mut Arguments) -> Result<()> {
         return remove_containers(args);
     }
 
-    let mut logger = Logger::new("pacwrap-sync").init().unwrap();
+    let mut logger = Logger::new("pacwrap-sync").init()?;
     let action = action(args);
     let lock = Lock::new().lock()?;
     let result = engage_aggregator(action, args, &mut logger, &lock);

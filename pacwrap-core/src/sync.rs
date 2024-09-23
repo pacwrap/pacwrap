@@ -22,7 +22,6 @@ use std::{
     os::unix::fs::symlink,
     path::Path,
     sync::OnceLock,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use alpm::{Alpm, LogLevel, SigLevel, Usage};
@@ -30,16 +29,22 @@ use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{global, global::ProgressKind, ContainerHandle, ContainerType::*, ContainerVariables, Global},
+    config::{
+        global::{global, ProgressKind},
+        ContainerHandle,
+        ContainerType::*,
+        ContainerVariables,
+        Global,
+    },
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET, UNIX_TIMESTAMP, VERBOSE},
     err,
     exec::pacwrap_key,
-    impl_error,
     sync::{
         event::download::{self, DownloadEvent},
         filesystem::{create_blank_state, create_hard_link},
         transaction::{TransactionAggregator, TransactionFlags},
     },
+    utils::unix_epoch_time,
     Error,
     ErrorGeneric,
     ErrorTrait,
@@ -91,6 +96,8 @@ impl Display for SyncError {
                 write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
             Self::TargetUpstream(pkg) =>
                 write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
+            Self::TransactionAgentError | Self::TransactionAgentFailure =>
+                write!(fmter, "Agent process terminated due to upstream error."),
             Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
             Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
             Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."),
@@ -104,23 +111,23 @@ impl Display for SyncError {
             Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
             Self::SignalInterrupt => write!(fmter, "Signal interrupt was triggered."),
             Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
-            Self::TransactionAgentError => write!(fmter, "Agent process terminated due to upstream error."),
             Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
             Self::NothingToDo => write!(fmter, "Nothing to do."),
-            _ => Ok(()),
-        }?;
-
-        if let Self::TransactionFailure(_) = self {
-            Ok(())
-        } else if let Self::SignalInterrupt = self {
-            write!(fmter, "\n{} Transaction aborted.", *ARROW_RED)
-        } else {
-            write!(fmter, "\n{} Transaction failed.", *ARROW_RED)
         }
     }
 }
 
-impl_error!(SyncError);
+impl ErrorTrait for SyncError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::TransactionFailure(_) => (),
+            Self::SignalInterrupt => eprintln!("{} Transaction aborted.", *ARROW_RED),
+            _ => eprintln!("{} Transaction failed.", *ARROW_RED),
+        }
+
+        1
+    }
+}
 
 impl From<&Error> for SyncError {
     fn from(error: &Error) -> SyncError {
@@ -255,7 +262,7 @@ fn alpm_handle(
 }
 
 fn alpm_log_callback(level: LogLevel, msg: &str, counter: &mut usize) {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let now = unix_epoch_time();
     let time = now.as_secs() as usize - *counter;
     let nano = now.subsec_nanos().to_string();
     let log_level = level.bits() / 4;
