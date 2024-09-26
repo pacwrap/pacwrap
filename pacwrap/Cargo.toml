@@ -1,6 +1,6 @@
 [package]
 name = "pacwrap"
-version = "0.8.5"
+version = "0.8.6"
 authors = [ "Xavier Moffett <sapphirus@azorium.net>" ]
 license ="GPL-3.0-only"
 readme = "README.md"
