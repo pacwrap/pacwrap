@@ -82,7 +82,7 @@ pub enum SyncError {
     TransactionFailure(String),
     InitializationFailure(String),
     InternalError(String),
-    NoCompatibleRemotes,
+    NoCompatibleContainers,
     UnableToLocateKeyrings,
     RepoConfError(String, String),
 }
@@ -99,7 +99,7 @@ impl Display for SyncError {
             Self::TransactionAgentError | Self::TransactionAgentFailure =>
                 write!(fmter, "Agent process terminated due to upstream error."),
             Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::NoCompatibleRemotes => write!(fmter, "No compatible containers available to synchronize remote database."),
+            Self::NoCompatibleContainers => write!(fmter, "No compatible containers available to synchronize remote database."),
             Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."),
             Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
             Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
@@ -342,7 +342,7 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
 fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<()> {
     let handle = match ag.cache().obtain_base_handle() {
         Some(handle) => handle,
-        None => err!(SyncError::NoCompatibleRemotes)?,
+        None => err!(SyncError::NoCompatibleContainers)?,
     };
     let flags = ag.flags();
     let db_path = format!("{}/pacman/", *DATA_DIR);
@@ -356,7 +356,7 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
         err!(SyncError::InitializationFailure(err.to_string()))?
     }
 
-    Alpm::release(handle).expect("Release Alpm handle");
+    handle.release().generic()?;
     ag.lock()?.assert()?;
 
     for handle in ag.cache().filter_handle(vec![Base, Slice, Aggregate]).iter() {

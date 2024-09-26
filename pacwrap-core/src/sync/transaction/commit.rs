@@ -47,6 +47,7 @@ use crate::{
     },
     utils::prompt::prompt,
     Error,
+    ErrorGeneric,
     Result,
 };
 
@@ -78,7 +79,7 @@ impl Transaction for Commit {
         let state = self.state.as_str();
 
         if let SyncState::NotRequired = handle.trans_ready(ag.action(), ag.flags())? {
-            return Ok(match ready_state(handle, ag.action(), &self.state) {
+            return Ok(match ready_state(ag.action(), &self.state) {
                 Some(state) => state,
                 None => TransactionState::Complete(false),
             });
@@ -105,7 +106,7 @@ impl Transaction for Commit {
         handle.set_alpm(Some(sync::instantiate_alpm(inshandle, ag.flags())?));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
         ag.logger().log(Info, &format!("container {instance}'s {state} transaction complete"))?;
-        Ok(next_state(handle, ag.action(), &self.state, true))
+        Ok(next_state(ag.action(), &self.state, true))
     }
 
     fn debug(&self) -> String {
@@ -135,7 +136,8 @@ fn confirm(
         println!("{}", sum);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            return Ok(State::Next(next_state(handle, ag.action(), state, false)));
+            handle.alpm_mut().trans_release().generic()?;
+            return Ok(State::Next(next_state(ag.action(), state, false)));
         }
 
         if !ag.flags().contains(TransactionFlags::NO_CONFIRM) {
@@ -143,23 +145,17 @@ fn confirm(
             let query = format!("Proceed with {action}?");
 
             if !prompt("::", format!("{}{query}{}", *BOLD, *RESET), true)? {
-                return Ok(State::Next(next_state(handle, ag.action(), state, false)));
+                handle.alpm_mut().trans_release().generic()?;
+                return Ok(State::Next(next_state(ag.action(), state, false)));
             }
         }
     }
 
-    handle.alpm_mut().trans_release().ok();
+    handle.alpm_mut().trans_release().generic()?;
     Ok(State::Commit(sum.download()))
 }
 
-fn next_state(
-    handle: &mut TransactionHandle,
-    action: &TransactionType,
-    state: &TransactionState,
-    updated: bool,
-) -> TransactionState {
-    handle.alpm_mut().trans_release().ok();
-
+fn next_state(action: &TransactionType, state: &TransactionState, updated: bool) -> TransactionState {
     match action {
         Remove(..) => match state {
             CommitForeign => Complete(updated),
@@ -174,9 +170,7 @@ fn next_state(
     }
 }
 
-fn ready_state(handle: &mut TransactionHandle, action: &TransactionType, state: &TransactionState) -> Option<TransactionState> {
-    handle.alpm_mut().trans_release().ok();
-
+fn ready_state(action: &TransactionType, state: &TransactionState) -> Option<TransactionState> {
     match action {
         Remove(..) => match state {
             CommitForeign => None,

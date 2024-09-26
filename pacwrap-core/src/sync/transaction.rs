@@ -225,7 +225,7 @@ impl TransactionType {
             progress.set_message(format!("{}{}{} ", *BOLD, message, *RESET));
             progress.tick();
         } else {
-            println!("{}{}{}{}", *BAR_CYAN, *BOLD, message, *RESET);
+            println!("{} {}{}{}", *BAR_CYAN, *BOLD, message, *RESET);
         }
     }
 }
@@ -531,11 +531,7 @@ impl<'a> TransactionHandle<'a> {
         }
     }
 
-    pub fn release(mut self) {
-        if let Some(alpm) = self.alpm.as_mut() {
-            alpm.trans_release().ok();
-        }
-
+    pub fn release(self) {
         drop(self);
     }
 
@@ -548,11 +544,11 @@ impl<'a> TransactionHandle<'a> {
     }
 
     pub fn alpm_mut(&mut self) -> &mut Alpm {
-        self.alpm.as_mut().unwrap()
+        self.alpm.as_mut().expect("ALPM handle")
     }
 
     pub fn alpm(&self) -> &Alpm {
-        self.alpm.as_ref().unwrap()
+        self.alpm.as_ref().expect("ALPM handle")
     }
 
     pub fn set_alpm(&mut self, alpm: Option<Alpm>) {

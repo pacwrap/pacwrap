@@ -285,6 +285,10 @@ impl<'a> TransactionAggregator<'a> {
                         progress.finish();
                     }
 
+                    if let Some(ref mut alpm) = handle.alpm {
+                        alpm.trans_release().ok();
+                    }
+
                     handle.release();
                     return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
                         SyncError::TransactionAgentFailure
