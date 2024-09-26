@@ -21,7 +21,7 @@ use std::path::Path;
 
 use alpm::{AnyQuestion, Question::*};
 
-use crate::utils::prompt::prompt;
+use crate::{utils::prompt::prompt, ErrorGeneric};
 
 pub fn callback(question: AnyQuestion, _: &mut ()) {
     match question.question() {
@@ -30,8 +30,9 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let pkg_b = x.conflict().package2().name();
             let prompt_string = format!("Conflict between {pkg_a} and {pkg_b}; Remove {pkg_b}?");
 
-            if prompt("->", prompt_string, false) {
-                x.set_remove(true);
+            match prompt("->", prompt_string, false).generic() {
+                Ok(bool) => x.set_remove(bool),
+                Err(err) => err.error(),
             }
         }
         Replace(x) => {
@@ -39,8 +40,9 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let new = x.newpkg().name();
             let prompt_string = format!("Replace package {old} with {new}?");
 
-            if prompt("->", prompt_string, false) {
-                x.set_replace(true);
+            match prompt("->", prompt_string, false).generic() {
+                Ok(bool) => x.set_replace(bool),
+                Err(err) => err.error(),
             }
         }
         Corrupted(mut x) => {
@@ -49,8 +51,9 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let reason = x.reason();
             let prompt_string = format!("'{filename}': {reason}. Remove package?");
 
-            if prompt("::", prompt_string, true) {
-                x.set_remove(true);
+            match prompt("->", prompt_string, false).generic() {
+                Ok(bool) => x.set_remove(bool),
+                Err(err) => err.error(),
             }
         }
         ImportKey(mut x) => {
@@ -58,8 +61,9 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let name = x.uid();
             let prompt_string = format!("Import key {fingerprint}, \"{name}\" to keyring?");
 
-            if prompt("->", prompt_string, true) {
-                x.set_import(true);
+            match prompt("->", prompt_string, false).generic() {
+                Ok(bool) => x.set_import(bool),
+                Err(err) => err.error(),
             }
         }
         _ => (),

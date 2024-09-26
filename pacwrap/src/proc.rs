@@ -278,7 +278,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     let instances: Vec<String> = instances.iter().map(|a| format!("{} ({}{}{})", a.0, *DIM, a.1, *RESET)).collect();
     let instances: Vec<&str> = instances.iter().map(|a| a.as_ref()).collect();
 
-    match no_confirm || prompt_targets(&instances, "Kill container processes?", false) {
+    match no_confirm || prompt_targets(&instances, "Kill container processes?", false)? {
         true => kill_processes(&list, sigint),
         false => Ok(()),
     }

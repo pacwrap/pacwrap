@@ -72,7 +72,7 @@ fn delete_containers<'a>(
     if flags.contains(TransactionFlags::NO_CONFIRM) {
         println!("{} {}{}...{}", *BAR_GREEN, *BOLD, &message, *RESET);
         delete_roots(cache, lock, logger, delete, force)?;
-    } else if prompt_targets(delete, &message, false) {
+    } else if prompt_targets(delete, &message, false)? {
         delete_roots(cache, lock, logger, delete, force)?;
     }
 

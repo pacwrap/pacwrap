@@ -436,7 +436,7 @@ impl<'a> TransactionHandle<'a> {
                     if !self.agent
                         && !ignored.contains(pkg.name())
                         && config.alpm().held().contains(&pkg.name())
-                        && !prompt("::", format!("Target package {}{}{} is held. Remove it?", *BOLD, pkg.name(), *RESET), false)
+                        && !prompt("::", format!("Target package {}{}{} is held. Remove it?", *BOLD, pkg.name(), *RESET), false)?
                     {
                         self.meta.held_pkgs.insert(pkg.name().into());
                         continue;
@@ -466,7 +466,7 @@ impl<'a> TransactionHandle<'a> {
                             "::",
                             format!("Target package {}{}{} is ignored. Upgrade it?", *BOLD, pkg.name(), *RESET),
                             false,
-                        )
+                        )?
                     {
                         self.meta.ignored_pkgs.insert(pkg.name().into());
                         continue;

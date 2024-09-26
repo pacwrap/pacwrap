@@ -92,7 +92,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
 
     let lock = Lock::new().lock()?;
 
-    if let (true, _) | (_, true) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)) {
+    if let (true, _) | (_, true) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)?) {
         if let Err(err) = delete_roots(&cache, &lock, &mut logger, &instances, force) {
             eprintln!("{}", ErrorType::Error(&err));
         }

@@ -44,7 +44,7 @@ use crate::{
         filesystem::{create_blank_state, create_hard_link},
         transaction::{TransactionAggregator, TransactionFlags},
     },
-    utils::unix_epoch_time,
+    utils::{prompt::PromptError, unix_epoch_time},
     Error,
     ErrorGeneric,
     ErrorTrait,
@@ -131,6 +131,10 @@ impl ErrorTrait for SyncError {
 
 impl From<&Error> for SyncError {
     fn from(error: &Error) -> SyncError {
+        if let Ok(PromptError::PromptInterrupted) = error.downcast::<PromptError>() {
+            return Self::SignalInterrupt;
+        }
+
         Self::InternalError(error.kind().to_string())
     }
 }

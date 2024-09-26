@@ -17,24 +17,51 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    io::ErrorKind::{Interrupted, NotConnected},
+};
+
 use dialoguer::{
     console::{style, Style},
     theme::ColorfulTheme,
     Input,
 };
-use std::io::Error;
 
-use crate::constants::{BAR_RED, BOLD, RESET};
+use crate::{
+    constants::{BAR_RED, BOLD, RESET},
+    err,
+    impl_error,
+    Error,
+    ErrorGeneric,
+    ErrorTrait,
+    Result,
+};
 
-pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool) -> bool {
-    if let Ok(value) = create_prompt(prompt.into(), prefix, yn_prompt) {
-        value.to_lowercase() == "y" || (yn_prompt && value.is_empty())
-    } else {
-        false
+#[derive(Debug)]
+pub enum PromptError {
+    PromptInterrupted,
+    PromptNotTerminal,
+}
+
+impl Display for PromptError {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::PromptInterrupted => write!(fmter, "Prompt was interrupted."),
+            Self::PromptNotTerminal => write!(fmter, "Input is not a terminal."),
+        }
     }
 }
 
-fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<String, Error> {
+impl_error!(PromptError);
+
+pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool) -> Result<bool> {
+    let value = create_prompt(prompt.into(), prefix, yn_prompt)?;
+
+    Ok(value.to_lowercase() == "y" || (yn_prompt && value.is_empty()))
+}
+
+fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<String> {
     let prompt = match yn_prompt {
         true => ("[Y/n]", style(prefix.into()).blue().bold()),
         false => ("[y/N]", style(prefix.into()).red().bold()),
@@ -50,11 +77,19 @@ fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<Strin
         values_style: Style::new(),
         ..ColorfulTheme::default()
     };
+    let input: String = match Input::with_theme(&theme).with_prompt(message).allow_empty(true).interact_text() {
+        Ok(prompt) => prompt,
+        Err(error) => match error.kind() {
+            Interrupted => err!(PromptError::PromptInterrupted)?,
+            NotConnected => err!(PromptError::PromptNotTerminal)?,
+            _ => Err(error).generic()?,
+        },
+    };
 
-    return Input::with_theme(&theme).with_prompt(message).allow_empty(true).interact_text();
+    Ok(input)
 }
 
-pub fn prompt_targets(targets: &[&str], ins_prompt: &str, yn_prompt: bool) -> bool {
+pub fn prompt_targets(targets: &[&str], ins_prompt: &str, yn_prompt: bool) -> Result<bool> {
     eprintln!("{} {}Container{}{}\n", *BAR_RED, *BOLD, if targets.len() > 1 { "s" } else { "" }, *RESET);
 
     for target in targets.iter() {
