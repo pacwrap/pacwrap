@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{os::unix::process::ExitStatusExt, process::Child, result::Result as StdResult};
+use std::{os::unix::process::ExitStatusExt, process::Child};
 
 use crate::{
     config::{
@@ -32,6 +32,7 @@ use crate::{
         self,
         event::summary::Summary,
         transaction::{
+            SyncState,
             Transaction,
             TransactionAggregator,
             TransactionFlags,
@@ -49,7 +50,10 @@ use crate::{
     Result,
 };
 
-use super::SyncState;
+enum State {
+    Commit((u64, u64)),
+    Next(TransactionState),
+}
 
 #[derive(Debug)]
 pub struct Commit {
@@ -59,10 +63,7 @@ pub struct Commit {
 
 impl Transaction for Commit {
     fn new(new: TransactionState, _: &TransactionAggregator) -> Box<Self> {
-        let kr = match new {
-            Commit(bool) => bool,
-            _ => false,
-        };
+        let kr = if let Commit(kr) = new { kr } else { false };
 
         Box::new(Self { state: new, keyring: kr })
     }
@@ -77,19 +78,19 @@ impl Transaction for Commit {
         let state = self.state.as_str();
 
         if let SyncState::NotRequired = handle.trans_ready(ag.action(), ag.flags())? {
-            match ready_state(handle, ag.action(), &self.state) {
-                Some(result) => return result,
-                None => return Ok(TransactionState::Complete(false)),
-            }
+            return Ok(match ready_state(handle, ag.action(), &self.state) {
+                Some(state) => state,
+                None => TransactionState::Complete(false),
+            });
         }
 
         if let Err(error) = handle.alpm_mut().trans_prepare() {
             erroneous_preparation(error)?
         }
 
-        let trans_state = match confirm(&self.state, ag, handle, global()?) {
-            Err(error) => return error,
-            Ok(state) => state,
+        let trans_state = match confirm(&self.state, ag, handle, global()?)? {
+            State::Next(state) => return Ok(state),
+            State::Commit(values) => values,
         };
         let params = TransactionParameters::new(*ag.action(), *handle.get_mode(), trans_state);
 
@@ -104,7 +105,7 @@ impl Transaction for Commit {
         handle.set_alpm(Some(sync::instantiate_alpm(inshandle, ag.flags())?));
         handle.apply_configuration(inshandle, ag.flags().intersects(TransactionFlags::CREATE))?;
         ag.logger().log(Info, &format!("container {instance}'s {state} transaction complete"))?;
-        next_state(handle, ag.action(), &self.state, true)
+        Ok(next_state(handle, ag.action(), &self.state, true))
     }
 
     fn debug(&self) -> String {
@@ -117,7 +118,7 @@ fn confirm(
     ag: &TransactionAggregator,
     handle: &mut TransactionHandle,
     global: &'static Global,
-) -> StdResult<(u64, u64), Result<TransactionState>> {
+) -> Result<State> {
     let database = ag.flags().intersects(TransactionFlags::DATABASE_ONLY | TransactionFlags::FORCE_DATABASE);
     let foreign = !handle.get_mode().bool();
     let create = match handle.get_mode() {
@@ -134,21 +135,21 @@ fn confirm(
         println!("{}", sum);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            Err(next_state(handle, ag.action(), state, false))?
+            return Ok(State::Next(next_state(handle, ag.action(), state, false)));
         }
 
         if !ag.flags().contains(TransactionFlags::NO_CONFIRM) {
             let action = ag.action().as_str();
             let query = format!("Proceed with {action}?");
 
-            if !prompt("::", format!("{}{query}{}", *BOLD, *RESET), true) {
-                Err(next_state(handle, ag.action(), state, false))?
+            if !prompt("::", format!("{}{query}{}", *BOLD, *RESET), true)? {
+                return Ok(State::Next(next_state(handle, ag.action(), state, false)));
             }
         }
     }
 
     handle.alpm_mut().trans_release().ok();
-    Ok(sum.download())
+    Ok(State::Commit(sum.download()))
 }
 
 fn next_state(
@@ -156,39 +157,35 @@ fn next_state(
     action: &TransactionType,
     state: &TransactionState,
     updated: bool,
-) -> Result<TransactionState> {
+) -> TransactionState {
     handle.alpm_mut().trans_release().ok();
 
     match action {
-        Remove(..) => Ok(match state {
+        Remove(..) => match state {
             CommitForeign => Complete(updated),
             Commit(_) => PrepareForeign(updated),
             _ => unreachable!(),
-        }),
-        Upgrade(..) => Ok(match state {
+        },
+        Upgrade(..) => match state {
             Commit(_) => Complete(updated),
             CommitForeign => Stage,
             _ => unreachable!(),
-        }),
+        },
     }
 }
 
-fn ready_state(
-    handle: &mut TransactionHandle,
-    action: &TransactionType,
-    state: &TransactionState,
-) -> Option<Result<TransactionState>> {
+fn ready_state(handle: &mut TransactionHandle, action: &TransactionType, state: &TransactionState) -> Option<TransactionState> {
     handle.alpm_mut().trans_release().ok();
 
     match action {
         Remove(..) => match state {
             CommitForeign => None,
-            Commit(_) => Some(Ok(PrepareForeign(false))),
+            Commit(_) => Some(PrepareForeign(false)),
             _ => unreachable!(),
         },
         Upgrade(..) => match state {
             Commit(_) => None,
-            CommitForeign => Some(Ok(Stage)),
+            CommitForeign => Some(Stage),
             _ => unreachable!(),
         },
     }
