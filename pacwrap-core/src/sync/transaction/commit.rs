@@ -79,6 +79,8 @@ impl Transaction for Commit {
         let state = self.state.as_str();
 
         if let SyncState::NotRequired = handle.trans_ready(ag.action(), ag.flags())? {
+            handle.alpm_mut().trans_release().generic()?;
+
             return Ok(match ready_state(ag.action(), &self.state) {
                 Some(state) => state,
                 None => TransactionState::Complete(false),
