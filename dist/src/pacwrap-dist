@@ -65,9 +65,9 @@ dist() {
 }
 
 pacman() {
-	if [[ "$(cat /etc/pacman.conf | grep "#DownloadUser")" ]]; then
-		return
-	fi
+    if [[ "$(cat /etc/pacman.conf | grep "#DownloadUser")" ]]; then
+        return
+    fi
 
     sed -i 's/DownloadUser =/#DownloadUser=/g;s/CheckSpace/#CheckSpace/g' /etc/pacman.conf
     if [[ $? == 0 ]]; then echo "Configured pacman.conf"; fi
