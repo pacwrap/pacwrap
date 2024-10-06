@@ -1,0 +1,47 @@
+name: Cargo build (Arch Linux)
+
+on:
+  push:
+  pull_request:
+
+env: 
+  CARGO_TERM_COLOR: always
+  PACWRAP_SCHEMA_BUILT: 1
+
+jobs:
+  checkfmt:
+    name: Check Formatting
+    runs-on: docker
+    container:
+      image: archlinux
+    strategy:
+      matrix:
+        toolchain:
+          - nightly
+    steps:
+      - name: Install packages
+        run: pacman -Syu git nodejs rustup --noconfirm
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }} 
+      - name: Check formatting
+        run: cargo fmt --check
+  build:
+    name: Build pacwrap
+    runs-on: docker
+    container:
+      image: archlinux
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+    steps:
+      - name: Install packages
+        run: pacman -Syu base-devel bubblewrap busybox fakechroot fakeroot git nodejs rustup --noconfirm
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: Build pacwrap
+        run: ./dist/tools/prepare.sh release && cargo build --release && ./dist/tools/package.sh release
