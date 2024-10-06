@@ -27,10 +27,10 @@ ACTION_NOUN="Common script"
 DIST_BIN="$PWD/dist/bin"
 DIST_SRC="$PWD/dist/src"
 
-if [[ -t 2 ]] && [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]]; then
+if [[ -t 2 ]] && [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]] || [[ $PACWRAP_CI == 1 ]]; then
     BOLD="[1m"
     RED="[1;31m"
- 	GREEN="[1;32m"
+    GREEN="[1;32m"
     RESET="[0m"
 fi
 
