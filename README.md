@@ -1,4 +1,4 @@
-# pacwrap
+# pacwrap [![Build Workflow](https://git.sapphirus.org/pacwrap/pacwrap/badges/workflows/build.yml/badge.svg?label=build&logo=github+actions&logoColor=d1d7e0&style=flat-square)](https://git.sapphirus.org/pacwrap/pacwrap/actions?workflow=build.yml)
 # <p align=center>[![pacwrap](https://shields.io/aur/version/pacwrap?style=for-the-badge&color=599ffb&logo=archlinux&label=pacwrap)](https://aur.archlinux.org/packages/pacwrap/)[![pacwrap-git](https://shields.io/aur/version/pacwrap-git?style=for-the-badge&color=599ffb&logo=archlinux&label=pacwrap-git)](https://aur.archlinux.org/packages/pacwrap-git/)[![License](https://shields.io/crates/l/pacwrap/0.7.2?style=for-the-badge&color=6dfb59&logo=gnu)](https://spdx.org/licenses/GPL-3.0-only.html)![MSRV](https://shields.io/crates/msrv/pacwrap/0.8.0?style=for-the-badge&color=fba759&logo=rust)</p>
 
 <img align="left" src="https://github.com/pacwrap/pacwrap/raw/master/assets/logo.svg">
