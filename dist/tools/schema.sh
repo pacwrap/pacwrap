@@ -39,9 +39,9 @@ DEST_DIR="$PWD/dist/schema"
 #
 main() {
     prepare_and_validate
-	populate_usr
-	populate_etc
-	create_archive $1
+    populate_usr
+    populate_etc
+    create_archive $1
     packaged "container schema [$1]"
 }
 
@@ -49,27 +49,27 @@ main() {
 # Validate and prepare staging environment
 #
 prepare_and_validate() {		
-	clean
-	mkdir -p $DEST_DIR$USR_DIR $DEST_DIR$ETC_DIR $DIST_BIN
+    clean
+    mkdir -p $DEST_DIR$USR_DIR $DEST_DIR$ETC_DIR $DIST_BIN
 
-	if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
-		error_fatal "'$DEST_DIR': directory not found."
-	fi
+    if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
+        error_fatal "'$DEST_DIR': directory not found."
+    fi
 
     if [[ ! -d "$DIST_SRC" ]]; then
-		error_fatal "'$DIST_SRC': directory not found."
-	fi
+        error_fatal "'$DIST_SRC': directory not found."
+    fi
 }
 
 #
 # Clean build artifacts
 #
 clean() {
-	if [[ -d "$DEST_DIR" ]]; then
-		rm -r "$DEST_DIR"
-		mkdir -p "$DEST_DIR"
-		cleaned "container schema"
-	fi
+    if [[ -d "$DEST_DIR" ]]; then
+        rm -r "$DEST_DIR"
+        mkdir -p "$DEST_DIR"
+        cleaned "container schema"
+    fi
 }
 
 #
@@ -77,21 +77,21 @@ clean() {
 #
 create_archive() {
     cd $DEST_DIR
-	tar acf ../bin/filesystem.tar.zst *
+    tar acf ../bin/filesystem.tar.zst *
 }
 
 #
 # Populate usr for container filesystem
 #
 populate_usr() {
-	mkdir -p "${DEST_DIR}/usr/share/libalpm/hooks/" \
-		"${DEST_DIR}/usr/share/libalpm/scripts/" \
-		"${DEST_DIR}/usr/local/bin" \
-	    "${DEST_DIR}/usr/lib/"
+    mkdir -p "${DEST_DIR}/usr/share/libalpm/hooks/" \
+        "${DEST_DIR}/usr/share/libalpm/scripts/" \
+        "${DEST_DIR}/usr/local/bin" \
+        "${DEST_DIR}/usr/lib/"
 
 
-	ln -s /usr/lib/flatpak-xdg-utils/xdg-open "${DEST_DIR}/usr/local/bin/"
-	ln -s /usr/lib/flatpak-xdg-utils/xdg-email "${DEST_DIR}/usr/local/bin/"
+    ln -s /usr/lib/flatpak-xdg-utils/xdg-open "${DEST_DIR}/usr/local/bin/"
+    ln -s /usr/lib/flatpak-xdg-utils/xdg-email "${DEST_DIR}/usr/local/bin/"
 
     install -Dm 644 "$DIST_SRC/0-pacwrap-dist.hook" "${DEST_DIR}/usr/share/libalpm/hooks/0-pacwrap-dist.hook" 
     install -Dm 644 "$DIST_SRC/1-pacwrap-dist.hook" "${DEST_DIR}/usr/share/libalpm/hooks/1-pacwrap-dist.hook" 
@@ -106,25 +106,27 @@ populate_usr() {
 # Populate etc for container filesystem 
 #
 populate_etc() {
-	local pacman_hooks=('20-systemd-sysusers'
-			    '30-systemd-tmpfiles' 
-			    '30-systemd-daemon-reload-system'
-			    '30-systemd-daemon-reload-user'
-			    '30-systemd-sysctl'
-			    '30-systemd-catalog'
-			    '30-systemd-update'
-		    	'30-systemd-udev-reload'
-			    '30-systemd-hwdb'
-		    	'dbus-reload')
-	
-	# Systemd cannot be started securely in an unprivileged namespace, therefore
-	# disable unnecessary systemd hooks in order to speed up transaction times.
-	mkdir -p "${DEST_DIR}/etc/pacman.d/hooks/" "${DEST_DIR}/usr/local/bin/"
-	for pacman_hook in ${pacman_hooks[@]}; do
-		ln -s /dev/null "${DEST_DIR}/etc/pacman.d/hooks/${pacman_hook}.hook"; done
+    local pacman_hooks=('20-systemd-sysusers'
+    '30-systemd-tmpfiles' 
+    '30-systemd-daemon-reload-system'
+    '30-systemd-daemon-reload-user'
+    '30-systemd-sysctl'
+    '30-systemd-catalog'
+    '30-systemd-update'
+    '30-systemd-udev-reload'
+    '30-systemd-hwdb'
+    'dbus-reload')
 
-	# Provide our own /etc/bash.bashrc	
-	cp "$DIST_SRC/bash.bashrc" "$DEST_DIR$ETC_DIR"
+    # Systemd cannot be started securely in an unprivileged namespace, therefore
+    # disable unnecessary systemd hooks in order to speed up transaction times.
+    mkdir -p "${DEST_DIR}/etc/pacman.d/hooks/" "${DEST_DIR}/usr/local/bin/"
+    for pacman_hook in ${pacman_hooks[@]}; do
+        ln -s /dev/null "${DEST_DIR}/etc/pacman.d/hooks/${pacman_hook}.hook"; done
+
+    # Provide our own /etc/bash.bashrc	
+    cp "$DIST_SRC/bash.bashrc" "$DEST_DIR$ETC_DIR"
 }
 
 main $@
+
+# vim:set ts=4 sw=4 et:1

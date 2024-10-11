@@ -28,39 +28,41 @@ DIST_RUNTIME="$PWD/dist/runtime"
 DIST_SCHEMA="$PWD/dist/schema"
 
 runtime() {
-	if [[ -d "$DIST_RUNTIME" ]]; then
-		rm -r "$DIST_RUNTIME"
-		mkdir -p "$DIST_RUNTIME"
-		cleaned "container runtime"
+    if [[ -d "$DIST_RUNTIME" ]]; then
+        rm -r "$DIST_RUNTIME"
+        mkdir -p "$DIST_RUNTIME"
+        cleaned "container runtime"
     fi
 }
 
 filesystem() {
-	if [[ -d "$DIST_SCHEMA" ]]; then
-		rm -r "$DIST_SCHEMA"
-		mkdir -p "$DIST_SCHEMA"
+    if [[ -d "$DIST_SCHEMA" ]]; then
+        rm -r "$DIST_SCHEMA"
+        mkdir -p "$DIST_SCHEMA"
         cleaned "container schema"
     fi
 }
 
 bin() {
-	if [[ -d "$DIST_BIN" ]]; then
-		rm -r "$DIST_BIN"
-		mkdir -p "$DIST_BIN"
+    if [[ -d "$DIST_BIN" ]]; then
+        rm -r "$DIST_BIN"
+        mkdir -p "$DIST_BIN"
         cleaned "bin artifacts"
     fi
 }
 
 main() {
-	for var in "$@"; do case $var in
-		schema)     filesystem;;
-		runtime)    runtime;;
+    for var in "$@"; do case $var in
+        schema)     filesystem;;
+        runtime)    runtime;;
         bin)        bin;;
         all)        bin
-                    filesystem
-					runtime;;
-		*)          error_fatal "Invalid parameter '$1'";;
-	esac; done
+            filesystem
+            runtime;;
+        *)          error_fatal "Invalid parameter '$1'";;
+    esac; done
 }
 
 main $@
+
+# vim:set ts=4 sw=4 et:1

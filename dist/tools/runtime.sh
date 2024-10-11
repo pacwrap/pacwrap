@@ -62,11 +62,11 @@ LIB_BINS="bash ls gpg grep"
 main() {	
     validate_args $1
     prepare_and_validate $1 
-	populate_lib
-	populate_bin
-	populate_etc
-	busybox_links
-	packaged "container runtime [$1]"
+    populate_lib
+    populate_bin
+    populate_etc
+    busybox_links
+    packaged "container runtime [$1]"
 }
 
 #
@@ -85,8 +85,8 @@ prepare_and_validate() {
     mkdir -p $DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT $DEST_DIR$BIN_DIR $DEST_DIR$ETC_DIR
 
     if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
-		error_fatal "'$DEST_DIR': directory not found."
-	fi
+        error_fatal "'$DEST_DIR': directory not found."
+    fi
 
     for bin in $LIB_BINS; do
         local path=$(type -P $bin)
@@ -101,22 +101,22 @@ prepare_and_validate() {
 # Clean build artifacts
 #
 clean() {
-	if [[ -d "$DEST_DIR" ]]; then
-		rm -r "$DEST_DIR"
-		mkdir -p "$DEST_DIR"
-		cleaned "container runtime"
-	fi
+    if [[ -d "$DEST_DIR" ]]; then
+        rm -r "$DEST_DIR"
+        mkdir -p "$DEST_DIR"
+        cleaned "container runtime"
+    fi
 }
 
 #
 # Populate libraries for container runtime
 #
 populate_lib() {
-	copy_libs ${BIN_PATHS[@]}
-	cp -L $FAKEROOT_SRC $FAKEROOT_DEST
-	cp -L $FAKECHROOT_SRC $FAKECHROOT_DEST
-	ln -s .$FAKEROOT/libfakeroot.so $DEST_DIR$LIB_DIR/libfakeroot.so
-	ln -s .$FAKEROOT$FAKECHROOT/libfakechroot.so $DEST_DIR$LIB_DIR/libfakechroot.so
+    copy_libs ${BIN_PATHS[@]}
+    cp -L $FAKEROOT_SRC $FAKEROOT_DEST
+    cp -L $FAKECHROOT_SRC $FAKECHROOT_DEST
+    ln -s .$FAKEROOT/libfakeroot.so $DEST_DIR$LIB_DIR/libfakeroot.so
+    ln -s .$FAKEROOT$FAKECHROOT/libfakechroot.so $DEST_DIR$LIB_DIR/libfakechroot.so
 
     # Remove debuglink section, to ensure the Arch Build System doesn't complain
     for lib in $(find $DEST_DIR$LIB_DIR -maxdepth 3 -type f -printf "%p "); do
@@ -128,21 +128,21 @@ populate_lib() {
 # Populate binaries for container runtime 
 #
 populate_bin() {
-	cp ${BIN_PATHS[0]} $DEST_DIR$BIN_DIR/agent
-	copy_bins $BIN_UTILS $COREUTILS 
-	ln -s bash $DEST_DIR$BIN_DIR/sh
-	ln -s ld-linux-x86-64.so.2 $DEST_DIR$BIN_DIR/ld-linux.so.2
-	ln -s ../lib64/ld-linux-x86-64.so.2 $DEST_DIR$BIN_DIR/ld.so
+    cp ${BIN_PATHS[0]} $DEST_DIR$BIN_DIR/agent
+    copy_bins $BIN_UTILS $COREUTILS 
+    ln -s bash $DEST_DIR$BIN_DIR/sh
+    ln -s ld-linux-x86-64.so.2 $DEST_DIR$BIN_DIR/ld-linux.so.2
+    ln -s ../lib64/ld-linux-x86-64.so.2 $DEST_DIR$BIN_DIR/ld.so
 }
 
 #
 # Populate /etc directory for container runtime
 #
 populate_etc() {
-	echo -e "#\n# /etc/bash.bashrc\n#\n# pacwrap runtime\n#\n\n${PROFILE_PS1}\nbind -x $'\"\\C-l\":clear;'\ncd \$HOME\n" > $DEST_DIR$ETC_DIR/bash.bashrc
-	sed -n 12,20p $DIST_SRC/bash.bashrc >> $DEST_DIR$ETC_DIR/bash.bashrc
-	echo -e "#\n# /etc/profile - busybox env\n#\n# pacwrap runtime\n#\n\n$PROFILE_PS1\n" > $DEST_DIR$ETC_DIR/profile
-	echo -e 'printf "\033]0;%s@%s\007" "${USER}" "${HOSTNAME%%.*}"\ncd $HOME' >> $DEST_DIR$ETC_DIR/profile
+    echo -e "#\n# /etc/bash.bashrc\n#\n# pacwrap runtime\n#\n\n${PROFILE_PS1}\nbind -x $'\"\\C-l\":clear;'\ncd \$HOME\n" > $DEST_DIR$ETC_DIR/bash.bashrc
+    sed -n 12,20p $DIST_SRC/bash.bashrc >> $DEST_DIR$ETC_DIR/bash.bashrc
+    echo -e "#\n# /etc/profile - busybox env\n#\n# pacwrap runtime\n#\n\n$PROFILE_PS1\n" > $DEST_DIR$ETC_DIR/profile
+    echo -e 'printf "\033]0;%s@%s\007" "${USER}" "${HOSTNAME%%.*}"\ncd $HOME' >> $DEST_DIR$ETC_DIR/profile
 }
 
 #
@@ -151,13 +151,13 @@ populate_etc() {
 busybox_links() {
     for applet in $(busybox --list); do
         if [[ "${COREUTILS[@]}" == *$applet* ]] ||
-           [[ "${BIN_UTILS[@]}" == *$applet* ]] ||
-           [[ $applet == "busybox" ]]; then
-                continue
+            [[ "${BIN_UTILS[@]}" == *$applet* ]] ||
+            [[ $applet == "busybox" ]]; then
+                    continue
         fi
 
-		ln -s busybox ./dist/runtime/bin/$applet
-	done
+        ln -s busybox ./dist/runtime/bin/$applet
+    done
 }
 
 #
@@ -166,7 +166,7 @@ busybox_links() {
 # $@: takes an array of system library paths
 #
 copy_libs() {
-	for path in ${@}; do 
+    for path in ${@}; do 
         ldd $path | sed -e "s/.*=> //g;s/ (.*)//g;s/\t.*//g" | xargs cp -Lt $DEST_DIR$LIB_DIR
     done
 }
@@ -177,7 +177,7 @@ copy_libs() {
 # $@: takes an array of system binaries located in /usr/bin
 #
 copy_bins() {
-	for bin in ${@}; do 
+    for bin in ${@}; do 
         cp $(type -P $bin) $DEST_DIR$BIN_DIR/$bin
 
         if [[ $bin == "fakeroot" ]]; then 
@@ -190,3 +190,5 @@ copy_bins() {
 }
 
 main $@
+
+# vim:set ts=4 sw=4 et:1

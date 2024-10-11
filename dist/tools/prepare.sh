@@ -29,3 +29,5 @@ validate_args $1
 layout_dir
 package $DIST_SRC/pacwrap-key $DIST_BIN/pacwrap-key $1 0
 ./dist/tools/schema.sh $1
+
+# vim:set ts=4 sw=4 et:1

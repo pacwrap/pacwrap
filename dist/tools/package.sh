@@ -31,3 +31,5 @@ validate_args $1
 package $DIST_MAN/pacwrap.1 $DIST_BIN/pacwrap.1 $1
 package $DIST_MAN/pacwrap.yml.2 $DIST_BIN/pacwrap.yml.2 $1
 ./dist/tools/runtime.sh $1
+
+# vim:set ts=4 sw=4 et:1

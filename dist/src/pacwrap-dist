@@ -18,50 +18,50 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 user() {
-	local uid=$PACWRAP_REAL_UID
-	local gid=$PACWRAP_REAL_GID
+    local uid=$PACWRAP_REAL_UID
+    local gid=$PACWRAP_REAL_GID
 
-	if [[ "$(cat /etc/passwd | grep $uid:$gid)" ]]; then
-		return
-	fi
+    if [[ "$(cat /etc/passwd | grep $uid:$gid)" ]]; then
+        return
+    fi
 
 
-	echo "Creating dummy user.."
-	echo "user:x:$uid:$gid::/:/usr/bin/nologin" >> /etc/passwd
-	echo "user:x:$gid:" >> /etc/group
+    echo "Creating dummy user.."
+    echo "user:x:$uid:$gid::/:/usr/bin/nologin" >> /etc/passwd
+    echo "user:x:$gid:" >> /etc/group
 }
 
 locale() {
-	if [[ -f "/etc/locale.conf" ]]; then
-		return
-	fi
+    if [[ -f "/etc/locale.conf" ]]; then
+        return
+    fi
 
-	echo "Initializing locales.."	
-	
-	if [[ $LANG == "en_US.UTF-8" ]] || [[ -z "$LANG" ]]; then
-		echo -e "\nen_US.UTF-8 UTF-8" >> /etc/locale.gen
-	else
-		echo -e "\nen_US.UTF-8 UTF-8\n$LANG ${LANG#*.}" >> /etc/locale.gen
-	fi
+    echo "Initializing locales.."	
 
-	echo "LANG=$LANG" > /etc/locale.conf
-	locale-gen
+    if [[ $LANG == "en_US.UTF-8" ]] || [[ -z "$LANG" ]]; then
+        echo -e "\nen_US.UTF-8 UTF-8" >> /etc/locale.gen
+    else
+        echo -e "\nen_US.UTF-8 UTF-8\n$LANG ${LANG#*.}" >> /etc/locale.gen
+    fi
+
+    echo "LANG=$LANG" > /etc/locale.conf
+    locale-gen
 }
 
 timezone() {
-	if [[ -f "/etc/localtime" ]]; then
-		return
-	fi
+    if [[ -f "/etc/localtime" ]]; then
+        return
+    fi
 
     echo "Setting localtime to UTC..."
     ln -s ../usr/share/zoneinfo/UCT /etc/localtime
 }
 
 dist() {
-	locale
-	timezone
-	user
-	echo "Distribution configuration completed."
+    locale
+    timezone
+    user
+    echo "Distribution configuration completed."
 }
 
 pacman() {
@@ -74,18 +74,20 @@ pacman() {
 }
 
 cert_store() {
-	chmod -R 755 /usr/share/ca-certificates /etc/ca-certificates
-	
-	if [[ $? == 0 ]]; then 
-		echo "Applied permissions to certificate stores successfully."
-	else
-		echo "Error occurred whilst applying permissions to certificate stores."
-	fi
+    chmod -R 755 /usr/share/ca-certificates /etc/ca-certificates
+
+    if [[ $? == 0 ]]; then 
+        echo "Applied permissions to certificate stores successfully."
+    else
+        echo "Error occurred whilst applying permissions to certificate stores."
+    fi
 }
 
 case $1 in
-	cert-store) cert_store;;
-	config) dist;;
+    cert-store) cert_store;;
+    config) dist;;
     pacman) pacman;;
-	*) echo "error: Hook parameter '$1' not found.";;
+    *) echo "error: Hook parameter '$1' not found.";;
 esac
+
+# vim:set ts=4 sw=4 et:1

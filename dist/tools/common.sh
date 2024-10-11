@@ -39,36 +39,36 @@ handle_failure() {
 }
 
 error_fatal() {
-	echo $BOLD$RED"error:$RESET $@";
-	exit 1	
+    echo $BOLD$RED"error:$RESET $@";
+    exit 1	
 }
 
 error() {
-	echo $BOLD$RED"error:$RESET $@";	
+    echo $BOLD$RED"error:$RESET $@";	
 }
 
 packaged() {
-	echo "$GREEN$BOLD    Packaged$RESET $@"
+    echo "$GREEN$BOLD    Packaged$RESET $@"
 }
 
 cleaned() {
-	echo "$BOLD$GREEN     Cleaned$RESET $@"
+    echo "$BOLD$GREEN     Cleaned$RESET $@"
 }
 
 validate_args() {
-	[[ -z "$1" ]] && error_fatal "release target not specified."
+    [[ -z "$1" ]] && error_fatal "release target not specified."
 
     case $1 in
-		release);; 
-		debug)  ;;	
-		*)      error_fatal "release target $1 is invalid.";;
-	esac
+        release);; 
+        debug)  ;;	
+        *)      error_fatal "release target $1 is invalid.";;
+    esac
 }
 
 layout_dir() { 
-	[[ ! -d "$DIST_SRC" ]] && error_fatal "'$DIST_SRC': src directory not found."
+    [[ ! -d "$DIST_SRC" ]] && error_fatal "'$DIST_SRC': src directory not found."
 
-	mkdir -p $DIST_BIN
+    mkdir -p $DIST_BIN
 }
 
 #
@@ -80,7 +80,7 @@ layout_dir() {
 # $4: Inlcude date (optional)
 #
 package() {
-	[[ ! -f "$1" ]] && error_fatal "'$1': file not found"
+    [[ ! -f "$1" ]] && error_fatal "'$1': file not found"
     ([[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]) && error_fatal "Invalid arguments."
 
     local version=$(version $3 $4)
@@ -102,9 +102,9 @@ version() {
 
         case $1 in
             release)    release="RELEASE"
-                        date=$(git log -1 --date=format:%d/%m/%Y --format=%cd);;
+                date=$(git log -1 --date=format:%d/%m/%Y --format=%cd);;
             debug)      release="DEV"
-                        date=$(date +'%d/%m/%Y %T%:z');;
+                date=$(date +'%d/%m/%Y %T%:z');;
         esac
 
         if [[ -z "$tag" ]]; then
@@ -121,3 +121,5 @@ version() {
 }
 
 COMMON_SCRIPT=1; readonly COMMON_SCRIPT BOLD RED GREEN RESET
+
+# vim:set ts=4 sw=4 et:1
