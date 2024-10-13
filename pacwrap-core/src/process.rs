@@ -27,7 +27,7 @@ use std::{
     result::Result as StdResult,
 };
 
-use crate::{config::ContainerCache, constants::CONTAINER_DIR, utils::print_warning, Error, ErrorGeneric};
+use crate::{config::ContainerCache, constants::CONTAINER_DIR, utils::print_warning, ErrorGeneric, Result};
 use indexmap::IndexMap;
 
 pub struct ProcessList {
@@ -166,7 +166,7 @@ impl ProcStat {
     }
 }
 
-pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
+pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList> {
     let mut map: IndexMap<i32, Process> = IndexMap::new();
     let mut groups: IndexMap<String, Vec<i32>> = IndexMap::new();
     let mut processes = procfs()?;
@@ -210,7 +210,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList, Error> {
     Ok(ProcessList::new(map, groups))
 }
 
-fn procfs() -> Result<Vec<(i32, u64)>, Error> {
+fn procfs() -> Result<Vec<(i32, u64)>> {
     Ok(read_dir("/proc/")
         .prepend_io(|| "/proc/".into())?
         .filter_map(StdResult::ok)
@@ -224,7 +224,7 @@ fn procfs() -> Result<Vec<(i32, u64)>, Error> {
         .collect())
 }
 
-fn procfs_meta(e: DirEntry) -> Result<Option<(OsString, u64)>, Box<dyn StdError>> {
+fn procfs_meta(e: DirEntry) -> StdResult<Option<(OsString, u64)>, Box<dyn StdError>> {
     Ok(Some((e.file_name(), e.metadata()?.modified()?.elapsed()?.as_secs())))
 }
 
