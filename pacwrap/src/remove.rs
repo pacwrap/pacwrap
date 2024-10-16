@@ -33,7 +33,10 @@ use pacwrap_core::{
     ErrorKind,
 };
 
-use crate::utils::delete::remove_containers;
+use crate::{
+    help::{help, HelpTopic},
+    utils::delete::remove_containers,
+};
 
 pub fn remove(args: &mut Arguments) -> Result<()> {
     check_root()?;
@@ -101,6 +104,7 @@ fn engage_aggregator<'a>(
             Op::Long("disable-sandbox") => flags |= TransactionFlags::NO_ALPM_SANDBOX,
             Op::Short('p') | Op::Long("preview") => flags |= TransactionFlags::PREVIEW,
             Op::Short('f') | Op::Long("filesystem") => flags |= TransactionFlags::FILESYSTEM_SYNC,
+            Op::Short('h') | Op::Long("help") => return help(args, &HelpTopic::Remove),
             Op::Short('t') | Op::Long("target") => match args.next() {
                 Some(arg) => match arg {
                     Op::ShortPos('t', target) | Op::LongPos("target", target) => {

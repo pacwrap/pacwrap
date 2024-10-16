@@ -40,6 +40,8 @@ use pacwrap_core::{
     ErrorKind,
 };
 
+use crate::help::{help, HelpTopic};
+
 pub fn synchronize(args: &mut Arguments) -> Result<()> {
     check_root()?;
     init()?;
@@ -183,6 +185,7 @@ fn engage_aggregator<'a>(
                 container_type = None;
                 create = true;
             }
+            Op::Short('h') | Op::Long("help") => return help(args, &HelpTopic::Sync),
             Op::Short('d') | Op::Long("dep") => match args.next() {
                 Some(arg) => match arg {
                     Op::ShortPos('d', dep) | Op::LongPos("dep", dep) => match container_type {

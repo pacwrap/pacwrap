@@ -31,6 +31,8 @@ use pacwrap_core::{
     Result,
 };
 
+use crate::help::{help, HelpTopic};
+
 pub mod delete;
 pub mod desktop;
 pub mod list;
@@ -49,6 +51,7 @@ pub fn engage_utility(args: &mut Arguments) -> Result<()> {
         Operand::Short('d') | Operand::Long("desktop") | Operand::Value("desktop") => desktop::file(args),
         Operand::Short('s') | Operand::Long("symlink") | Operand::Value("symlink") => symlink::link(args),
         Operand::Short('o') | Operand::Long("open") | Operand::Value("open") => open(args),
+        Operand::Short('h') | Operand::Long("help") => help(args, &HelpTopic::Utils),
         _ => args.invalid_operand(),
     }
 }

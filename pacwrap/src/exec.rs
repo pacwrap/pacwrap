@@ -78,6 +78,8 @@ use pacwrap_core::{
     Result,
 };
 
+use crate::help::{help, HelpTopic};
+
 static SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
 #[derive(Debug)]
@@ -106,6 +108,7 @@ impl Display for ExecError {
 enum ExecParams<'a> {
     FakeRoot(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
     Container(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
+    Nonce,
 }
 
 impl<'a> ExecParams<'a> {
@@ -130,6 +133,10 @@ impl<'a> ExecParams<'a> {
                 Op::Long("root") | Op::Short('r') => root = true,
                 Op::Long("shell") | Op::Short('s') => shell = true,
                 Op::Long("verbose") | Op::Short('v') => verbosity += 1,
+                Op::Long("help") | Op::Short('h') => {
+                    help(args, &HelpTopic::Execute)?;
+                    return Ok(Self::Nonce);
+                }
                 Op::LongPos(_, str) | Op::ShortPos(_, str) | Op::Value(str) =>
                     if container.is_none() {
                         container = Some(str);
@@ -163,6 +170,7 @@ pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
         ExecParams::FakeRoot(verbosity, false, args, handle) => execute_fakeroot(&handle, Some(args), verbosity),
         ExecParams::Container(verbosity, true, _, handle) => execute_container(&handle, vec!["bash"], true, verbosity),
         ExecParams::Container(verbosity, false, args, handle) => execute_container(&handle, args, false, verbosity),
+        ExecParams::Nonce => Ok(()),
     }
 }
 
