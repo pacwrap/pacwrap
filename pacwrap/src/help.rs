@@ -68,8 +68,8 @@ impl Display for ErrorKind {
     }
 }
 
-pub fn help(args: &mut Arguments) -> Result<()> {
-    let help = ascertain_help(args)?;
+pub fn help(args: &mut Arguments, topic: &HelpTopic) -> Result<()> {
+    let help = ascertain_help(args, topic)?;
     let mut buffer = String::new();
 
     for topic in help.0 {
@@ -85,31 +85,35 @@ pub fn help(args: &mut Arguments) -> Result<()> {
     Ok(())
 }
 
-fn ascertain_help<'a>(args: &'a mut Arguments) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout)> {
+fn ascertain_help<'a>(args: &'a mut Arguments, default_ht: &'a HelpTopic) -> Result<(IndexSet<&'a HelpTopic>, &'a HelpLayout)> {
     let mut layout = match is_color_terminal() {
         true => &HelpLayout::Console,
         false => &HelpLayout::Dumb,
     };
-    let mut topic: Vec<&HelpTopic> = vec![&HelpTopic::Default];
+    let mut topic: Vec<&HelpTopic> = vec![default_ht];
     let mut more = false;
 
-    while let Some(arg) = args.next() {
-        match arg {
-            Operand::Long("format") | Operand::Long("help") | Operand::Short('f') | Operand::Short('h') => continue,
-            Operand::Short('m') | Operand::Long("more") => more = true,
-            Operand::ShortPos('f', "man") | Operand::LongPos("format", "man") => layout = &HelpLayout::Man,
-            Operand::ShortPos('f', "ansi") | Operand::LongPos("format", "ansi") => layout = &HelpLayout::Console,
-            Operand::ShortPos('f', "dumb") | Operand::LongPos("format", "dumb") => layout = &HelpLayout::Dumb,
-            Operand::ShortPos('f', "markdown") | Operand::LongPos("format", "markdown") => layout = &HelpLayout::Markdown,
-            Operand::ShortPos('h', "all")
-            | Operand::LongPos("help", "all")
-            | Operand::Short('a')
-            | Operand::Long("all")
-            | Operand::Value("all") => topic.extend(HELP_ALL.iter()),
-            Operand::ShortPos('h', value) | Operand::LongPos("help", value) | Operand::Value(value) =>
-                topic.push(HelpTopic::from(value)?),
-            _ => args.invalid_operand()?,
+    if let HelpTopic::Default = default_ht {
+        while let Some(arg) = args.next() {
+            match arg {
+                Operand::Long("format") | Operand::Long("help") | Operand::Short('f') | Operand::Short('h') => continue,
+                Operand::Short('m') | Operand::Long("more") => more = true,
+                Operand::ShortPos('f', "man") | Operand::LongPos("format", "man") => layout = &HelpLayout::Man,
+                Operand::ShortPos('f', "ansi") | Operand::LongPos("format", "ansi") => layout = &HelpLayout::Console,
+                Operand::ShortPos('f', "dumb") | Operand::LongPos("format", "dumb") => layout = &HelpLayout::Dumb,
+                Operand::ShortPos('f', "markdown") | Operand::LongPos("format", "markdown") => layout = &HelpLayout::Markdown,
+                Operand::ShortPos('h', "all")
+                | Operand::LongPos("help", "all")
+                | Operand::Short('a')
+                | Operand::Long("all")
+                | Operand::Value("all") => topic.extend(HELP_ALL.iter()),
+                Operand::ShortPos('h', value) | Operand::LongPos("help", value) | Operand::Value(value) =>
+                    topic.push(HelpTopic::from(value)?),
+                _ => args.invalid_operand()?,
+            }
         }
+    } else if args.next().is_some() {
+        args.invalid_operand()?;
     }
 
     let len = topic.len();
@@ -120,7 +124,7 @@ fn ascertain_help<'a>(args: &'a mut Arguments) -> Result<(IndexSet<&'a HelpTopic
 }
 
 #[derive(Eq, PartialEq, Hash)]
-enum HelpTopic {
+pub enum HelpTopic {
     Sync,
     Remove,
     Compose,

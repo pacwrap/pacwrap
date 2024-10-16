@@ -43,7 +43,10 @@ use pacwrap_core::{
     Result,
 };
 
-use crate::utils::delete::delete_roots;
+use crate::{
+    help::{help, HelpTopic},
+    utils::delete::delete_roots,
+};
 
 pub fn compose(args: &mut Arguments) -> Result<()> {
     check_root()?;
@@ -196,6 +199,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                         compose.insert(instance, None);
                     }
                 },
+            Op::Short('h') | Op::Long("help") => return help(args, &HelpTopic::Compose),
             Op::Short('l') | Op::Long("lazy-load") => flags |= TransactionFlags::LAZY_LOAD_DB,
             Op::Short('f') | Op::Long("force") => force = true,
             Op::Short('r') | Op::Long("reinitialize") => reinitialize = true,

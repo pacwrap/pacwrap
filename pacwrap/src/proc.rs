@@ -46,6 +46,8 @@ use pacwrap_core::{
     Result,
 };
 
+use crate::help::{help, HelpTopic};
+
 #[derive(Debug)]
 pub enum ProcError {
     NotEnumerable,
@@ -102,6 +104,7 @@ fn summary(args: &mut Arguments) -> Result<()> {
         match arg {
             Operand::Value("ps") | Operand::Short('s') => continue,
             Operand::Short('d') | Operand::Short('t') | Operand::Long("depth") | Operand::Long("target") => continue,
+            Operand::Short('h') | Operand::Long("help") => return help(args, &HelpTopic::Process),
             Operand::Short('x') | Operand::Long("exec") => exec += 1,
             Operand::Short('a') | Operand::Long("all") => all = true,
             Operand::Short('c') | Operand::Long("command") => cmd += 1,

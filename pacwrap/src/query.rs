@@ -31,7 +31,9 @@ use pacwrap_core::{
     },
 };
 
-pub fn query(arguments: &mut Arguments) -> Result<()> {
+use crate::help::{help, HelpTopic};
+
+pub fn query(args: &mut Arguments) -> Result<()> {
     let mut flags: TransactionFlags = TransactionFlags::NONE;
     let mut target = "";
     let mut explicit = false;
@@ -39,14 +41,15 @@ pub fn query(arguments: &mut Arguments) -> Result<()> {
 
     check_root()?;
 
-    while let Some(arg) = arguments.next() {
+    while let Some(arg) = args.next() {
         match arg {
             Operand::Long("debug") => flags |= TransactionFlags::DEBUG,
             Operand::Long("target") | Operand::Short('t') => continue,
+            Operand::Short('h') | Operand::Long("help") => return help(args, &HelpTopic::Query),
             Operand::Short('e') | Operand::Long("explicit") => explicit = true,
             Operand::Short('q') | Operand::Long("quiet") => quiet = true,
             Operand::LongPos(_, t) | Operand::ShortPos(_, t) | Operand::Value(t) => target = t,
-            _ => arguments.invalid_operand()?,
+            _ => args.invalid_operand()?,
         }
     }
 
