@@ -81,18 +81,22 @@ layout_dir() {
 #
 package() {
     [[ ! -f "$1" ]] && error_fatal "'$1': file not found"
-    ([[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]) && error_fatal "Invalid arguments."
+    [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]] && error_fatal "Invalid arguments."
 
-    local version=$(version $3 $4)
-    local version_string=$(echo $version | head -n1 | sed -e 's/[]\/$*.^[]/\\&/g')
+    local version=$(version $3 $4) 
+    local version_string=$(echo $version | sed -e 's/[]\/$*.^[]/\\&/g')
     local placeholder="version_string_placeholder"
+
+    [[ -z "$version" ]] || [[ -z "$version_string" ]] && error_fatal "Version string undeclared"
 
     sed -e "s/$placeholder/$version_string/g" < $1 > $2
     packaged "${2##*/} v${version% (*}"
 }
 
 version() {
-    eval $(cat Cargo.toml | grep version | head -n1 | sed -e "s/version = /local version=/g")
+    eval $(grep -m 1 version Cargo.toml | sed -e "s/version = /local version=/g")
+
+    [[ -z "$version" ]] && return
 
     if [[ ! -z "$(type -P git)" ]] && [[ -d ".git" ]]; then
         local git=$(git rev-parse --short HEAD)
@@ -101,9 +105,11 @@ version() {
         local date=
 
         case $1 in
-            release)    release="RELEASE"
+            release)    
+                release="RELEASE"
                 date=$(git log -1 --date=format:%d/%m/%Y --format=%cd);;
-            debug)      release="DEV"
+            debug)      
+                release="DEV"
                 date=$(date +'%d/%m/%Y %T%:z');;
         esac
 
