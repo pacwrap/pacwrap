@@ -1,6 +1,7 @@
 [package]
 name = "pacwrap"
 description = "A package manager which facilitates Arch-based bubblewrap containers."
+
 default-run = "pacwrap"
 
 version.workspace = true
@@ -17,8 +18,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core/" }
-indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
+indexmap = "2.0.0"
 nix = "0.22.3, <= 0.22.3"
 simplebyteunit = "0.2.1"
 
@@ -27,13 +27,16 @@ command-fds = "0.2.2"
 signal-hook = "0.3.15"
 os_pipe = "1.1.4"
 
-# Packaging
-alpm = { version = "4.0.1", features = ["checkver"] }
-
 # Miscellaneous
 sha2 = "0.10.8"
 regex = "1.10.3"
 rand = "0.8.5"
 
-[build-dependencies]
-pacwrap-core = { path = "../pacwrap-core/" }
+[dependencies.alpm]
+workspace = true
+
+[dependencies.pacwrap-core]
+workspace = true
+
+[build-dependencies.pacwrap-core]
+workspace = true

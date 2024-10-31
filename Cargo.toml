@@ -1,17 +1,12 @@
 [workspace]
-resolver = "1"
+resolver = "2"
 members = ["pacwrap", "pacwrap-agent", "pacwrap-core"]
-
-[profile.release]
-lto = "thin"
-opt-level = "s"
 
 [workspace.package]
 version = "0.8.7-pre"
 edition = "2021"
 rust-version = "1.72"
 readme = "README.md"
-default-run = "pacwrap"
 
 license = "GPL-3.0-only"
 authors = [ "Xavier Moffett <sapphirus@azorium.net>" ]
@@ -20,3 +15,11 @@ categories = [ "command-line-utilities", "virtualization", "filesystem", "concur
 
 homepage = "https://pacwrap.sapphirus.org/"
 repository = "https://github.com/pacwrap/pacwrap"
+
+[workspace.dependencies]
+pacwrap-core = { version = "0.8.7-pre", path = "pacwrap-core" }
+alpm = { version = "4.0.1", features = ["checkver"] }
+
+[profile.release]
+lto = "thin"
+opt-level = "s"

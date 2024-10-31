@@ -38,7 +38,6 @@ libseccomp = "0.3.0"
 signal-hook = "0.3.15"
 
 # Packaging
-alpm = { version = "4.0.1", features = ["checkver"] }
 pacmanconf = "2.0.0"
 tar = "0.4"
 zstd = "0.13.0"
@@ -52,3 +51,6 @@ indicatif = "0.17.5"
 
 #Cryptography
 sha2 = "0.10.8"
+
+[dependencies.alpm]
+workspace = true
