@@ -5,3 +5,18 @@ members = ["pacwrap", "pacwrap-agent", "pacwrap-core"]
 [profile.release]
 lto = "thin"
 opt-level = "s"
+
+[workspace.package]
+version = "0.8.7-pre"
+edition = "2021"
+rust-version = "1.72"
+readme = "README.md"
+default-run = "pacwrap"
+
+license = "GPL-3.0-only"
+authors = [ "Xavier Moffett <sapphirus@azorium.net>" ]
+keywords = [ "bubblewrap", "sandbox", "package", "manager", "archlinux" ]
+categories = [ "command-line-utilities", "virtualization", "filesystem", "concurrency", "caching" ]
+
+homepage = "https://pacwrap.sapphirus.org/"
+repository = "https://github.com/pacwrap/pacwrap"

@@ -92,7 +92,7 @@ package() {
 }
 
 version() {
-    eval $(cat pacwrap/Cargo.toml | grep version | head -n1 | sed -e "s/version = /local version=/g")
+    eval $(cat Cargo.toml | grep version | head -n1 | sed -e "s/version = /local version=/g")
 
     if [[ ! -z "$(type -P git)" ]] && [[ -d ".git" ]]; then
         local git=$(git rev-parse --short HEAD)

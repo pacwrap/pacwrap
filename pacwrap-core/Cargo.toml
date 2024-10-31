@@ -1,18 +1,19 @@
 [package]
 name = "pacwrap-core"
-version = "0.8.6"
-authors = [ "Xavier Moffett <sapphirus@azorium.net>" ]
-license ="GPL-3.0-only"
-readme = "README.md"
-edition = "2021"
-rust-version = "1.72"
-
-homepage = "https://pacwrap.sapphirus.org/"
-repository = "https://github.com/pacwrap/pacwrap"
-
 description = "Library providing core functionality for pacwrap"
-keywords = [ "bubblewrap", "sandbox", "package", "manager", "archlinux" ]
-categories = [ "command-line-utilities", "virtualization", "filesystem", "concurrency", "caching" ]
+
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+license.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 bitflags = "2.4.2"

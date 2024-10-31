@@ -1,22 +1,23 @@
 [package]
 name = "pacwrap"
-version = "0.8.6"
-authors = [ "Xavier Moffett <sapphirus@azorium.net>" ]
-license ="GPL-3.0-only"
-readme = "README.md"
-edition = "2021"
-rust-version="1.72"
+description = "A package manager which facilitates Arch-based bubblewrap containers."
 default-run = "pacwrap"
 
-homepage = "https://pacwrap.sapphirus.org/"
-repository = "https://github.com/pacwrap/pacwrap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
 
-description = "Facilitates the creation, management, and execution of unprivileged Arch-based bubblewrap containers."
-keywords = [ "bubblewrap", "sandbox", "package", "manager", "archlinux" ]
-categories = [ "command-line-utilities", "virtualization", "filesystem", "concurrency", "caching" ]
+license.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-pacwrap-core = { path = "../pacwrap-core/", version = "0.8.4" }
+pacwrap-core = { path = "../pacwrap-core/" }
 indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
 nix = "0.22.3, <= 0.22.3"
 simplebyteunit = "0.2.1"
@@ -35,4 +36,4 @@ regex = "1.10.3"
 rand = "0.8.5"
 
 [build-dependencies]
-pacwrap-core = { path = "../pacwrap-core/", version = "0.8.4" }
+pacwrap-core = { path = "../pacwrap-core/" }
