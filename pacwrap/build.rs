@@ -73,7 +73,7 @@ fn is_debug() -> bool {
 }
 
 fn main() {
-    let built = var("PACWRAP_SCHEMA_BUILT").is_ok();
+    let built = var("PACWRAP_SCHEMA_BUILT").is_ok_and(|s| s.parse().unwrap_or(false));
 
     if !cfg!(target_os = "linux") || !cfg!(target_family = "unix") {
         panic!("Unsupported build target. Please refer to the build documentation for further information.")

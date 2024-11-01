@@ -34,6 +34,28 @@ jobs:
         run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }} 
       - name: Check format
         run: cargo fmt --check
+  lint:
+    name: Lint pacwrap
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+    env: 
+      PACWRAP_SCHEMA_BUILT: 0
+    steps:
+      - name: Install packages
+        run: pacman -Syu base-devel bubblewrap busybox fakechroot fakeroot git nodejs rustup --noconfirm
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: Set up environment
+        run: git config --global --add safe.directory '*'
+      - name: Lint pacwrap
+        run: cargo clippy --release -- -Dwarnings
   build:
     name: Build pacwrap
     runs-on: ubuntu-latest
@@ -54,5 +76,3 @@ jobs:
         run: git config --global --add safe.directory '*'
       - name: Build pacwrap
         run: ./dist/tools/prepare.sh release && cargo build --release && ./dist/tools/package.sh release
-      - name: Lint pacwrap
-        run: cargo clippy --release -- -Dwarnings
