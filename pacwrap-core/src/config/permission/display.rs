@@ -41,28 +41,14 @@ struct Display;
 #[typetag::serde(name = "display")]
 impl Permission for Display {
     fn check(&self) -> Result<Option<Condition>, PermError> {
-        let mut bound = None;
+        let (wayland, xorg) = (validate_wayland_socket()?, validate_xorg_socket()?);
 
-        match validate_wayland_socket() {
-            Ok(b) =>
-                if let Some(con) = b {
-                    bound = Some(con);
-                },
-            Err(e) => Err(e)?,
-        }
-
-        match validate_xorg_socket() {
-            Ok(b) =>
-                if let Some(con) = b {
-                    bound = Some(con);
-                },
-            Err(e) => Err(e)?,
-        }
-
-        if bound.is_none() {
-            Err(Fail("Expected environment variables were not found.".into()))
+        if wayland.is_some() {
+            Ok(wayland)
+        } else if xorg.is_some() {
+            Ok(xorg)
         } else {
-            Ok(bound)
+            Err(Fail("Expected environment variables were not found.".into()))
         }
     }
 
@@ -82,57 +68,61 @@ impl Permission for Display {
 }
 
 fn validate_wayland_socket() -> Result<Option<Condition>, PermError> {
-    if !WAYLAND_DISPLAY.is_empty() {
-        if !Path::new(&*WAYLAND_SOCKET).exists() {
-            Err(Fail(format!("Wayland socket '{}' not found.", &*WAYLAND_SOCKET)))?
-        }
-
-        if !check_socket(&WAYLAND_SOCKET) {
-            Err(Fail(format!("'{}' is not a valid UNIX socket.", &*WAYLAND_SOCKET)))?
-        }
-
-        return Ok(Some(Success));
+    if WAYLAND_DISPLAY.is_empty() {
+        return Ok(None);
     }
 
-    Ok(None)
+    if !Path::new(&*WAYLAND_SOCKET).exists() {
+        Err(Fail(format!("Wayland socket '{}' not found.", &*WAYLAND_SOCKET)))?
+    }
+
+    if !check_socket(&WAYLAND_SOCKET) {
+        Err(Fail(format!("'{}' is not a valid UNIX socket.", &*WAYLAND_SOCKET)))?
+    }
+
+    Ok(Some(Success))
 }
 
 fn validate_xorg_socket() -> Result<Option<Condition>, PermError> {
-    if !X11_DISPLAY.is_empty() {
-        let display: Vec<&str> = X11_DISPLAY.split(":").collect();
-        let xorg_socket = format!("/tmp/.X11-unix/X{}", display[1]);
-
-        if XAUTHORITY.is_empty() {
-            Err(Fail("XAUTHORITY environment variable unspecified.".into()))?
-        }
-
-        if !Path::new(*XAUTHORITY).exists() {
-            Err(Fail(format!("Xauthority file '{}' not found.", *XAUTHORITY)))?
-        }
-
-        if display[0].is_empty() || display[0] == "unix" {
-            if Path::new(&xorg_socket).exists() {
-                if !check_socket(&xorg_socket) {
-                    Err(Fail(format!("'{}' is not a valid UNIX socket.", &xorg_socket)))?
-                }
-
-                return Ok(Some(Success));
-            } else {
-                Err(Fail(format!("X11 socket '{}' not found.", &xorg_socket)))?
-            }
-        } else {
-            return Ok(Some(SuccessWarn(format!("Connecting to TCP X11 socket at '{}'", *X11_DISPLAY))));
-        }
+    if X11_DISPLAY.is_empty() {
+        return Ok(None);
     }
 
-    Ok(None)
+    if !X11_DISPLAY.contains(':') {
+        Err(Fail(format!("Expected value with colon delimiter: `DISPLAY={}`.", *X11_DISPLAY)))?
+    }
+
+    if XAUTHORITY.is_empty() {
+        Err(Fail("XAUTHORITY environment variable unspecified.".into()))?
+    }
+
+    if !Path::new(*XAUTHORITY).exists() {
+        Err(Fail(format!("Xauthority file '{}' not found.", *XAUTHORITY)))?
+    }
+
+    let display: Vec<&str> = X11_DISPLAY.split(":").collect();
+    let xorg_socket = format!("/tmp/.X11-unix/X{}", display[1]);
+
+    if display[0].is_empty() || display[0] == "unix" {
+        if Path::new(&xorg_socket).exists() {
+            if !check_socket(&xorg_socket) {
+                Err(Fail(format!("'{}' is not a valid UNIX socket.", &xorg_socket)))?
+            }
+
+            Ok(Some(Success))
+        } else {
+            Err(Fail(format!("X11 socket '{}' not found.", &xorg_socket)))?
+        }
+    } else {
+        Ok(Some(SuccessWarn(format!("Connecting to TCP X11 socket at '{}'", *X11_DISPLAY))))
+    }
 }
 
 fn configure_wayland(args: &mut ExecutionArgs) {
-    let wayland_socket = format!("{}/{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
+    let wayland_socket = format!("{}/wayland-0", *XDG_RUNTIME_DIR);
 
-    args.env("WAYLAND_DISPLAY", *WAYLAND_DISPLAY);
-    args.robind(&wayland_socket, &wayland_socket);
+    args.env("WAYLAND_DISPLAY", "wayland-0");
+    args.robind(&WAYLAND_SOCKET, &wayland_socket);
 }
 
 fn configure_xorg(args: &mut ExecutionArgs) {
