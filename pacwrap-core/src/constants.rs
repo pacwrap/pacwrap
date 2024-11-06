@@ -81,7 +81,7 @@ lazy_static! {
     pub static ref CONFIG_FILE: &'static str = format_str!("{}/pacwrap.yml", *CONFIG_DIR);
     pub static ref XDG_RUNTIME_DIR: String = format!("/run/user/{}", *UID);
     pub static ref DBUS_SOCKET: String = format!("/run/user/{}/pacwrap_dbus_{}", *UID, &id());
-    pub static ref WAYLAND_SOCKET: String = format!("{}{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
+    pub static ref WAYLAND_SOCKET: String = format!("{}/{}", *XDG_RUNTIME_DIR, *WAYLAND_DISPLAY);
     pub static ref LOG_LOCATION: &'static str = format_str!("{}/pacwrap.log", *DATA_DIR);
     pub static ref UNIX_TIMESTAMP: u64 = unix_epoch_time().as_secs();
     pub static ref IS_COLOR_TERMINAL: bool = is_color_terminal();
