@@ -25,7 +25,10 @@ use crate::{
         filesystem::{BindError, Filesystem},
         ContainerVariables,
     },
+    err,
     exec::args::ExecutionArgs,
+    Error,
+    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,10 +39,10 @@ struct System {
 
 #[typetag::serde(name = "sysfs")]
 impl Filesystem for System {
-    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         for dir in self.path.iter() {
             if !Path::new(&format!("/sys/{}", dir)).exists() {
-                Err(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
+                err!(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
             }
         }
 

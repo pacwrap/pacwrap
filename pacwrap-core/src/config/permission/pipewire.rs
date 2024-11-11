@@ -39,7 +39,7 @@ struct Pipewire {
 
 #[typetag::serde(name = "pipewire")]
 impl Permission for Pipewire {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         if !Path::new(&self.socket).exists() {
             Err(Warn("Pipewire socket not found.".to_string()))?
         }

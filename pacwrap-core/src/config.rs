@@ -18,7 +18,7 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter, Result as FmtResult},
     fs::File,
     io::{ErrorKind::NotFound, Write},
     path::Path,
@@ -54,28 +54,36 @@ pub mod permission;
 pub mod register;
 pub mod vars;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ConfigError {
     Permission(&'static str, PermError),
-    Filesystem(&'static str, BindError),
+    Filesystem(&'static str, Error),
     Save(String, String),
     Load(String, String),
     AlreadyExists(String),
     ConfigNotFound(String),
+    InternalError(String),
 }
 
 impl_error!(ConfigError);
 
 impl Display for ConfigError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::Filesystem(module, err) => write!(fmter, "Failed to register filesystem '{}': {} ", module, err),
-            Self::Permission(module, err) => write!(fmter, "Failed to register permission '{}': {} ", module, err),
+            Self::Filesystem(module, err) => write!(fmter, "Failed to register filesystem module '{}': {} ", module, err.kind()),
+            Self::Permission(module, err) => write!(fmter, "Failed to register permission module '{}': {} ", module, err),
             Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
             Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
             Self::AlreadyExists(ins) => write!(fmter, "Container '{}{ins}{}' already exists.", *BOLD, *RESET),
             Self::ConfigNotFound(path) => write!(fmter, "'{path}': Configuration not found."),
+            Self::InternalError(error) => write!(fmter, "Internal error: {error}"),
         }
+    }
+}
+
+impl From<&Error> for ConfigError {
+    fn from(error: &Error) -> ConfigError {
+        Self::InternalError(error.kind().to_string())
     }
 }
 

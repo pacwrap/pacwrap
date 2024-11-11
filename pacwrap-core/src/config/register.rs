@@ -33,13 +33,13 @@ use crate::{
     utils::print_warning,
 };
 
-pub fn register_filesystems(per: &[Box<dyn Filesystem>], vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
-    for p in per.iter() {
-        match p.check(vars) {
-            Ok(_) => p.register(args, vars),
-            Err(condition) => match condition {
-                BindError::Warn(_) => error!(ConfigError::Filesystem(p.module(), condition)).warn(),
-                BindError::Fail(_) => err!(ConfigError::Filesystem(p.module(), condition))?,
+pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
+    for filesystem in per {
+        match filesystem.qualify(vars) {
+            Ok(_) => filesystem.register(args, vars),
+            Err(condition) => match condition.downcast::<BindError>().map_err(|e| error!(ConfigError::from(e)))? {
+                BindError::Warn(_) => error!(ConfigError::Filesystem(filesystem.module(), condition)).warn(),
+                BindError::Fail(_) => err!(ConfigError::Filesystem(filesystem.module(), condition))?,
             },
         }
     }
@@ -49,7 +49,7 @@ pub fn register_filesystems(per: &[Box<dyn Filesystem>], vars: &ContainerVariabl
 
 pub fn register_permissions(per: &[Box<dyn Permission>], args: &mut ExecutionArgs) -> Result<()> {
     for p in per.iter() {
-        match p.check() {
+        match p.qualify() {
             Ok(condition) => match condition {
                 Some(b) => {
                     p.register(args);

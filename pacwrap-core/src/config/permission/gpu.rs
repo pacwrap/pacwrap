@@ -42,7 +42,7 @@ struct Graphics;
 
 #[typetag::serde(name = "gpu")]
 impl Permission for Graphics {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         let gpu_dev = populate_dev().map_err(|error| {
             eprintln!("{}", ErrorType::Error(&error));
             Fail("No graphics devices are available.".into())

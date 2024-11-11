@@ -26,7 +26,10 @@ use crate::{
         filesystem::{BindError, Filesystem},
         ContainerVariables,
     },
+    err,
     exec::args::ExecutionArgs,
+    Error,
+    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,9 +37,9 @@ pub struct Root;
 
 #[typetag::serde(name = "root")]
 impl Filesystem for Root {
-    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, vars: &ContainerVariables) -> Result<()> {
         if !Path::new(vars.root()).exists() {
-            Err(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
+            err!(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
         }
         Ok(())
     }

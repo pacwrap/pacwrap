@@ -26,7 +26,10 @@ use crate::{
         filesystem::{BindError, Filesystem},
         ContainerVariables,
     },
+    err,
     exec::args::ExecutionArgs,
+    Error,
+    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,9 +37,9 @@ pub struct Home;
 
 #[typetag::serde(name = "home")]
 impl Filesystem for Home {
-    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, vars: &ContainerVariables) -> Result<()> {
         if !Path::new(vars.home()).exists() {
-            Err(BindError::Fail("Specified home directory not found.".into()))?
+            err!(BindError::Fail("Specified home directory not found.".into()))?
         }
         Ok(())
     }

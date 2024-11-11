@@ -24,7 +24,10 @@ use crate::{
         filesystem::{BindError, Filesystem},
         ContainerVariables,
     },
+    err,
     exec::args::ExecutionArgs,
+    Error,
+    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,9 +38,9 @@ pub struct Dir {
 
 #[typetag::serde(name = "dir")]
 impl Filesystem for Dir {
-    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.path.is_empty() {
-            Err(BindError::Fail("Path not specified.".into()))?
+            err!(BindError::Fail("Path not specified.".into()))?
         }
 
         Ok(())
