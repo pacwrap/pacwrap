@@ -36,7 +36,7 @@ struct Dev {
 
 #[typetag::serde(name = "dev")]
 impl Permission for Dev {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         for device in self.devices.iter() {
             if !Path::new(&format!("/dev/{}", device)).exists() {
                 Err(Fail(format!("/dev/{} is inaccessible.", device)))?
