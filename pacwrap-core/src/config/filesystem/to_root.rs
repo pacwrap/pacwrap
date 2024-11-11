@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem, Mount},
+        filesystem::{BindError, Filesystem, Mount, Permission},
         ContainerVariables,
     },
     err,
@@ -49,7 +49,7 @@ impl Filesystem for ToRoot {
                 err!(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
-            check_mount(&m.permission, &m.path)?
+            check_mount(&m.path)?
         }
 
         Ok(())
@@ -66,25 +66,16 @@ impl Filesystem for ToRoot {
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, src: &str, dest: &str) {
+fn bind_filesystem(args: &mut ExecutionArgs, permission: &Permission, src: &str, dest: &str) {
     let dest = match dest.is_empty() {
         true => src,
         false => dest,
     };
 
-    match permission == "rw" {
-        false => args.robind(src, dest),
-        true => args.bind(src, dest),
-    }
+    args.bind(permission, src, dest);
 }
 
-fn check_mount(permission: &String, path: &String) -> Result<()> {
-    let per = permission.to_lowercase();
-
-    if per != "ro" && per != "rw" {
-        err!(BindError::Fail(format!("{} is an invalid permission.", permission)))?
-    }
-
+fn check_mount(path: &String) -> Result<()> {
     if !Path::new(path).exists() {
         err!(BindError::Fail("Source path not found.".into()))?
     }

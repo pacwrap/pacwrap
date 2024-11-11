@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem},
+        filesystem::{BindError, Filesystem, Permission::ReadOnly},
         ContainerVariables,
     },
     err,
@@ -45,7 +45,7 @@ impl Filesystem for Home {
     }
 
     fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
-        args.bind(vars.home(), vars.home_mount());
+        args.bind(&ReadOnly, vars.home(), vars.home_mount());
         args.env("HOME", vars.home_mount());
         args.env("USER", vars.user());
     }

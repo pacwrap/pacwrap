@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        filesystem::Permission::ReadOnly,
         permission::{
             Condition::{Success, SuccessWarn},
             PermError::Fail,
@@ -122,7 +123,7 @@ fn configure_wayland(args: &mut ExecutionArgs) {
     let wayland_socket = format!("{}/wayland-0", *XDG_RUNTIME_DIR);
 
     args.env("WAYLAND_DISPLAY", "wayland-0");
-    args.robind(&WAYLAND_SOCKET, &wayland_socket);
+    args.bind(&ReadOnly, &WAYLAND_SOCKET, &wayland_socket);
 }
 
 fn configure_xorg(args: &mut ExecutionArgs) {
@@ -132,9 +133,9 @@ fn configure_xorg(args: &mut ExecutionArgs) {
 
     args.env("DISPLAY", *X11_DISPLAY);
     args.env("XAUTHORITY", &container_xauth);
-    args.robind(*XAUTHORITY, &container_xauth);
+    args.bind(&ReadOnly, *XAUTHORITY, &container_xauth);
 
     if display[0].is_empty() || display[0] == "unix" {
-        args.robind(&xorg_socket, &xorg_socket);
+        args.bind(&ReadOnly, &xorg_socket, &xorg_socket);
     }
 }
