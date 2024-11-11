@@ -17,23 +17,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use dyn_clone::{clone_trait_object, DynClone};
+use serde::{Deserialize, Serialize};
 
-use crate::{config::ContainerVariables, exec::args::ExecutionArgs};
+use crate::{config::ContainerVariables, exec::args::ExecutionArgs, impl_error, ErrorTrait, Result};
 
 mod dir;
 pub mod home;
 pub mod root;
 mod sys;
+mod tmp;
 mod to_home;
 mod to_root;
+mod xdg_home;
 
-pub enum Condition {
-    Success,
-    SuccessWarn(String),
-    Nothing,
+#[typetag::serde(tag = "mount")]
+pub trait Filesystem: DynClone {
+    fn qualify(&self, vars: &ContainerVariables) -> Result<()>;
+    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables);
+    fn module(&self) -> &'static str;
 }
 
 #[derive(Debug, Clone)]
@@ -42,8 +46,52 @@ pub enum BindError {
     Warn(String),
 }
 
+enum Permission {
+    ReadOnly,
+    ReadWrite,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct Mount {
+    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
+    permission: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    path: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    dest: String,
+}
+
+impl Mount {
+    fn dest(per: Permission, path: &str) -> Self {
+        Self {
+            permission: per.into(),
+            path: path.into(),
+            dest: path.into(),
+        }
+    }
+}
+
+impl From<&str> for Permission {
+    fn from(s: &str) -> Permission {
+        match s.to_lowercase().as_str() {
+            "rw" => Self::ReadWrite,
+            _  => Self::ReadOnly,
+        }
+    }
+}
+
+impl From<Permission> for String {
+    fn from(val: Permission) -> String {
+        match val {
+            Permission::ReadWrite => "rw",
+            Permission::ReadOnly => "ro",
+        }
+        .into()
+    }
+}
+
 impl Display for BindError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Fail(error) => write!(fmter, "{}", error),
             Self::Warn(error) => write!(fmter, "{}", error),
@@ -51,13 +99,7 @@ impl Display for BindError {
     }
 }
 
-#[typetag::serde(tag = "mount")]
-pub trait Filesystem: DynClone {
-    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError>;
-    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables);
-    fn module(&self) -> &'static str;
-}
-
+impl_error!(BindError);
 clone_trait_object!(Filesystem);
 
 fn default_permission() -> String {

@@ -22,10 +22,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{default_permission, is_default_permission, BindError, Filesystem},
+        filesystem::{BindError, Filesystem, Mount},
         ContainerVariables,
     },
+    err,
     exec::args::ExecutionArgs,
+    Error,
+    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,26 +37,16 @@ pub struct ToRoot {
     mounts: Vec<Mount>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Mount {
-    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
-    permission: String,
-    #[serde(skip_serializing_if = "String::is_empty", default)]
-    path: String,
-    #[serde(skip_serializing_if = "String::is_empty", default)]
-    dest: String,
-}
-
 #[typetag::serde(name = "to_root")]
 impl Filesystem for ToRoot {
-    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.mounts.is_empty() {
-            Err(BindError::Warn("Mount volumes undeclared.".into()))?
+            err!(BindError::Warn("Mount volumes undeclared.".into()))?
         }
 
         for m in self.mounts.iter() {
             if m.path.is_empty() {
-                Err(BindError::Warn("Mount volumes undeclared.".into()))?
+                err!(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
             check_mount(&m.permission, &m.path)?
@@ -85,15 +78,15 @@ fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, src: &str, dest: 
     }
 }
 
-fn check_mount(permission: &String, path: &String) -> Result<(), BindError> {
+fn check_mount(permission: &String, path: &String) -> Result<()> {
     let per = permission.to_lowercase();
 
     if per != "ro" && per != "rw" {
-        Err(BindError::Fail(format!("{} is an invalid permission.", permission)))?
+        err!(BindError::Fail(format!("{} is an invalid permission.", permission)))?
     }
 
     if !Path::new(path).exists() {
-        Err(BindError::Fail("Source path not found.".into()))?
+        err!(BindError::Fail("Source path not found.".into()))?
     }
 
     Ok(())

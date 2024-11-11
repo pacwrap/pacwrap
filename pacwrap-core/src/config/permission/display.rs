@@ -40,7 +40,7 @@ struct Display;
 
 #[typetag::serde(name = "display")]
 impl Permission for Display {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         let (wayland, xorg) = (validate_wayland_socket()?, validate_xorg_socket()?);
 
         if wayland.is_some() {

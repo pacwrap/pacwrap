@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem, Mount},
+        filesystem::{BindError, Filesystem, Mount, Permission::*},
         ContainerVariables,
     },
     constants::HOME,
@@ -33,13 +33,13 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToHome {
-    #[serde(skip_serializing_if = "Vec::is_empty", default, rename = "volumes")]
+pub struct XdgHome {
+    #[serde(skip_serializing_if = "Vec::is_empty", default = "xdg_default", rename = "volumes")]
     mounts: Vec<Mount>,
 }
 
-#[typetag::serde(name = "to_home")]
-impl Filesystem for ToHome {
+#[typetag::serde(name = "xdg_home")]
+impl Filesystem for XdgHome {
     fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.mounts.is_empty() {
             err!(BindError::Warn("Mount volumes undeclared.".into()))?
@@ -50,38 +50,41 @@ impl Filesystem for ToHome {
                 err!(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
-            check_mount(&m.permission, &m.path)?
+            check_mount(&m.permission, &m.path)?;
         }
 
         Ok(())
     }
 
-    fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
-        for m in self.mounts.iter() {
-            bind_filesystem(args, vars, &m.permission, &m.path, &m.dest);
+    fn register(&self, args: &mut ExecutionArgs, _: &ContainerVariables) {
+        let mounts = xdg_default();
+        let mut mounts = mounts
+            .iter()
+            .filter(|m| check_mount(&m.permission, &m.path).is_ok())
+            .collect::<Vec<&Mount>>();
+
+        mounts.extend(self.mounts.iter().filter(|a| !mounts.contains(a)).collect::<Vec<&Mount>>());
+
+        for m in mounts {
+            bind_filesystem(args, &m.permission, &m.path);
         }
     }
 
     fn module(&self) -> &'static str {
-        "to_home"
+        "xdg_home"
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, vars: &ContainerVariables, permission: &str, src: &str, dest: &str) {
-    let dest = match dest.is_empty() {
-        false => dest,
-        true => src,
-    };
-    let dest = &format!("{}/{}", vars.home_mount(), dest);
-    let src = &format!("{}/{}", *HOME, src);
+fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, dest: &str) {
+    let path = &format!("{}/{}", *HOME, dest);
 
     match permission == "rw" {
-        false => args.robind(src, dest),
-        true => args.bind(src, dest),
+        false => args.robind(path, path),
+        true => args.bind(path, path),
     }
 }
 
-fn check_mount(permission: &String, path: &String) -> Result<()> {
+fn check_mount(permission: &str, path: &str) -> Result<()> {
     let per = permission.to_lowercase();
 
     if per != "ro" && per != "rw" {
@@ -93,4 +96,11 @@ fn check_mount(permission: &String, path: &String) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn xdg_default() -> Vec<Mount> {
+    ["Downloads", "Documents", "Pictures", "Videos", "Music"]
+        .iter()
+        .map(|d| Mount::dest(ReadOnly, d))
+        .collect()
 }

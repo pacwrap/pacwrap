@@ -39,7 +39,7 @@ struct Pulseaudio {
 
 #[typetag::serde(name = "pulseaudio")]
 impl Permission for Pulseaudio {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         if !Path::new(&self.socket).exists() {
             Err(Warn("Pulseaudio socket not found.".into()))?
         }

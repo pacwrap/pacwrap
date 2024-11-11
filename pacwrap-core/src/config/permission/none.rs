@@ -32,7 +32,7 @@ pub struct None;
 
 #[typetag::serde(name = "none")]
 impl Permission for None {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
 

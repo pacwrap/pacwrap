@@ -32,7 +32,7 @@ pub struct Network;
 
 #[typetag::serde(name = "net")]
 impl Permission for Network {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
 
