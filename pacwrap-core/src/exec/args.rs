@@ -27,13 +27,13 @@ pub enum Argument {
     EnvVar(String, String),
     SymbolicLink(String, String),
     Device(String),
+    TmpFs(String),
     DevFs,
     DieWithParent,
     DisableNamespaces,
     HostNetworking,
     ProcFs,
     NewSession,
-    TmpFs,
     UnshareAll,
 }
 
@@ -48,6 +48,7 @@ impl Argument {
     fn to_vec(&self) -> Vec<&str> {
         match self {
             Self::Directory(val) => vec!["--dir", val],
+            Self::TmpFs(val) => vec!["--tmpfs", val],
             Self::Bind(src, dest) => vec!["--bind", src, dest],
             Self::RoBind(src, dest) => vec!["--ro-bind", src, dest],
             Self::SymbolicLink(src, dest) => vec!["--symlink", src, dest],
@@ -59,7 +60,6 @@ impl Argument {
             Self::HostNetworking => vec!["--share-net"],
             Self::ProcFs => vec!["--proc", "/proc"],
             Self::NewSession => vec!["--new-session"],
-            Self::TmpFs => vec!["--tmpfs", "/tmp"],
             Self::UnshareAll => vec!["--unshare-all"],
         }
     }
@@ -75,10 +75,14 @@ impl ExecutionArgs {
     pub fn new() -> Self {
         Self {
             dbus: Vec::new(),
-            bind: vec![Argument::TmpFs],
+            bind: vec![Argument::TmpFs("/tmp".into())],
             sys: vec![Argument::DevFs, Argument::ProcFs],
             env: vec![Argument::UnshareAll],
         }
+    }
+
+    pub fn tmp(&mut self, dest: &str) {
+        self.bind.push(Argument::TmpFs(dest.into()));
     }
 
     pub fn dir(&mut self, dest: &str) {

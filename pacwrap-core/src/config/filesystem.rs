@@ -75,7 +75,7 @@ impl From<&str> for Permission {
     fn from(s: &str) -> Permission {
         match s.to_lowercase().as_str() {
             "rw" => Self::ReadWrite,
-            _  => Self::ReadOnly,
+            _ => Self::ReadOnly,
         }
     }
 }
