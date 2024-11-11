@@ -38,6 +38,7 @@ use signal_hook::iterator::Signals;
 use pacwrap_core::{
     config::{
         self,
+        filesystem::Permission::ReadOnly,
         register::{register_dbus, register_filesystems, register_permissions},
         ContainerHandle,
         ContainerType::Slice,
@@ -332,7 +333,7 @@ fn instantiate_dbus_proxy(per: &[Box<dyn Dbus>], args: &mut ExecutionArgs, verbo
         Ok(mut child) => {
             let mut increment: u8 = 0;
 
-            args.robind(&DBUS_SOCKET, &dbus_socket_path);
+            args.bind(&ReadOnly, &DBUS_SOCKET, &dbus_socket_path);
             args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
             args.env("DBUS_SESSION_BUS_ADDRESS", &format!("unix:path={dbus_socket_path}"));
 

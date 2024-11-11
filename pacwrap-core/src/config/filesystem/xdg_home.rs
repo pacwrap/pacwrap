@@ -22,7 +22,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem, Mount, Permission::*},
+        filesystem::{
+            BindError,
+            Filesystem,
+            Mount,
+            Permission::{self, ReadOnly},
+        },
         ContainerVariables,
     },
     constants::HOME,
@@ -50,7 +55,7 @@ impl Filesystem for XdgHome {
                 err!(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
-            check_mount(&m.permission, &m.path)?;
+            check_mount(&m.path)?;
         }
 
         Ok(())
@@ -58,10 +63,7 @@ impl Filesystem for XdgHome {
 
     fn register(&self, args: &mut ExecutionArgs, _: &ContainerVariables) {
         let mounts = xdg_default();
-        let mut mounts = mounts
-            .iter()
-            .filter(|m| check_mount(&m.permission, &m.path).is_ok())
-            .collect::<Vec<&Mount>>();
+        let mut mounts = mounts.iter().filter(|m| check_mount(&m.path).is_ok()).collect::<Vec<&Mount>>();
 
         mounts.extend(self.mounts.iter().filter(|a| !mounts.contains(a)).collect::<Vec<&Mount>>());
 
@@ -75,22 +77,13 @@ impl Filesystem for XdgHome {
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, dest: &str) {
+fn bind_filesystem(args: &mut ExecutionArgs, permission: &Permission, dest: &str) {
     let path = &format!("{}/{}", *HOME, dest);
 
-    match permission == "rw" {
-        false => args.robind(path, path),
-        true => args.bind(path, path),
-    }
+    args.bind(permission, path, path);
 }
 
-fn check_mount(permission: &str, path: &str) -> Result<()> {
-    let per = permission.to_lowercase();
-
-    if per != "ro" && per != "rw" {
-        err!(BindError::Fail(format!("{} is an invalid permission.", permission)))?
-    }
-
+fn check_mount(path: &str) -> Result<()> {
     if !Path::new(&format!("{}/{}", *HOME, &path)).exists() {
         err!(BindError::Fail(format!("~/{} not found.", path)))?
     }

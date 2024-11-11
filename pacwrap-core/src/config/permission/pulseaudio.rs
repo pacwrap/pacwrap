@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        filesystem::Permission::ReadOnly,
         permission::{Condition::Success, PermError::Warn, *},
         Permission,
     },
@@ -52,7 +53,7 @@ impl Permission for Pulseaudio {
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        args.robind(&self.socket, &default_socket());
+        args.bind(&ReadOnly, &self.socket, &default_socket());
     }
 
     fn module(&self) -> &'static str {
