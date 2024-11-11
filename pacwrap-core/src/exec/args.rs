@@ -19,6 +19,8 @@
 
 use std::fmt::{Debug, Formatter};
 
+use crate::config::filesystem::Permission;
+
 #[derive(Debug)]
 pub enum Argument {
     Directory(String),
@@ -89,12 +91,11 @@ impl ExecutionArgs {
         self.bind.push(Argument::Directory(dest.into()));
     }
 
-    pub fn bind(&mut self, src: &str, dest: &str) {
-        self.bind.push(Argument::Bind(src.into(), dest.into()));
-    }
-
-    pub fn robind(&mut self, src: &str, dest: &str) {
-        self.bind.push(Argument::RoBind(src.into(), dest.into()));
+    pub fn bind(&mut self, permission: &Permission, src: &str, dest: &str) {
+        match permission {
+            Permission::ReadOnly => self.bind.push(Argument::Bind(src.into(), dest.into())),
+            Permission::ReadWrite => self.bind.push(Argument::Bind(src.into(), dest.into())),
+        }
     }
 
     pub fn symlink(&mut self, src: &str, dest: &str) {

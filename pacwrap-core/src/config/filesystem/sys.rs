@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem},
+        filesystem::{BindError, Filesystem, Permission::ReadOnly},
         ContainerVariables,
     },
     err,
@@ -51,7 +51,7 @@ impl Filesystem for System {
 
     fn register(&self, args: &mut ExecutionArgs, _: &ContainerVariables) {
         for dir in self.path.iter() {
-            args.robind(&format!("/sys/{}", dir), &format!("/sys/{}", dir));
+            args.bind(&ReadOnly, &format!("/sys/{}", dir), &format!("/sys/{}", dir));
         }
     }
 

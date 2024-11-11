@@ -17,10 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    result::Result as StdResult,
+};
 
 use dyn_clone::{clone_trait_object, DynClone};
-use serde::{Deserialize, Serialize};
+use serde::{
+    de::{Error as DeError, Visitor},
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
 
 use crate::{config::ContainerVariables, exec::args::ExecutionArgs, impl_error, ErrorTrait, Result};
 
@@ -46,7 +55,8 @@ pub enum BindError {
     Warn(String),
 }
 
-enum Permission {
+#[derive(Debug, PartialEq, Clone)]
+pub enum Permission {
     ReadOnly,
     ReadWrite,
 }
@@ -54,17 +64,49 @@ enum Permission {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Mount {
     #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
-    permission: String,
+    permission: Permission,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     path: String,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     dest: String,
 }
 
+struct PermissionVisitor;
+
+impl Serialize for Permission {
+    fn serialize<D: Serializer>(&self, serializer: D) -> StdResult<D::Ok, D::Error> {
+        serializer.serialize_str(self.into())
+    }
+}
+
+impl<'de> Deserialize<'de> for Permission {
+    fn deserialize<D: Deserializer<'de>>(serializer: D) -> StdResult<Self, D::Error> {
+        serializer.deserialize_str(PermissionVisitor)
+    }
+}
+
+impl<'de> Visitor<'de> for PermissionVisitor {
+    type Value = Permission;
+
+    fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
+        write!(formatter, "expected the type 'ro' or 'rw'")
+    }
+
+    fn visit_str<E: DeError>(self, str: &str) -> StdResult<Self::Value, E> {
+        let str_lc = str.to_lowercase();
+
+        if str_lc != "rw" && str_lc != "ro" {
+            Err(E::invalid_type(serde::de::Unexpected::Other(str), &self))?
+        }
+
+        Ok(str.into())
+    }
+}
+
 impl Mount {
     fn dest(per: Permission, path: &str) -> Self {
         Self {
-            permission: per.into(),
+            permission: per,
             path: path.into(),
             dest: path.into(),
         }
@@ -80,13 +122,12 @@ impl From<&str> for Permission {
     }
 }
 
-impl From<Permission> for String {
-    fn from(val: Permission) -> String {
+impl From<&Permission> for &str {
+    fn from(val: &Permission) -> &'static str {
         match val {
             Permission::ReadWrite => "rw",
             Permission::ReadOnly => "ro",
         }
-        .into()
     }
 }
 
@@ -102,10 +143,10 @@ impl Display for BindError {
 impl_error!(BindError);
 clone_trait_object!(Filesystem);
 
-fn default_permission() -> String {
-    "ro".into()
+fn default_permission() -> Permission {
+    Permission::ReadOnly
 }
 
-fn is_default_permission(var: &String) -> bool {
-    var == "ro"
+fn is_default_permission(var: &Permission) -> bool {
+    var == &Permission::ReadOnly
 }

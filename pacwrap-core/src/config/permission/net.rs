@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        filesystem::Permission::ReadOnly,
         permission::{Condition::Success, *},
         Permission,
     },
@@ -38,7 +39,7 @@ impl Permission for Network {
 
     fn register(&self, args: &mut ExecutionArgs) {
         args.push_env(HostNetworking);
-        args.bind("/etc/resolv.conf", "/etc/resolv.conf");
+        args.bind(&ReadOnly, "/etc/resolv.conf", "/etc/resolv.conf");
     }
 
     fn module(&self) -> &'static str {

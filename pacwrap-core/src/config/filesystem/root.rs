@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem},
+        filesystem::{BindError, Filesystem, Permission::ReadOnly},
         ContainerVariables,
     },
     err,
@@ -45,8 +45,8 @@ impl Filesystem for Root {
     }
 
     fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
-        args.robind(&format!("{}/usr", vars.root()), "/usr");
-        args.robind(&format!("{}/etc", vars.root()), "/etc");
+        args.bind(&ReadOnly, &format!("{}/usr", vars.root()), "/usr");
+        args.bind(&ReadOnly, &format!("{}/etc", vars.root()), "/etc");
         args.symlink("/usr/lib", "/lib");
         args.symlink("/usr/lib", "/lib64");
         args.symlink("/usr/bin", "/bin");

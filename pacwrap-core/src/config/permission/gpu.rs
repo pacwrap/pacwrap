@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        filesystem::Permission::ReadOnly,
         permission::{
             Condition::{self, *},
             PermError::{self, *},
@@ -65,7 +66,7 @@ impl Permission for Graphics {
         let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
 
         if nvidia && Path::new("/sys/module/nvidia").exists() {
-            args.robind("/sys/module/nvidia", "/sys/module/nvidia")
+            args.bind(&ReadOnly, "/sys/module/nvidia", "/sys/module/nvidia")
         }
 
         for dev in gpu_dev {
