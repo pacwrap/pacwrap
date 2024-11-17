@@ -26,8 +26,10 @@ jobs:
         toolchain:
           - nightly
     steps:
+      - name: Update container
+        run: pacman -Sy archlinux-keyring --noconfirm --needed && pacman -Su --noconfirm
       - name: Install packages
-        run: pacman -Syu git nodejs rustup --noconfirm
+        run: pacman -S git nodejs rustup --noconfirm
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install toolchain
@@ -46,8 +48,10 @@ jobs:
     env: 
       PACWRAP_SCHEMA_BUILT: 0
     steps:
+      - name: Update container
+        run: pacman -Sy archlinux-keyring --noconfirm --needed && pacman -Su --noconfirm
       - name: Install packages
-        run: pacman -Syu base-devel bubblewrap busybox fakechroot fakeroot git nodejs rustup --noconfirm
+        run: pacman -S base-devel git nodejs rustup --noconfirm
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install toolchain
@@ -66,8 +70,10 @@ jobs:
         toolchain:
           - stable
     steps:
+      - name: Update container
+        run: pacman -Sy archlinux-keyring --noconfirm --needed && pacman -Su --noconfirm
       - name: Install packages
-        run: pacman -Syu base-devel bubblewrap busybox fakechroot fakeroot git nodejs rustup --noconfirm
+        run: pacman -S base-devel bubblewrap busybox fakechroot fakeroot git nodejs rustup --noconfirm
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install toolchain
