@@ -83,7 +83,7 @@ pub struct Table<'a> {
     built: bool,
 }
 
-impl<'a> Default for Table<'a> {
+impl Default for Table<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -157,7 +157,7 @@ impl<'a> Table<'a> {
         !self.marker.is_empty()
     }
 
-    pub fn build(&'a mut self) -> Result<&Self, Error> {
+    pub fn build(&'a mut self) -> Result<&'a Self, Error> {
         if let (0, 0) = self.dimensions {
             err!(TableError::Empty)?
         } else if let (_, 0) = self.dimensions {
@@ -251,7 +251,7 @@ impl<'a> Entry<'a> {
     }
 }
 
-impl<'a> Display for Table<'a> {
+impl Display for Table<'_> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
         if !self.built {
             return writeln!(fmt, "Table object not built");

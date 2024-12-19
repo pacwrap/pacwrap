@@ -68,7 +68,7 @@ impl<'a> FileType<'a> {
     }
 }
 
-impl<'a> Display for FileType<'a> {
+impl Display for FileType<'_> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
         match self {
             FileType::LogFile => write!(fmt, "{}/pacwrap.log", *DATA_DIR),

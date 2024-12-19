@@ -231,7 +231,7 @@ impl TransactionType {
 }
 
 impl<'a> TransactionMetadata<'a> {
-    fn new(queue: Vec<&'a str>) -> TransactionMetadata {
+    fn new(queue: Vec<&'a str>) -> TransactionMetadata<'a> {
         Self {
             foreign_pkgs: HashSet::new(),
             resident_pkgs: HashSet::new(),

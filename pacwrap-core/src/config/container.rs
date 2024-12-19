@@ -143,7 +143,7 @@ impl<'a> ContainerHandle<'a> {
     }
 }
 
-impl<'a> Debug for ContainerHandle<'a> {
+impl Debug for ContainerHandle<'_> {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(fmter, "{:?}", self.vars())?;
         write!(fmter, "{:?}", self.config())

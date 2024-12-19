@@ -67,7 +67,7 @@ impl Display for InvalidArgument {
     }
 }
 
-impl<'a> Default for Arguments<'a> {
+impl Default for Arguments<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -181,7 +181,7 @@ impl<'a> Iterator for Arguments<'a> {
     }
 }
 
-impl<'a> Display for Operand<'a> {
+impl Display for Operand<'_> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Long(str) => write!(fmt, "--{}", str),
@@ -195,13 +195,13 @@ impl<'a> Display for Operand<'a> {
     }
 }
 
-impl<'a> Default for &Operand<'a> {
+impl Default for &Operand<'_> {
     fn default() -> Self {
         &Operand::Nothing
     }
 }
 
-impl<'a> Default for Operand<'a> {
+impl Default for Operand<'_> {
     fn default() -> Self {
         Self::Nothing
     }

@@ -286,7 +286,7 @@ impl Default for SummaryKind {
 }
 
 impl TableColumns {
-    fn header<'a>(&'a self, preface: &'a str) -> Vec<&str> {
+    fn header<'a>(&self, preface: &'a str) -> Vec<&'a str> {
         match self {
             Self::OldNewNetDownload => vec![preface, "Old Version", "New Version", "Net Change", "Download Size"],
             Self::NewNetDownload => vec![preface, "New Version", "Net Change", "Download Size"],

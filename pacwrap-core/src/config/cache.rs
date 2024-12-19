@@ -35,7 +35,7 @@ pub struct ContainerCache<'a> {
     instances: IndexMap<&'a str, ContainerHandle<'a>>,
 }
 
-impl<'a> Default for ContainerCache<'a> {
+impl Default for ContainerCache<'_> {
     fn default() -> Self {
         Self::new()
     }
