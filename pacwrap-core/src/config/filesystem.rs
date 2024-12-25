@@ -41,6 +41,7 @@ mod tmp;
 mod to_home;
 mod to_root;
 mod xdg_home;
+mod xdg_runtime;
 
 #[typetag::serde(tag = "mount")]
 pub trait Filesystem: DynClone {
