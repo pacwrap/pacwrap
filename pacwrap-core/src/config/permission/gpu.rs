@@ -81,13 +81,13 @@ impl Permission for Graphics {
 
 fn populate_dev() -> Result<Vec<String>, Error> {
     Ok(read_dir("/dev/")
-        .prepend_io(|| "/dev".into())?
+        .prepend_io(|| "/dev")?
         .filter_map(|f| {
             f.map_or_else(
                 |_| None,
                 |f| {
                     let file = f.file_name();
-                    let dev = file.to_str().unwrap();
+                    let dev = file.to_str().expect("UTF-8 path");
 
                     (dev.starts_with("nvidia") || dev == "dri").then_some(format!("/dev/{}", dev))
                 },

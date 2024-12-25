@@ -21,7 +21,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter, Result as FmtResult},
     fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename, File, Metadata},
-    io::{copy, BufReader, Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
+    io::{copy, BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
@@ -81,6 +81,9 @@ pub enum FilesystemSyncError {
     UnsupportedVersion(String, u32),
     DeserializationFailure(String, String),
     SerializationFailure(String, String),
+    DataLengthMaximum(u64, u64),
+    DataLengthZero,
+    InvalidHashLength,
 }
 
 impl_error!(FilesystemSyncError);
@@ -95,6 +98,9 @@ impl Display for FilesystemSyncError {
                 write!(fmter, "Deserialization failure occurred with '{}{file}{}.dat': {err}", *BOLD, *RESET),
             Self::ChecksumMismatch(file) => write!(fmter, "'{file}': Checksum mismatch"),
             Self::MagicMismatch(file, magic) => write!(fmter, "'{file}': Magic number mismatch ({MAGIC_NUMBER} != {magic})"),
+            Self::DataLengthZero => write!(fmter, "Data length provided is zero"),
+            Self::InvalidHashLength => write!(fmter, "Hash length provided is invalid."),
+            Self::DataLengthMaximum(cur, max) => write!(fmter, "Data length exceeded maximum {cur} >= {max}"),
         }
     }
 }
@@ -282,11 +288,11 @@ impl<'a> FilesystemSync<'a> {
                 if let IOErrorKind::NotFound = err.kind() {
                     return Ok(None);
                 } else {
-                    return Err(err).prepend_io(|| path.into());
+                    return Err(err).prepend_io(|| path);
                 },
         };
 
-        file.read_exact(header.as_slice_mut()).prepend_io(|| path.into())?;
+        file.read_exact(header.as_slice_mut()).prepend_io(|| path)?;
 
         let magic = header.read_le_32();
         let version = header.read_le_32();
@@ -302,7 +308,7 @@ impl<'a> FilesystemSync<'a> {
             self.state_map_prev.insert(instance.clone(), Some(state.clone()));
             Ok(Some(state))
         } else {
-            let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path.into())?;
+            let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path)?;
 
             if !checksum_valid {
                 err!(FilesystemSyncError::ChecksumMismatch(path.into()))?
@@ -543,12 +549,12 @@ fn serialize(path: &str, ds: FileSystemState) -> Result<()> {
         err!(FilesystemSyncError::SerializationFailure(path.into(), err.as_ref().to_string()))?
     }
 
-    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| path.into())?;
-    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| path.into())?;
+    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| path)?;
+    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| path)?;
     Ok(())
 }
 
-fn decode_state<R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
+fn decode_state<R: Read>(mut stream: R) -> Result<(Vec<u8>, bool)> {
     let mut header_buffer = ByteBuffer::with_capacity(10).read();
 
     stream.read_exact(header_buffer.as_slice_mut())?;
@@ -557,11 +563,11 @@ fn decode_state<R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
     let state_length = header_buffer.read_le_64();
 
     if state_length == 0 {
-        Err(IOError::new(IOErrorKind::InvalidInput, "Data length provided is zero".to_string()))?;
+        err!(FilesystemSyncError::DataLengthZero)?;
     } else if hash_length != 32 {
-        Err(IOError::new(IOErrorKind::InvalidInput, "Hash length provided is invalid.".to_string()))?;
+        err!(FilesystemSyncError::InvalidHashLength)?;
     } else if state_length >= BYTE_LIMIT {
-        Err(IOError::new(IOErrorKind::InvalidInput, format!("Data length exceeded maximum {state_length} >= {BYTE_LIMIT}")))?;
+        err!(FilesystemSyncError::DataLengthMaximum(state_length, BYTE_LIMIT))?;
     }
 
     let mut hash_buffer = vec![0; hash_length as usize];
@@ -594,9 +600,9 @@ fn encode_state(path: &str, state_data: Vec<u8>, hash: Vec<u8>) -> IOResult<u64>
 fn check(instance: &str) -> Result<bool> {
     let path = &format!("{}/state/{}.dat", *DATA_DIR, instance);
     let mut header_buffer = ByteBuffer::with_capacity(8).read();
-    let mut file = File::open(path).prepend_io(|| path.into())?;
+    let mut file = File::open(path).prepend_io(|| path)?;
 
-    file.read_exact(header_buffer.as_slice_mut()).prepend_io(|| path.into())?;
+    file.read_exact(header_buffer.as_slice_mut())?;
 
     let magic = header_buffer.read_le_32();
     let version = header_buffer.read_le_32();

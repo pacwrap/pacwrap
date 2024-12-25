@@ -148,7 +148,7 @@ impl Logger {
         let path = Path::new(location);
         let file = OpenOptions::new().create(true).append(true).truncate(false).open(path);
 
-        self.file = Some(file.prepend_io(|| location.into())?);
+        self.file = Some(file.prepend_io(|| location)?);
         Ok(self)
     }
 
@@ -175,9 +175,7 @@ impl Logger {
          * time offset if a change were to occur whilst this application is running.
          */
         if let Ok(local) = OffsetDateTime::now_local() {
-            let local_time = local.format(UTC_OFFSET).expect("Format localtime");
-
-            self.offset = UtcOffset::parse(&local_time, UTC_OFFSET).expect("Offset localtime");
+            self.offset = UtcOffset::parse(&local.format(UTC_OFFSET)?, UTC_OFFSET)?;
         }
 
         if let Level::Debug = level {
@@ -190,10 +188,10 @@ impl Logger {
 
         match self.file.as_mut() {
             Some(file) => {
-                let time = OffsetDateTime::now_utc().to_offset(self.offset).format(DATE_FORMAT).expect("Format time");
+                let time = OffsetDateTime::now_utc().to_offset(self.offset).format(DATE_FORMAT)?;
                 let log = format!("[{}] [{}] [{}] {}\n", time, self.module, level, msg);
 
-                file.write(log.as_bytes()).generic()
+                Ok(file.write(log.as_bytes())?)
             }
             None => err!(LoggerError::Uninitialized)?,
         }

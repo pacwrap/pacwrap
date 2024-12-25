@@ -285,14 +285,14 @@ pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> 
         let dep = handle.metadata().dependencies();
         let dep = dep.last().expect("Dependency element");
 
-        symlink(dep, root).prepend_io(|| root.into())?;
+        symlink(dep, root).prepend_io(|| root)?;
     } else {
-        create_dir(root).prepend_io(|| root.into())?;
+        create_dir(root).prepend_io(|| root)?;
     }
 
     if let Aggregate | Base = container_type {
         if !Path::new(home).exists() {
-            create_dir(home).prepend_io(|| home.into())?;
+            create_dir(home).prepend_io(|| home)?;
         }
     }
 
@@ -320,7 +320,7 @@ pub fn instantiate_trust() -> Result<()> {
         err!(SyncError::UnableToLocateKeyrings)?
     }
 
-    create_dir_all(path).prepend_io(|| path.into())?;
+    create_dir_all(path).prepend_io(|| path)?;
     pacwrap_key(vec!["--init"])?;
     pacwrap_key(vec!["--populate"])
 }
@@ -356,7 +356,7 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
         err!(SyncError::InitializationFailure(err.to_string()))?
     }
 
-    handle.release().generic()?;
+    handle.release()?;
     ag.lock()?.assert()?;
 
     for handle in ag.cache().filter_handle(vec![Base, Slice, Aggregate]).iter() {

@@ -141,16 +141,16 @@ pub fn extract(inshandle: &ContainerHandle, old_schema: &Option<SchemaState>) ->
     }
 
     for entry in access_archive(ARCHIVE_PATH)?.entries().unwrap() {
-        let mut entry = entry.prepend_io(|| ARCHIVE_PATH.into())?;
-        let path = entry.path().prepend_io(|| ARCHIVE_PATH.into())?.to_string_lossy().to_string();
+        let mut entry = entry.prepend_io(|| ARCHIVE_PATH)?;
+        let path = entry.path().prepend_io(|| ARCHIVE_PATH)?.to_string_lossy().to_string();
         let dest_path = format!("{}/{}", inshandle.vars().root(), path);
 
-        if let Err(err) = entry.unpack(&dest_path).prepend_io(|| ARCHIVE_PATH.into()) {
+        if let Err(err) = entry.unpack(&dest_path).prepend_io(|| ARCHIVE_PATH) {
             err.warn();
         }
     }
 
-    if let Err(err) = fs::copy(env!("PACWRAP_DIST_META"), &meta_path).prepend_io(|| ARCHIVE_PATH.into()) {
+    if let Err(err) = fs::copy(env!("PACWRAP_DIST_META"), &meta_path).prepend_io(|| ARCHIVE_PATH) {
         err.warn();
     }
 
@@ -171,14 +171,14 @@ pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
         }
     };
 
-    file.read_exact(header.as_slice_mut()).prepend_io(|| schema.into())?;
+    file.read_exact(header.as_slice_mut()).prepend_io(|| schema)?;
 
     let magic = header.read_le_32();
     let major: (u32, u32) = (*VERSION_MAJOR, header.read_le_32());
     let minor: (u32, u32) = (*VERSION_MINOR, header.read_le_32());
     let patch: (u32, u32) = (*VERSION_PATCH, header.read_le_32());
 
-    file.rewind().prepend_io(|| schema.into())?;
+    file.rewind().prepend_io(|| schema)?;
 
     if magic != MAGIC_NUMBER {
         print_warning(&format!("'{}': Magic number mismatch ({MAGIC_NUMBER} != {magic})", schema));
@@ -221,20 +221,20 @@ fn get_schema_state() -> Result<&'static SchemaState> {
 
 fn deserialize() -> Result<SchemaState> {
     let schema = env!("PACWRAP_DIST_META");
-    let file = File::open(schema).prepend_io(|| schema.into())?;
+    let file = File::open(schema).prepend_io(|| schema)?;
 
     bincode::deserialize_from::<&File, SchemaState>(&file).prepend(|| format!("Schema deserialization failure '{schema}'"))
 }
 
 fn access_archive<'a>(path: &str) -> Result<Archive<Decoder<'a, BufReader<File>>>> {
-    Ok(Archive::new(Decoder::new(File::open(path).prepend_io(|| path.into())?).prepend_io(|| path.into())?))
+    Ok(Archive::new(Decoder::new(File::open(path).prepend_io(|| path)?).prepend_io(|| path)?))
 }
 
 fn remove_file(path: &str) -> Result<()> {
     if Path::new(&format!("{}.pacnew", &path)).exists() {
-        fs::remove_file(path).prepend(|| format!("Failed to remove '{path}'"))?;
+        fs::remove_file(path).prepend(|| path)?;
     } else {
-        fs::copy(format!("{}.pacnew", &path), path).prepend(|| format!("Failed to copy '{path}'"))?;
+        fs::copy(format!("{}.pacnew", &path), path).prepend_io(|| format!("{}.pacnew", &path))?;
     }
 
     Ok(())
@@ -242,7 +242,7 @@ fn remove_file(path: &str) -> Result<()> {
 
 fn remove_symlink(path: &str) -> Result<()> {
     if fs::read_link(path).is_ok() {
-        fs::remove_file(path).prepend(|| format!("Failed to remove symlink '{path}'"))?;
+        fs::remove_file(path).prepend_io(|| path)?;
     }
 
     Ok(())
@@ -253,9 +253,9 @@ fn remove_directory(path: &str) -> Result<()> {
         return Ok(());
     }
 
-    fs::remove_dir(path).prepend(|| format!("Failed to remove directory '{path}'"))
+    fs::remove_dir(path).prepend_io(|| path)
 }
 
 fn is_directory_occupied(path: &str) -> Result<bool> {
-    Ok(fs::read_dir(path).prepend_io(|| path.into())?.count() > 0)
+    Ok(fs::read_dir(path).prepend_io(|| path)?.count() > 0)
 }

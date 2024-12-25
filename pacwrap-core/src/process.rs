@@ -212,7 +212,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList> {
 
 fn procfs() -> Result<Vec<(i32, u64)>> {
     Ok(read_dir("/proc/")
-        .prepend_io(|| "/proc/".into())?
+        .prepend_io(|| "/proc/")?
         .filter_map(StdResult::ok)
         .filter_map(|s| procfs_meta(s).unwrap_or(None))
         .filter_map(|(name, mtime)| {

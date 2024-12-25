@@ -130,13 +130,13 @@ pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: V
 }
 
 fn save<T: Serialize>(obj: &T, path: &str) -> Result<()> {
-    let mut f = File::create(path).prepend_io(|| path.into())?;
+    let mut f = File::create(path).prepend_io(|| path)?;
     let config = match serde_yaml::to_string(&obj) {
         Ok(file) => file,
         Err(error) => err!(ConfigError::Save(path.into(), error.to_string()))?,
     };
 
-    write!(f, "{}", config).prepend_io(|| path.into())
+    write!(f, "{}", config).prepend_io(|| path)
 }
 
 #[inline]
@@ -158,7 +158,7 @@ fn handle<'a>(vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
 }
 
 fn load_config() -> Result<Global> {
-    match serde_yaml::from_reader(File::open(*CONFIG_FILE).prepend_io(|| CONFIG_FILE.to_string())?) {
+    match serde_yaml::from_reader(File::open(*CONFIG_FILE).prepend_io(|| *CONFIG_FILE)?) {
         Ok(file) => Ok(file),
         Err(error) => err!(ConfigError::Load(CONFIG_FILE.to_string(), error.to_string()))?,
     }

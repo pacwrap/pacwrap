@@ -67,7 +67,7 @@ pub fn transact() -> Result<()> {
         }
     };
 
-    file.read_exact_at(header.as_slice_mut(), 0).prepend_io(|| AGENT_PARAMS.into())?;
+    file.read_exact_at(header.as_slice_mut(), 0).prepend_io(|| AGENT_PARAMS)?;
     decode_header(&mut header)?;
 
     let params: TransactionParameters = deserialize(&mut file)?;

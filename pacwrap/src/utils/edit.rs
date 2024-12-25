@@ -128,7 +128,7 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
 }
 
 fn edit_file(file: &str, temporary_file: &str, lock: Option<&Lock>, edit: bool) -> Result<()> {
-    copy(file, temporary_file).prepend_io(|| file.into())?;
+    copy(file, temporary_file).prepend_io(|| file)?;
     handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
 
     if edit && hash_file(file)? != hash_file(temporary_file)? {
@@ -136,19 +136,19 @@ fn edit_file(file: &str, temporary_file: &str, lock: Option<&Lock>, edit: bool) 
             lock.assert()?;
         }
 
-        copy(temporary_file, file).prepend_io(|| temporary_file.into())?;
+        copy(temporary_file, file).prepend_io(|| temporary_file)?;
         eprintln!("{} Changes written to file.", *ARROW_GREEN);
     } else if edit {
         eprintln!("{} No changes made.", *ARROW_CYAN);
     }
 
-    remove_file(temporary_file).prepend_io(|| temporary_file.into())
+    remove_file(temporary_file).prepend_io(|| temporary_file)
 }
 
 fn hash_file(file_path: &str) -> Result<Vec<u8>> {
-    let mut file = File::open(file_path).prepend_io(|| file_path.into())?;
+    let mut file = File::open(file_path).prepend_io(|| file_path)?;
     let mut hasher = Sha256::new();
 
-    copy_io(&mut file, &mut hasher).prepend_io(|| file_path.into())?;
+    copy_io(&mut file, &mut hasher).prepend_io(|| file_path)?;
     Ok(hasher.finalize().to_vec())
 }

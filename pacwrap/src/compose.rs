@@ -225,7 +225,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                         delete.push(target);
                     }
 
-                    Path::new(target).try_exists().prepend_io(|| target.into())?;
+                    Path::new(target).try_exists().prepend_io(|| target)?;
 
                     current_target.map(|_| config)
                 } else {

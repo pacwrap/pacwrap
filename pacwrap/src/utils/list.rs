@@ -144,7 +144,7 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
         let instance = container.vars().instance();
         let container_path = &format!("{}/{}", *CONTAINER_DIR, instance);
         let (len, organic, total) = if measure_disk && container.metadata().container_type() != &ContainerType::Symbolic {
-            directory_size(container_path)?
+            directory_size(container_path).prepend_io(|| container_path)?
         } else {
             (0, 0, 0)
         };
@@ -223,17 +223,14 @@ fn directory_size(dir: &str) -> Result<(i64, i64, i64)> {
     let mut total = 0;
     let mut unique = 0;
 
-    for entry in read_dir(dir).prepend_io(|| dir.into())? {
-        let entry = entry.prepend(|| format!("Failure acquiring entry in '{dir}'"))?;
-        let name = entry.file_name().to_str().unwrap().to_string();
-        let meta = entry.metadata().prepend(|| format!("Failure to acquire metadata in '{dir}/{name}'"))?;
+    for entry in read_dir(dir)? {
+        let entry = entry?;
+        let meta = entry.metadata()?;
 
-        if entry
-            .file_type()
-            .prepend(|| format!("Failure to acquire filetype '{dir}/{name}'"))?
-            .is_dir()
-        {
-            let (l, u, t) = directory_size(&format!("{dir}/{name}"))?;
+        if entry.file_type()?.is_dir() {
+            let path = entry.file_name();
+            let path = path.to_str().expect("UTF-8 path");
+            let (l, u, t) = directory_size(&format!("{dir}/{path}"))?;
 
             len += l;
             unique += u;

@@ -210,9 +210,9 @@ pub fn global() -> Result<&'static Global> {
         Some(f) => f,
         None => {
             let cfg = match load_config() {
-                Ok(config) => Ok(config),
-                Err(error) => error.fatal(),
-            }?;
+                Ok(cfg) => cfg,
+                Err(err) => err.fatal(),
+            };
 
             CONFIG.get_or_init(|| cfg)
         }

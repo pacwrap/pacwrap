@@ -19,6 +19,7 @@
 
 use std::{
     any::Any,
+    error::Error as StdError,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
     process::exit,
     result::Result as StdResult,
@@ -62,12 +63,14 @@ pub trait Downcast {
 }
 
 pub trait ErrorGeneric<R, E> {
-    fn prepend<F>(self, f: F) -> Result<R>
+    fn prepend<Y, Z>(self, f: Y) -> Result<R>
     where
-        F: FnOnce() -> String;
-    fn prepend_io<F>(self, f: F) -> Result<R>
+        Z: AsRef<str>,
+        Y: FnOnce() -> Z;
+    fn prepend_io<Y, Z>(self, f: Y) -> Result<R>
     where
-        F: FnOnce() -> String;
+        Z: AsRef<str>,
+        Y: FnOnce() -> Z;
     fn generic(self) -> Result<R>;
 }
 
@@ -80,7 +83,7 @@ pub enum ErrorType<'a> {
 
 #[derive(Debug)]
 struct GenericError {
-    prepend: String,
+    prepend: Option<String>,
     error: String,
 }
 
@@ -141,44 +144,49 @@ impl<R, E> ErrorGeneric<R, E> for StdResult<R, E>
 where
     E: Display,
 {
-    fn prepend<F>(self, f: F) -> Result<R>
+    fn prepend<Y, Z>(self, f: Y) -> Result<R>
     where
-        F: FnOnce() -> String, {
+        Z: AsRef<str>,
+        Y: FnOnce() -> Z, {
         match self {
             Ok(f) => Ok(f),
             Err(err) => err!(GenericError {
-                prepend: f(),
+                prepend: Some(f().as_ref().into()),
                 error: err.to_string(),
             }),
         }
     }
 
-    fn prepend_io<F>(self, f: F) -> Result<R>
+    fn prepend_io<Y, Z>(self, f: Y) -> Result<R>
     where
-        F: FnOnce() -> String, {
-        match self {
-            Ok(f) => Ok(f),
-            Err(err) => err!(GenericError {
-                prepend: format!("'{}'", f()),
-                error: err.to_string(),
-            }),
-        }
+        Z: AsRef<str>,
+        Y: FnOnce() -> Z, {
+        self.prepend(|| format!("'{}'", f().as_ref()))
     }
 
     fn generic(self) -> Result<R> {
-        match self {
-            Ok(f) => Ok(f),
-            Err(err) => err!(GenericError {
-                prepend: "An error has occurred".into(),
-                error: err.to_string(),
-            }),
-        }
+        self.prepend(|| "An error has occurred")
+    }
+}
+
+impl<T> From<T> for Error
+where
+    T: StdError + ToString,
+{
+    fn from(err: T) -> Self {
+        error!(GenericError {
+            prepend: None,
+            error: err.to_string(),
+        })
     }
 }
 
 impl Display for GenericError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}: {}", self.prepend, self.error)
+        match &self.prepend {
+            None => write!(f, "{}", self.error),
+            Some(prepend) => write!(f, "{}: {}", prepend, self.error),
+        }
     }
 }
 

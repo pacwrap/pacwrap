@@ -80,7 +80,7 @@ fn initialize_file(location: &str, contents: &str) -> Result<()> {
         return Ok(());
     }
 
-    write!(File::create(location).prepend_io(|| location.into())?, "{contents}").prepend_io(|| location.into())?;
+    write!(File::create(location).prepend_io(|| location)?, "{contents}").prepend_io(|| location)?;
     Ok(())
 }
 

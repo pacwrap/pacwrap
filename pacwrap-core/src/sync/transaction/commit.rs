@@ -47,7 +47,6 @@ use crate::{
     },
     utils::prompt::prompt,
     Error,
-    ErrorGeneric,
     Result,
 };
 
@@ -79,7 +78,7 @@ impl Transaction for Commit {
         let state = self.state.as_str();
 
         if let SyncState::NotRequired = handle.trans_ready(ag.action(), ag.flags())? {
-            handle.alpm_mut().trans_release().generic()?;
+            handle.alpm_mut().trans_release()?;
 
             return Ok(match ready_state(ag.action(), &self.state) {
                 Some(state) => state,
@@ -138,7 +137,7 @@ fn confirm(
         println!("{}", sum);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            handle.alpm_mut().trans_release().generic()?;
+            handle.alpm_mut().trans_release()?;
             return Ok(State::Next(next_state(ag.action(), state, false)));
         }
 
@@ -147,13 +146,13 @@ fn confirm(
             let query = format!("Proceed with {action}?");
 
             if !prompt("::", format!("{}{query}{}", *BOLD, *RESET), true)? {
-                handle.alpm_mut().trans_release().generic()?;
+                handle.alpm_mut().trans_release()?;
                 return Ok(State::Next(next_state(ag.action(), state, false)));
             }
         }
     }
 
-    handle.alpm_mut().trans_release().generic()?;
+    handle.alpm_mut().trans_release()?;
     Ok(State::Commit(sum.download()))
 }
 

@@ -33,7 +33,6 @@ use crate::{
     err,
     impl_error,
     Error,
-    ErrorGeneric,
     ErrorTrait,
     Result,
 };
@@ -55,34 +54,35 @@ impl Display for PromptError {
 
 impl_error!(PromptError);
 
-pub fn prompt(prefix: &str, prompt: impl Into<String>, yn_prompt: bool) -> Result<bool> {
-    let value = create_prompt(prompt.into(), prefix, yn_prompt)?;
+pub fn prompt(prefix: impl AsRef<str>, prompt: impl AsRef<str>, yn_prompt: bool) -> Result<bool> {
+    let value = create_prompt(prompt.as_ref(), prefix.as_ref(), yn_prompt)?;
 
     Ok(value.to_lowercase() == "y" || (yn_prompt && value.is_empty()))
 }
 
-fn create_prompt(message: String, prefix: &str, yn_prompt: bool) -> Result<String> {
+fn create_prompt<T: AsRef<str>>(message: T, prefix: T, yn_prompt: bool) -> Result<String> {
+    let prefix = prefix.as_ref();
     let prompt = match yn_prompt {
         true => ("[Y/n]", style(prefix.into()).blue().bold()),
         false => ("[y/N]", style(prefix.into()).red().bold()),
     };
 
     let theme = ColorfulTheme {
-        success_prefix: style(prefix.into()).green().bold(),
         prompt_prefix: prompt.1,
+        success_prefix: style(prefix.into()).green().bold(),
         error_prefix: style(prefix.into()).red().bold(),
-        prompt_suffix: style(prompt.0.to_string()).bold(),
-        success_suffix: style(prompt.0.to_string()).bold(),
+        prompt_suffix: style(prompt.0.into()).bold(),
+        success_suffix: style(prompt.0.into()).bold(),
         prompt_style: Style::new(),
         values_style: Style::new(),
         ..ColorfulTheme::default()
     };
-    let input: String = match Input::with_theme(&theme).with_prompt(message).allow_empty(true).interact_text() {
+    let input: String = match Input::with_theme(&theme).with_prompt(message.as_ref()).allow_empty(true).interact_text() {
         Ok(prompt) => prompt,
         Err(error) => match error.kind() {
             Interrupted => err!(PromptError::PromptInterrupted)?,
             NotConnected => err!(PromptError::PromptNotTerminal)?,
-            _ => Err(error).generic()?,
+            _ => Err(error)?,
         },
     };
 
