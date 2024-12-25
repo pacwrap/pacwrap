@@ -46,11 +46,23 @@ pub struct XdgHome {
 #[typetag::serde(name = "xdg_home")]
 impl Filesystem for XdgHome {
     fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
+        let xdg_mounts = xdg_default();
+
         if self.mounts.is_empty() {
             err!(BindError::Warn("Mount volumes undeclared.".into()))?
         }
 
-        for m in self.mounts.iter() {
+        for m in xdg_mounts.iter() {
+            if m.path.is_empty() {
+                err!(BindError::Warn("Mount volumes undeclared.".into()))?
+            }
+
+            if let Err(err) = check_mount(&m.path) {
+                err.warn();
+            }
+        }
+
+        for m in self.mounts.iter().filter(|a| !xdg_mounts.contains(a)) {
             if m.path.is_empty() {
                 err!(BindError::Warn("Mount volumes undeclared.".into()))?
             }
@@ -63,11 +75,9 @@ impl Filesystem for XdgHome {
 
     fn register(&self, args: &mut ExecutionArgs, _: &ContainerVariables) {
         let mounts = xdg_default();
-        let mut mounts = mounts.iter().filter(|m| check_mount(&m.path).is_ok()).collect::<Vec<&Mount>>();
+        let mounts = mounts.iter().filter(|m| check_mount(&m.path).is_ok()).collect::<Vec<&Mount>>();
 
-        mounts.extend(self.mounts.iter().filter(|a| !mounts.contains(a)).collect::<Vec<&Mount>>());
-
-        for m in mounts {
+        for m in self.mounts.iter().filter(|a| !mounts.contains(a) && check_mount(&a.path).is_ok()) {
             bind_filesystem(args, &m.permission, &m.path);
         }
     }

@@ -41,6 +41,7 @@ impl Filesystem for Home {
         if !Path::new(vars.home()).exists() {
             err!(BindError::Fail("Specified home directory not found.".into()))?
         }
+
         Ok(())
     }
 
