@@ -27,12 +27,16 @@ use pacwrap_core::{
     config::provide_handle,
     constants::{ARROW_GREEN, HOME},
     err,
+    exec::path::resolve_path,
     utils::{arguments::Operand, table::Table, Arguments},
     Error,
     ErrorGeneric,
     ErrorKind,
     Result,
 };
+
+const GLOBAL_APP_DIR: &str = "/usr/share/applications";
+const LOCAL_APP_DIR: &str = "/.local/share/applications";
 
 pub fn file(args: &mut Arguments) -> Result<()> {
     match args.next().unwrap_or_default() {
@@ -47,8 +51,8 @@ fn list_desktop_entries(args: &mut Arguments) -> Result<()> {
     let table_header = vec!["Desktop Entries:"];
     let mut table = Table::new().header(&table_header);
     let (local, app_dir) = &match args.target() {
-        Ok(instance) => (false, format!("{}/usr/share/applications", provide_handle(instance)?.vars().root())),
-        Err(_) => (true, format!("{}/.local/share/applications", *HOME)),
+        Ok(instance) => (false, format!("{}{GLOBAL_APP_DIR}", provide_handle(instance)?.vars().root())),
+        Err(_) => (true, format!("{}{LOCAL_APP_DIR}", *HOME)),
     };
     let dir = read_dir(app_dir).prepend_io(|| app_dir)?;
 
@@ -68,7 +72,8 @@ fn list_desktop_entries(args: &mut Arguments) -> Result<()> {
 
 fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
     let target = args.target()?;
-    let app_dir = &format!("{}/usr/share/applications", provide_handle(target)?.vars().root());
+    let handle = provide_handle(target)?;
+    let app_dir = &format!("{}{GLOBAL_APP_DIR}", handle.vars().root());
     let dir = read_dir(app_dir).prepend_io(|| app_dir)?;
     let name = &match args.next().unwrap_or_default() {
         Operand::Value(val) | Operand::ShortPos(_, val) | Operand::LongPos(_, val) => val,
@@ -89,23 +94,23 @@ fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
         }
     }
 
+    let mut contents = String::new();
     let file_name = &match file_name {
         Some(file) => file,
         None => return err!(ErrorKind::Message("Desktop file not found."))?,
     };
-    let desktop_file = &format!("{}/{}", app_dir, file_name);
-    let mut contents = String::new();
+    let desktop_file = &resolve_path(handle.vars().root(), GLOBAL_APP_DIR, "file_name")?;
 
     File::open(desktop_file)
-        .prepend_io(|| desktop_file)?
+        .prepend_io(|| desktop_file.to_string_lossy())?
         .read_to_string(&mut contents)
-        .prepend_io(|| desktop_file)?;
-    contents = Regex::new("Exec=*")
-        .unwrap()
+        .prepend_io(|| desktop_file.to_string_lossy())?;
+    contents = Regex::new("Exec=*")?
         .replace_all(&contents, format!("Exec=pacwrap run {} ", target))
         .to_string();
+    contents = Regex::new("TryExec=(.*)")?.replace_all(&contents, "TryExec=pacwrap").to_string();
 
-    let desktop_file = &format!("{}/.local/share/applications/pacwrap.{}", *HOME, file_name);
+    let desktop_file = &format!("{}{LOCAL_APP_DIR}/pacwrap.{}", *HOME, file_name);
     let mut output = File::create(desktop_file).prepend_io(|| desktop_file)?;
 
     write!(output, "{}", contents).prepend_io(|| desktop_file)?;
@@ -114,7 +119,7 @@ fn create_desktop_entry(args: &mut Arguments) -> Result<()> {
 }
 
 fn remove_desktop_entry(args: &mut Arguments) -> Result<()> {
-    let app_dir = &format!("{}/.local/share/applications", *HOME);
+    let app_dir = &format!("{}{LOCAL_APP_DIR}", *HOME);
     let dir = read_dir(app_dir).prepend_io(|| app_dir)?;
     let name = &match args.next().unwrap_or_default() {
         Operand::Value(val) | Operand::ShortPos(_, val) | Operand::LongPos(_, val) => val,
@@ -139,7 +144,7 @@ fn remove_desktop_entry(args: &mut Arguments) -> Result<()> {
         Some(file) => file,
         None => return err!(ErrorKind::Message("Desktop file not found."))?,
     };
-    let desktop_file = &format!("{}/.local/share/applications/{}", *HOME, file_name);
+    let desktop_file = &format!("{}{LOCAL_APP_DIR}/{}", *HOME, file_name);
 
     remove_file(desktop_file).prepend_io(|| desktop_file)?;
     eprintln!("{} Removed '{file_name}'.", *ARROW_GREEN);
