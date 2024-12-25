@@ -159,3 +159,121 @@ impl Debug for ExecutionArgs {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::ExecutionArgs;
+    use crate::config::filesystem::Permission::*;
+
+    #[test]
+    fn bind() {
+        let mut args = ExecutionArgs::default();
+
+        args.bind(&ReadOnly, "/test", "/");
+        args.bind(&ReadWrite, "/test/dir", "/test");
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--ro-bind",
+                "/test",
+                "/",
+                "--bind",
+                "/test/dir",
+                "/test",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--unshare-all"
+            ]
+        );
+    }
+
+    #[test]
+    fn env() {
+        let mut args = ExecutionArgs::default();
+
+        args.env("KEY", "VALUE");
+
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--unshare-all",
+                "--setenv",
+                "KEY",
+                "VALUE"
+            ]
+        );
+    }
+
+    #[test]
+    fn dev() {
+        let mut args = ExecutionArgs::default();
+
+        args.dev("/dev/nvidiactl");
+
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--dev-bind-try",
+                "/dev/nvidiactl",
+                "/dev/nvidiactl",
+                "--unshare-all"
+            ]
+        );
+    }
+
+    #[test]
+    fn dbus() {
+        let mut args = ExecutionArgs::default();
+
+        args.dbus("TALK", "org.test.socket");
+
+        assert_eq!(args.get_dbus(), ["--TALK=org.test.socket"]);
+    }
+
+    #[test]
+    fn symlink() {
+        let mut args = ExecutionArgs::default();
+
+        args.symlink("/test-src", "/test-dest");
+
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--symlink",
+                "/test-src",
+                "/test-dest",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--unshare-all"
+            ]
+        );
+    }
+
+    #[test]
+    fn default() {
+        assert_eq!(
+            ExecutionArgs::default().arguments(),
+            ["--tmpfs", "/tmp", "--dev", "/dev", "--proc", "/proc", "--unshare-all"]
+        );
+    }
+}
