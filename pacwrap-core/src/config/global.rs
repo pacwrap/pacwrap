@@ -150,7 +150,7 @@ impl AlpmConfiguration {
     }
 
     pub fn sig_level(&self) -> Vec<String> {
-        self.sig_level.split(" ").map(|a| a.into()).collect()
+        self.sig_level.split_whitespace().map(|a| a.into()).collect()
     }
 
     pub fn download_timeout(&self) -> bool {

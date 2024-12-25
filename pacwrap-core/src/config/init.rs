@@ -23,6 +23,7 @@ use crate::{
     constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
     err,
     Error,
+    ErrorGeneric,
     ErrorKind,
     Result,
 };
@@ -79,15 +80,7 @@ fn initialize_file(location: &str, contents: &str) -> Result<()> {
         return Ok(());
     }
 
-    let mut f = match File::create(location) {
-        Ok(f) => f,
-        Err(error) => err!(ErrorKind::IOError(location.into(), error.kind()))?,
-    };
-
-    if let Err(error) = write!(f, "{contents}") {
-        err!(ErrorKind::IOError(location.into(), error.kind()))?
-    }
-
+    write!(File::create(location).prepend_io(|| location.into())?, "{contents}").prepend_io(|| location.into())?;
     Ok(())
 }
 

@@ -20,6 +20,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 use crate::{
     config::{
@@ -32,38 +33,39 @@ use crate::{
     utils::check_socket,
 };
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Pipewire {
-    #[serde(skip_serializing_if = "is_default_socket", default = "default_socket")]
-    socket: String,
+    socket: Option<String>,
 }
 
 #[typetag::serde(name = "pipewire")]
 impl Permission for Pipewire {
     fn qualify(&self) -> Result<Option<Condition>, PermError> {
-        if !Path::new(&self.socket).exists() {
+        let default = &default_socket();
+        let socket = self.socket.as_ref().unwrap_or(default);
+
+        if !Path::new(socket).exists() {
             Err(Warn("Pipewire socket not found.".to_string()))?
         }
 
-        if !check_socket(&self.socket) {
-            Err(Warn(format!("'{}' is not a valid UNIX socket.", &self.socket)))?
+        if !check_socket(socket) {
+            Err(Warn(format!("'{}' is not a valid UNIX socket.", &socket)))?
         }
 
         Ok(Some(Success))
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
-        args.bind(&ReadOnly, &self.socket, &default_socket());
+        let default = &default_socket();
+        let socket = self.socket.as_ref().unwrap_or(default);
+
+        args.bind(&ReadOnly, socket, default);
     }
 
     fn module(&self) -> &'static str {
         "pipewire"
     }
-}
-
-fn is_default_socket(var: &String) -> bool {
-    let default: &String = &default_socket();
-    default == var
 }
 
 fn default_socket() -> String {

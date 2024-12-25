@@ -48,7 +48,7 @@ impl Permission for Graphics {
             eprintln!("{}", ErrorType::Error(&error));
             Fail("No graphics devices are available.".into())
         })?;
-        let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
+        let nvidia = gpu_dev.iter().any(|a| a.contains("nvidia"));
 
         if GPU_DEV.get_or_init(|| gpu_dev).is_empty() {
             Err(Fail("No graphics devices are available.".into()))?
@@ -63,7 +63,7 @@ impl Permission for Graphics {
 
     fn register(&self, args: &mut ExecutionArgs) {
         let gpu_dev = GPU_DEV.get().expect("Uninitialized device array");
-        let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
+        let nvidia = gpu_dev.iter().any(|a| a.contains("nvidia"));
 
         if nvidia && Path::new("/sys/module/nvidia").exists() {
             args.bind(&ReadOnly, "/sys/module/nvidia", "/sys/module/nvidia")
