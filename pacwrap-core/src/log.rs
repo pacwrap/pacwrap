@@ -24,7 +24,7 @@ use std::{
     path::Path,
 };
 
-use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
+use time::{format_description::FormatItem, macros::format_description as fdesc, OffsetDateTime, UtcOffset};
 
 use crate::{
     constants::{LOG_LOCATION, UNIX_TIMESTAMP},
@@ -37,9 +37,9 @@ use crate::{
     Result,
 };
 
-const DATE_FORMAT: &[FormatItem<'static>] =
-    format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
-const UTC_OFFSET: &[FormatItem<'static>] = format_description!("[offset_hour]");
+const DATE_FORMAT_UTC: &[FormatItem<'static>] = fdesc!("[year]-[month]-[day]T[hour]:[minute]:[second]");
+const DATE_FORMAT: &[FormatItem<'static>] = fdesc!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
+const UTC_OFFSET: &[FormatItem<'static>] = fdesc!("[offset_hour]");
 
 impl_error!(LoggerError);
 
@@ -188,10 +188,14 @@ impl Logger {
 
         match self.file.as_mut() {
             Some(file) => {
-                let time = OffsetDateTime::now_utc().to_offset(self.offset).format(DATE_FORMAT)?;
-                let log = format!("[{}] [{}] [{}] {}\n", time, self.module, level, msg);
+                let offset = OffsetDateTime::now_utc();
+                let time = if self.offset.is_utc() {
+                    offset.format(DATE_FORMAT_UTC)
+                } else {
+                    offset.to_offset(self.offset).format(DATE_FORMAT)
+                }?;
 
-                Ok(file.write(log.as_bytes())?)
+                Ok(file.write(format!("[{}] [{}] [{}] {}\n", time, self.module, level, msg).as_bytes())?)
             }
             None => err!(LoggerError::Uninitialized)?,
         }
