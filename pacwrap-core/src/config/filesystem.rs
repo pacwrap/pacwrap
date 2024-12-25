@@ -86,7 +86,7 @@ impl<'de> Deserialize<'de> for Permission {
     }
 }
 
-impl<'de> Visitor<'de> for PermissionVisitor {
+impl Visitor<'_> for PermissionVisitor {
     type Value = Permission;
 
     fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
