@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -176,17 +176,17 @@ impl Default for ContainerRuntime {
 
 impl ContainerRuntime {
     pub fn new() -> Self {
-        let default_fs: [Box<dyn Filesystem>; 2] = [Box::new(Root {}), Box::new(Home {})];
-        let default_per: [Box<dyn Permission>; 1] = [Box::new(None {})];
+        let default_fs: [Box<dyn Filesystem>; 2] = [Box::new(Root::default()), Box::new(Home)];
+        let default_per: [Box<dyn Permission>; 1] = [Box::new(None)];
 
         Self {
             seccomp: true,
             allow_forking: false,
             retain_session: false,
             enable_userns: false,
+            filesystems: Vec::from(default_fs),
             permissions: Vec::from(default_per),
             dbus: Vec::new(),
-            filesystems: Vec::from(default_fs),
         }
     }
 

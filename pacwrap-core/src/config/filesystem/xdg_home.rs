@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -37,6 +37,8 @@ use crate::{
     Result,
 };
 
+const XDG_HOME_DIRS: [&str; 5] = ["Downloads", "Documents", "Pictures", "Videos", "Music"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct XdgHome {
     #[serde(skip_serializing_if = "Vec::is_empty", default = "xdg_default", rename = "volumes")]
@@ -49,12 +51,12 @@ impl Filesystem for XdgHome {
         let xdg_mounts = xdg_default();
 
         if self.mounts.is_empty() {
-            err!(BindError::Warn("Mount volumes undeclared.".into()))?
+            err!(BindError::Warn("Mount volumes are undeclared.".into()))?
         }
 
         for m in xdg_mounts.iter() {
             if m.path.is_empty() {
-                err!(BindError::Warn("Mount volumes undeclared.".into()))?
+                err!(BindError::Warn("Mount path is undeclared.".into()))?
             }
 
             if let Err(err) = check_mount(&m.path) {
@@ -64,7 +66,7 @@ impl Filesystem for XdgHome {
 
         for m in self.mounts.iter().filter(|a| !xdg_mounts.contains(a)) {
             if m.path.is_empty() {
-                err!(BindError::Warn("Mount volumes undeclared.".into()))?
+                err!(BindError::Warn("Mount path is undeclared.".into()))?
             }
 
             check_mount(&m.path)?;
@@ -102,8 +104,5 @@ fn check_mount(path: &str) -> Result<()> {
 }
 
 fn xdg_default() -> Vec<Mount> {
-    ["Downloads", "Documents", "Pictures", "Videos", "Music"]
-        .iter()
-        .map(|d| Mount::dest(ReadOnly, d))
-        .collect()
+    XDG_HOME_DIRS.iter().map(|d| Mount::dest(ReadOnly, d)).collect()
 }
