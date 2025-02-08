@@ -73,7 +73,7 @@ impl Display for FileType<'_> {
         match self {
             FileType::LogFile => write!(fmt, "{}/pacwrap.log", *DATA_DIR),
             FileType::ContainerConfig(file) => write!(fmt, "{}/container/{}.yml", *CONFIG_DIR, file),
-            FileType::DesktopFile(file) => write!(fmt, "{}/.local/share/applications/pacwrap.{}.desktop", *HOME, file),
+            FileType::DesktopFile(file) => write!(fmt, "{}/.local/share/applications/{}.pacwrap.desktop", *HOME, file),
             FileType::Config => write!(fmt, "{}/pacwrap.yml", *CONFIG_DIR),
             FileType::Repo => write!(fmt, "{}/repositories.conf", *CONFIG_DIR),
         }
@@ -85,12 +85,12 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
 
     while let Some(arg) = args.next() {
         file = Some(match arg {
-            Operand::Short('d') | Operand::Long("desktop") => continue,
+            Operand::Short('d') | Operand::Long("desktop") | Operand::Long("desktop-any") => continue,
             Operand::Short('l') | Operand::Long("log") | Operand::Value("log") => FileType::LogFile,
             Operand::Short('r') | Operand::Long("repo") | Operand::Value("repo") => FileType::Repo,
             Operand::Short('c') | Operand::Long("config") | Operand::Value("config") => FileType::Config,
-            Operand::ShortPos('d', val) | Operand::LongPos("desktop", val) => FileType::DesktopFile(val),
             Operand::ShortPos('c', val) | Operand::LongPos("config", val) => FileType::ContainerConfig(val),
+            Operand::ShortPos('d', val) | Operand::LongPos("desktop", val) => FileType::DesktopFile(val),
             Operand::LongPos("view", arg)
             | Operand::LongPos("edit", arg)
             | Operand::ShortPos('e', arg)
@@ -102,11 +102,9 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
         });
     }
 
-    let (file, temp, lock, edit) = &match file {
+    let (file, ext, lock, edit) = &match file {
         Some(file) => {
             let (edit, ext) = (file.can_edit(edit), file.ext());
-            let prs = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
-            let temp = format!("/tmp/tmp.{}{}", prs, ext);
             let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
                 Some(Lock::new().lock()?)
             } else {
@@ -114,11 +112,11 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
             };
             let file = file.to_string();
 
-            (file, temp, lock, edit)
+            (file, ext, lock, edit)
         }
         None => return args.invalid_operand(),
     };
-    let result = edit_file(file, temp, lock.as_ref(), *edit);
+    let result = edit_file(file, ext, lock.as_ref(), *edit);
 
     if let Some(lock) = lock {
         lock.unlock()?;
@@ -127,7 +125,10 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
     result
 }
 
-fn edit_file(file: &str, temporary_file: &str, lock: Option<&Lock>, edit: bool) -> Result<()> {
+pub fn edit_file(file: &str, ext: &str, lock: Option<&Lock>, edit: bool) -> Result<()> {
+    let prs = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+    let temporary_file = &format!("/tmp/tmp.{}{}", prs, ext);
+
     copy(file, temporary_file).prepend_io(|| file)?;
     handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
 

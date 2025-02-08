@@ -18,6 +18,7 @@
  */
 
 use pacwrap_core::utils::arguments::{Arguments, Operand as Op};
+use utils::desktop;
 
 use crate::{help::HelpTopic, utils::list};
 
@@ -42,6 +43,7 @@ fn main() {
         Op::Short('C') | Op::Long("compose") | Op::Value("compose") => compose::compose(arguments),
         Op::Short('U') | Op::Long("utils") | Op::Value("utils") => utils::engage_utility(arguments),
         Op::Short('V') | Op::Long("version") | Op::Value("version") => help::print_version(arguments),
+        Op::Short('d') | Op::Long("desktop") | Op::Value("desktop") => desktop::file(arguments),
         Op::Short('h') | Op::Long("help") | Op::Value("help") => help::help(arguments, &HelpTopic::Default),
         _ => arguments.invalid_operand(),
     };
