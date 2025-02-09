@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,18 +22,18 @@ use std::collections::HashMap;
 use alpm::{AnyDownloadEvent, DownloadEvent as Event, DownloadResult};
 use dialoguer::console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
-use lazy_static::lazy_static;
 use simplebyteunit::simplebyteunit::*;
 
 use crate::{
     config::global::ProgressKind,
     constants::{ARROW_CYAN, BOLD, RESET},
+    lazy_lock,
     sync::transaction::TransactionMode,
 };
 
 use super::whitespace;
 
-lazy_static! {
+lazy_lock! {
     static ref INIT: ProgressStyle = ProgressStyle::with_template(" {spinner:.green} {msg}").unwrap();
     static ref FAILED: ProgressStyle = ProgressStyle::with_template(" {spinner:.red.bold} {msg} failed to download.")
         .unwrap()

@@ -83,7 +83,7 @@ An online version of the user manual is viewable **[here](https://github.com/pac
 
 ## Build requirements
 
-A minimum version of Rust 1.72 is required to build with the following libraries fulfilled by your distribution:
+A minimum version of Rust 1.80 is required to build with the following libraries fulfilled by your distribution:
 ```
 libalpm=15, libseccomp, libzstd
 ```

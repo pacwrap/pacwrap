@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -21,7 +21,6 @@ use std::collections::{HashMap, HashSet};
 
 use alpm::Alpm;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use lazy_static::lazy_static;
 use signal_hook::iterator::Signals;
 
 use crate::{
@@ -30,6 +29,7 @@ use crate::{
     err,
     error,
     exec::{fakeroot_container, ExecutionType::NonInteractive},
+    lazy_lock,
     lock::{Lock, LockError},
     log::{Level, Logger},
     sync::{
@@ -51,7 +51,7 @@ use crate::{
     Result,
 };
 
-lazy_static! {
+lazy_lock! {
     pub static ref BAR_CYAN_STYLE: ProgressStyle = ProgressStyle::with_template("{spinner:.bold.cyan} {msg}")
         .unwrap()
         .tick_strings(&["::", ":.", ".:", "::"]);

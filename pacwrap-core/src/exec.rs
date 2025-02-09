@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -25,7 +25,6 @@ use std::{
 };
 
 use command_fds::{CommandFdExt, FdMapping};
-use lazy_static::lazy_static;
 
 use crate::{
     config::{ContainerHandle, ContainerType},
@@ -49,6 +48,7 @@ use crate::{
         seccomp::{provide_bpf_program, FilterType::*},
         utils::{agent_params, decode_info_json, wait_on_fakeroot, wait_on_process},
     },
+    lazy_lock,
     sync::transaction::{TransactionFlags, TransactionMetadata, TransactionParameters},
     to_static_str,
     utils::TermControl,
@@ -63,7 +63,7 @@ pub mod path;
 pub mod seccomp;
 pub mod utils;
 
-lazy_static! {
+lazy_lock! {
     static ref ID: (&'static str, &'static str) = (to_static_str!(UID), to_static_str!(GID));
     static ref DIST_IMG: &'static str = option_env!("PACWRAP_DIST_IMG").unwrap_or(RUNTIME_DIRECTORY);
     static ref DIST_TLS: &'static str = option_env!("PACWRAP_DIST_TLS").unwrap_or(RUNTIME_TLS_STORE);
