@@ -23,7 +23,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use pacwrap_core::{
     err,
     impl_error,
-    utils::{arguments::Operand, is_color_terminal, Arguments},
+    utils::{ansi::is_color_terminal, arguments::Operand, Arguments},
     Error,
     ErrorTrait,
     Result,

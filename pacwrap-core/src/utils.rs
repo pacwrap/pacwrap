@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -25,14 +25,13 @@ use std::{
 };
 
 use crate::{
-    constants::{BOLD_RED, BOLD_YELLOW, GID, RESET, UID},
+    constants::{GID, UID},
     err,
     Error,
     ErrorKind,
     Result,
 };
 
-pub use ansi::{is_color_terminal, is_truecolor_terminal};
 pub use arguments::Arguments;
 pub use termcontrol::TermControl;
 
@@ -43,24 +42,43 @@ pub mod prompt;
 pub mod table;
 pub mod termcontrol;
 
-pub fn print_warning(message: &str) {
-    eprintln!("{}warning:{} {}", *BOLD_YELLOW, *RESET, message);
+#[macro_export]
+macro_rules! lazy_lock {
+    ( $v:vis static ref $x:ident: $y:ty = $z: expr; $($t:tt)* ) => {
+        $v static $x: std::sync::LazyLock<$y> = std::sync::LazyLock::new(|| $z);
+        lazy_lock!($($t)*);
+    };
+    () => ()
 }
 
-pub fn print_error(message: &str) {
-    eprintln!("{}error:{} {}", *BOLD_RED, *RESET, message);
+#[macro_export]
+macro_rules! eprintln_warn {
+    ( $( $x:expr ),+ ) => {
+        eprint!("{}warning:{} ", *BOLD_YELLOW, *RESET);
+        eprintln!($( $x, )+);
+    };
 }
 
-pub fn check_socket(socket: &String) -> bool {
-    UnixStream::connect(Path::new(socket)).is_ok()
+#[macro_export]
+macro_rules! eprintln_error {
+    ( $( $x:expr ),+ ) => {
+        eprint!("{}error:{} ", *BOLD_RED, *RESET);
+        eprintln!($( $x, )+);
+    };
 }
 
-pub fn unix_epoch_time() -> Duration {
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime")
+#[macro_export]
+macro_rules! format_static {
+    ( $( $x:expr ),+ ) => {
+        format!($( $x, )+).leak()
+    };
 }
 
-pub fn whitespace(amt: usize) -> String {
-    " ".repeat(amt)
+#[macro_export]
+macro_rules! to_static_str {
+    ( $x:expr ) => {
+        $x.to_string().leak()
+    };
 }
 
 pub fn env_var(env: &'static str) -> Result<String> {
@@ -76,4 +94,12 @@ pub fn check_root() -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn check_socket(socket: &String) -> bool {
+    UnixStream::connect(Path::new(socket)).is_ok()
+}
+
+pub fn unix_epoch_time() -> Duration {
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime")
 }

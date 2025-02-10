@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use pacwrap_core::{
     config::{cache, init::init, ConfigError::AlreadyExists, ContainerCache, ContainerType},
-    constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
+    eprintln_warn,
     err,
     error::*,
     lock::Lock,
@@ -33,9 +33,9 @@ use pacwrap_core::{
         transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
+        ansi::*,
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
-        print_warning,
     },
     ErrorKind,
 };
@@ -246,9 +246,9 @@ fn engage_aggregator<'a>(
     }
 
     if flags.contains(TransactionFlags::LAZY_LOAD_DB) {
-        print_warning("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
-        print_warning("In future, manual intervention may be required for missing dependencies.");
-        print_warning("See `--help sync` or the pacwrap(1) man page for further information.");
+        eprintln_warn!("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
+        eprintln_warn!("In future, manual intervention may be required for missing dependencies.");
+        eprintln_warn!("See `--help sync` or the pacwrap(1) man page for further information.");
     }
 
     if !create_targets.is_empty() || init {

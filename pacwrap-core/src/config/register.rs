@@ -26,11 +26,12 @@ use crate::{
         Dbus,
         Permission,
     },
+    eprintln_warn,
     err,
     error,
     error::*,
     exec::args::ExecutionArgs,
-    utils::print_warning,
+    utils::ansi::*,
 };
 
 pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
@@ -55,7 +56,7 @@ pub fn register_permissions(per: &[Box<dyn Permission>], args: &mut ExecutionArg
                     p.register(args);
 
                     if let Condition::SuccessWarn(warning) = b {
-                        print_warning(&format!("{}: {} ", p.module(), warning));
+                        eprintln_warn!("{}: {} ", p.module(), warning);
                     }
                 }
                 None => continue,

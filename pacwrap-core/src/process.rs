@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -27,7 +27,7 @@ use std::{
     result::Result as StdResult,
 };
 
-use crate::{config::ContainerCache, constants::CONTAINER_DIR, utils::print_warning, ErrorGeneric, Result};
+use crate::{config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn, utils::ansi::*, ErrorGeneric, Result};
 use indexmap::IndexMap;
 
 pub struct ProcessList {
@@ -197,7 +197,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList> {
             Some(vec) => vec.push(pid),
             None => {
                 if cache.get_instance_option(&ins).is_none() {
-                    print_warning(&format!("Container {ins} doesn't exist."));
+                    eprintln_warn!("Container {ins} doesn't exist.");
                 }
 
                 groups.insert(ins.clone(), vec![pid]);

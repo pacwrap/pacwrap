@@ -21,10 +21,11 @@ use std::process::Command;
 
 use pacwrap_core::{
     config,
+    eprintln_warn,
     err,
     utils::{
+        ansi::*,
         arguments::{InvalidArgument, Operand},
-        print_warning,
         Arguments,
     },
     Error,
@@ -51,7 +52,7 @@ pub fn engage_utility(args: &mut Arguments) -> Result<()> {
         Operand::Short('l') | Operand::Long("list") | Operand::Value("list") => Some("list"),
         _ => None,
     } {
-        print_warning(&format!("Command flow is deprecated. See `$ pacwrap --help {}` for further information.", option));
+        eprintln_warn!("Command flow is deprecated. See `$ pacwrap --help {}` for further information.", option);
     }
 
     match arg {

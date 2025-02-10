@@ -21,7 +21,7 @@ use std::{collections::HashMap, path::Path};
 
 use pacwrap_core::{
     config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType::*},
-    constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
+    eprintln_warn,
     err,
     lock::Lock,
     log::{Level::Info, Logger},
@@ -31,9 +31,9 @@ use pacwrap_core::{
         transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
+        ansi::*,
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
-        print_warning,
         prompt::prompt_targets,
     },
     Error,
@@ -249,9 +249,9 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     }
 
     if flags.contains(TransactionFlags::LAZY_LOAD_DB) {
-        print_warning("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
-        print_warning("In future, manual intervention may be required for missing dependencies.");
-        print_warning("See `--help compose` or the pacwrap(1) man page for further information.");
+        eprintln_warn!("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
+        eprintln_warn!("In future, manual intervention may be required for missing dependencies.");
+        eprintln_warn!("See `--help compose` or the pacwrap(1) man page for further information.");
     }
 
     cache = instantiate(compose_handles(&cache, compose)?, cache, lock, &mut logger)?;

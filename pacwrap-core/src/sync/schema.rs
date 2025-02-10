@@ -33,8 +33,9 @@ use zstd::Decoder;
 use crate::{
     config::ContainerHandle,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
+    eprintln_warn,
     err,
-    utils::{bytebuffer::ByteBuffer, print_warning},
+    utils::{ansi::*, bytebuffer::ByteBuffer},
     Error,
     ErrorGeneric,
     ErrorKind,
@@ -181,7 +182,7 @@ pub fn version(inshandle: &ContainerHandle) -> Result<SchemaStatus> {
     file.rewind().prepend_io(|| schema)?;
 
     if magic != MAGIC_NUMBER {
-        print_warning(&format!("'{}': Magic number mismatch ({MAGIC_NUMBER} != {magic})", schema));
+        eprintln_warn!("'{}': Magic number mismatch ({MAGIC_NUMBER} != {magic})", schema);
         Ok(OutOfDate(None))
     } else if major.0 != major.1 || minor.0 != minor.1 || patch.0 != patch.1 {
         Ok(OutOfDate(Some(

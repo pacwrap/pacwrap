@@ -30,12 +30,13 @@ use nix::{
 use pacwrap_core::{
     config::cache,
     constants::{ARROW_GREEN, BOLD, DIM, RESET},
+    eprintln_warn,
     err,
     impl_error,
     process::{self, Process},
     utils::{
+        ansi::*,
         arguments::{InvalidArgument, Operand},
-        print_warning,
         prompt::prompt_targets,
         table::{ColumnAttribute, Table},
         Arguments,
@@ -288,7 +289,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
 }
 
 fn fork_warn(process: &Process) {
-    print_warning(&format!(
+    eprintln_warn!(
         "Process fork detected with PID {}{}{} from an instance of {}{}{}.",
         *BOLD,
         process.pid(),
@@ -296,7 +297,7 @@ fn fork_warn(process: &Process) {
         *BOLD,
         process.instance(),
         *RESET
-    ));
+    );
 }
 
 fn kill_processes(process_list: &Vec<&Process>, sigint: Signal) -> Result<()> {

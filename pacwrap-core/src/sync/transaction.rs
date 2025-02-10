@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use self::{SyncState::*, TransactionMode::*, TransactionType::*};
 use crate::{
     config::{global, ContainerHandle, Global},
-    constants::{ARROW_CYAN, BAR_CYAN, BOLD, BOLD_GREEN, BOLD_YELLOW, RESET},
+    eprintln_warn,
     err,
     log::{Level, Logger},
     sync::{
@@ -38,7 +38,7 @@ use crate::{
         utils::AlpmUtils,
         SyncError,
     },
-    utils::{print_warning, prompt::prompt},
+    utils::{ansi::*, prompt::prompt},
     Error,
 };
 
@@ -386,10 +386,15 @@ impl<'a> TransactionHandle<'a> {
             let ver = package.version();
             let ver_new = new.version();
 
-            print_warning(&format!(
+            eprintln_warn!(
                 "{}{name}{}: Ignoring package upgrade ({}{ver}{} => {}{ver_new}{})",
-                *BOLD, *RESET, *BOLD_YELLOW, *RESET, *BOLD_GREEN, *RESET
-            ));
+                *BOLD,
+                *RESET,
+                *BOLD_YELLOW,
+                *RESET,
+                *BOLD_GREEN,
+                *RESET
+            );
         }
 
         Ok(())

@@ -26,8 +26,9 @@ use crate::{
         permission::{Condition::Success, *},
         Permission,
     },
+    eprintln_warn,
     exec::args::ExecutionArgs,
-    utils::print_warning,
+    utils::ansi::*,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +79,7 @@ fn env_var(var: &String, set: &String) -> String {
     match env::var(var) {
         Ok(env) => env,
         Err(_) => {
-            print_warning(&format!("Environment variable {} is unset.", var));
+            eprintln_warn!("Environment variable {} is unset.", var);
             "".into()
         }
     }

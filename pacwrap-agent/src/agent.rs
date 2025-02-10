@@ -28,6 +28,7 @@ use serde::Deserialize;
 use pacwrap_core::{
     config::Global,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
+    eprintln_warn,
     err,
     log::{Level, Logger},
     sync::{
@@ -42,7 +43,7 @@ use pacwrap_core::{
         AlpmConfigData,
         SyncError,
     },
-    utils::{bytebuffer::ByteBuffer, print_warning},
+    utils::{ansi::*, bytebuffer::ByteBuffer},
     Error,
     ErrorGeneric,
     Result,
@@ -139,7 +140,7 @@ fn conduct_transaction(
         if error.kind() != NotFound {
             let message = &format!("Failed to propagate ld.so.cache: {}", error);
 
-            print_warning(message);
+            eprintln_warn!("{}", message);
             logger.log(Level::Warn, message)?;
         }
     }

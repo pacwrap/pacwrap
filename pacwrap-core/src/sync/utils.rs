@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -31,15 +31,7 @@ use alpm::{
 };
 use signal_hook::iterator::Signals;
 
-use crate::{
-    constants::{BOLD, BOLD_WHITE, RESET, SIGNAL_LIST},
-    err,
-    error,
-    sync::SyncError,
-    utils::{print_error, print_warning},
-    Error,
-    Result,
-};
+use crate::{constants::SIGNAL_LIST, eprintln_error, eprintln_warn, err, error, sync::SyncError, utils::ansi::*, Error, Result};
 
 pub trait AlpmUtils {
     fn get_local_package(&self, pkg: &str) -> Option<&Package>;
@@ -103,16 +95,16 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
                         FileConflictType::Filesystem => {
                             let file = conflict.file();
                             let target = conflict.target();
-                            print_warning(&format!("{}: '{}' already exists.", target, file));
+                            eprintln_warn!("{}: '{}' already exists.", target, file);
                         }
                         FileConflictType::Target => {
                             let file = conflict.file();
                             let target = format!("{}{}{}", *BOLD_WHITE, conflict.target(), *RESET);
                             if let Some(conflicting) = conflict.conflicting_target() {
                                 let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
-                                print_warning(&format!("{conflicting}: '{target}' is owned by {file}"));
+                                eprintln_warn!("{conflicting}: '{target}' is owned by {file}");
                             } else {
-                                print_warning(&format!("{target}: '{file}' is owned by foreign target"));
+                                eprintln_warn!("{target}: '{file}' is owned by foreign target");
                             }
                         }
                     }
@@ -122,7 +114,7 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
             }
             CommitData::PkgInvalid(p) =>
                 for pkg in p.iter() {
-                    print_error(&format!("Invalid package: {}{}{}", *BOLD_WHITE, pkg, *RESET));
+                    eprintln_error!("Invalid package: {}{}{}", *BOLD_WHITE, pkg, *RESET);
                 },
         }
     }
@@ -152,7 +144,7 @@ pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
         match error.data() {
             PrepareData::PkgInvalidArch(list) =>
                 for package in list.iter() {
-                    print_error(&format!(
+                    eprintln_error!(
                         "Invalid architecture {}{}{} for {}{}{}",
                         *BOLD,
                         package.arch().unwrap_or("UNKNOWN"),
@@ -160,11 +152,11 @@ pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
                         *BOLD,
                         package.name(),
                         *RESET
-                    ));
+                    );
                 },
             PrepareData::UnsatisfiedDeps(list) =>
                 for missing in list.iter() {
-                    print_error(&format!(
+                    eprintln_error!(
                         "Unsatisifed dependency {}{}{} for target {}{}{}",
                         *BOLD,
                         missing.depend(),
@@ -172,11 +164,11 @@ pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
                         *BOLD,
                         missing.target(),
                         *RESET
-                    ));
+                    );
                 },
             PrepareData::ConflictingDeps(list) =>
                 for conflict in list.iter() {
-                    print_error(&format!(
+                    eprintln_error!(
                         "Conflict between {}{}{} and {}{}{}: {}",
                         *BOLD,
                         conflict.package1().name(),
@@ -185,7 +177,7 @@ pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
                         conflict.package2().name(),
                         *RESET,
                         conflict.reason()
-                    ));
+                    );
                 },
         }
     }

@@ -18,7 +18,7 @@
  */
 
 use pacwrap_core::{
-    utils::{arguments::Operand, is_truecolor_terminal, Arguments},
+    utils::{ansi::is_truecolor_terminal, arguments::Operand, Arguments},
     Result,
 };
 
