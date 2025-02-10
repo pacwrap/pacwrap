@@ -33,7 +33,6 @@ use pacwrap_core::{
     utils::{
         arguments::Operand,
         table::{ColumnAttribute, Table},
-        whitespace,
         Arguments,
     },
     ErrorGeneric,
@@ -209,15 +208,15 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
         println!(
             "{}\nTotal Size:      {}{} \nDifference:   {}{} - {} {} \n{}Size on Disk{}:    {}{}\n",
             table.build()?,
-            whitespace(max_len - equation[0].len()),
+            " ".repeat(max_len - equation[0].len()),
             equation[0],
             *UNDERLINE,
-            whitespace(max_len - equation[1].len()),
+            " ".repeat(max_len - equation[1].len()),
             equation[1],
             *RESET,
             *BOLD,
             *RESET,
-            whitespace(max_len - equation[2].len()),
+            " ".repeat(max_len - equation[2].len()),
             equation[2]
         )
     } else {
