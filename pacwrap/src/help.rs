@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -35,7 +35,7 @@ mod version;
 
 pub use version::print_version;
 
-static HELP_ALL: [HelpTopic; 13] = [
+static HELP_ALL: [HelpTopic; 14] = [
     HelpTopic::Execute,
     HelpTopic::Sync,
     HelpTopic::Remove,
@@ -43,6 +43,7 @@ static HELP_ALL: [HelpTopic; 13] = [
     HelpTopic::Query,
     HelpTopic::Process,
     HelpTopic::List,
+    HelpTopic::Desktop,
     HelpTopic::Utils,
     HelpTopic::Version,
     HelpTopic::Help,
@@ -133,6 +134,7 @@ pub enum HelpTopic {
     Query,
     Utils,
     Process,
+    Desktop,
     List,
     Help,
     Version,
@@ -171,6 +173,7 @@ impl HelpTopic {
             Self::Remove => manual::remove(buf, layout),
             Self::Execute => manual::execute(buf, layout),
             Self::Process => manual::process(buf, layout),
+            Self::Desktop => manual::desktop(buf, layout),
             Self::Version => manual::version(buf, layout),
             Self::Env => manual::environment(buf, layout),
             Self::Compose => manual::compose(buf, layout),

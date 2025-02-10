@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -24,6 +24,7 @@ use pacwrap_core::{
     err,
     utils::{
         arguments::{InvalidArgument, Operand},
+        print_warning,
         Arguments,
     },
     Error,
@@ -43,7 +44,17 @@ mod symlink;
 const GIO: &str = "gio";
 
 pub fn engage_utility(args: &mut Arguments) -> Result<()> {
-    match args.next().unwrap_or_default() {
+    let arg = args.next().unwrap_or_default();
+
+    if let Some(option) = match arg {
+        Operand::Short('d') | Operand::Long("desktop") | Operand::Value("desktop") => Some("desktop"),
+        Operand::Short('l') | Operand::Long("list") | Operand::Value("list") => Some("list"),
+        _ => None,
+    } {
+        print_warning(&format!("Command flow is deprecated. See `$ pacwrap --help {}` for further information.", option));
+    }
+
+    match arg {
         Operand::Short('v') | Operand::Long("view") | Operand::Value("view") => edit::edit(args, false),
         Operand::Short('e') | Operand::Long("edit") | Operand::Value("edit") => edit::edit(args, true),
         Operand::Short('r') | Operand::Long("remove") | Operand::Value("remove") => delete::remove_containers(args),

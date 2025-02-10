@@ -88,7 +88,7 @@ pub fn file(args: &mut Arguments) -> Result<()> {
         Operand::Short('r') | Operand::Long("remove") | Operand::Value("remove") => remove(args),
         Operand::Short('c') | Operand::Long("create") | Operand::Value("create") => create(args),
         Operand::Short('e') | Operand::Long("edit") | Operand::Value("edit") => edit(args),
-        Operand::Short('h') | Operand::Long("help") => help(args, &HelpTopic::Utils),
+        Operand::Short('h') | Operand::Long("help") => help(args, &HelpTopic::Desktop),
         _ => args.invalid_operand(),
     }
 }

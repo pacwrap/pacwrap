@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -39,6 +39,8 @@ use pacwrap_core::{
     ErrorGeneric,
     Result,
 };
+
+use crate::help::{help, HelpTopic};
 
 use Display::*;
 
@@ -87,7 +89,7 @@ impl Display {
     }
 }
 
-fn parse_arguments(args: &mut Arguments) -> Result<(bool, IndexSet<Display>)> {
+fn parse_arguments(args: &mut Arguments) -> Result<Option<(bool, IndexSet<Display>)>> {
     let mut bytes = false;
     let mut vec = vec![Name, Type];
 
@@ -97,17 +99,24 @@ fn parse_arguments(args: &mut Arguments) -> Result<(bool, IndexSet<Display>)> {
             Operand::Short('s') | Operand::Long("summary") => vec.push(Summary(Some(bytes))),
             Operand::Short('t') | Operand::Long("total") => vec.push(Total(bytes)),
             Operand::Short('o') | Operand::Long("on-disk") => vec.push(Organic(bytes)),
+            Operand::Short('h') | Operand::Long("help") => {
+                help(args, &HelpTopic::List)?;
+                return Ok(None);
+            }
             _ => args.invalid_operand()?,
         }
     }
 
-    Ok((vec.len() > 2, IndexSet::from_iter(vec)))
+    Ok(Some((vec.len() > 2, IndexSet::from_iter(vec))))
 }
 
 pub fn list_containers(args: &mut Arguments) -> Result<()> {
     let handles = populate()?;
     let mut handles = handles.registered_handles();
-    let (measure_disk, table_type) = parse_arguments(args)?;
+    let (measure_disk, table_type) = match parse_arguments(args)? {
+        Some((measure_disk, table_type)) => (measure_disk, table_type),
+        None => return Ok(()),
+    };
     let containers = &format!("Containers ({})", handles.len());
     let mut container_sizes: HashMap<&str, (i64, i64)> = HashMap::new();
     let mut actual_size = 0;

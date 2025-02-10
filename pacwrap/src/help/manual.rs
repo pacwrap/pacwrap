@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -89,6 +89,9 @@ pub fn default(buf: &mut String, layout: &HelpLayout) -> Result {
 
 {sub_bold}-L, --list{reset_bold}
 {tab}{tab}List available containers managed by pacwrap.
+
+{sub_bold}-d, --desktop{reset_bold}
+{tab}{tab}Manage desktop files associated with pacwrap containers.
 
 {sub_bold}-U, --utils{reset_bold}
 {tab}{tab}Engage miscellaneous utilities to manage containers.
@@ -501,6 +504,35 @@ pub fn list(buf: &mut String, layout: &HelpLayout) -> Result {
     )
 }
 
+pub fn desktop(buf: &mut String, layout: &HelpLayout) -> Result {
+    let head = layout.head();
+    let tab = layout.tab();
+    let sub_para = layout.sub_paragraph();
+    let sub_bold = layout.sub_bold();
+    let reset = layout.reset();
+    let reset_bold = layout.reset_bold();
+    let bold = layout.bold();
+
+    writeln!(
+        buf,
+        "{head}DESKTOP{reset}
+{sub_para}Create and manage desktop files to launch applications in pacwrap from your favourite applications menu.
+
+{sub_bold}-c, --create{reset_bold} <{bold}CONTAINER{reset_bold}> <{bold}APPLICATION{reset_bold}>
+{tab}{tab}Create desktop file at `$HOME/.local/share/applications/` launching an associated container with pacwrap.
+
+{sub_bold}-l, --list{reset_bold} <{bold}CONTAINER{reset_bold}>
+{tab}{tab}List available desktop files in the container root located at `/usr/share/applications/`
+{tab}{tab}or `HOME/.local/share/applications/`.
+
+{sub_bold}-r, --remove{reset_bold} <{bold}APPLICATION{reset_bold}>
+{tab}{tab}Remove desktop file associated with application from `$HOME/.local/share/applications/`.
+
+{sub_bold}-f, --find{reset_bold} <{bold}PREDICATE{reset_bold}>
+{tab}{tab}Filter desktop list enumeration based on a {bold}predicate{reset_bold}.\n"
+    )
+}
+
 pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
     let head = layout.head();
     let tab = layout.tab();
@@ -519,9 +551,6 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}maintenance of containers. Each utility is considered a command module and therefore can be shortcuted
 {tab}with a command verb.
 
-{sub_bold}-d, --desktop{reset_bold}
-{tab}{tab}Create desktop file to launch application inside of a pacwrap container.
-
 {sub_bold}-v, --view{reset_bold}
 {tab}{tab}Invoke {bold}$EDITOR{reset_bold} to view file associated with pacwrap.
 
@@ -531,27 +560,11 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 {sub_bold}-o, --open{reset_bold}
 {tab}{tab}Invoke default file viewer on specified target's home or root directory.
 
-{sub_bold}-l, --list{reset_bold}
-{tab}{tab}Print a list of containers and basic metrics.
-
 {sub_bold}-s, --symlink{reset_bold}
 {tab}{tab}Create a symbolic container.
 
 {sub_bold}-r, --remove{reset_bold}
 {tab}{tab}Delete a container(s) root filesystem.
-
-{sub_sect}DESKTOP OPTIONS{reset_bold}
-{sub_para}Create and manage desktop files to launch applications in pacwrap from your favourite applications menu.
-
-{sub_bold}-c, --create{reset_bold} <{bold}CONTAINER{reset_bold}> <{bold}APPLICATION{reset_bold}>
-{tab}{tab}Create desktop file associated with application at `$HOME/.local/share/applications/` launching an 
-{tab}{tab}application in pacwrap.
-
-{sub_bold}-l, --list{reset_bold} <{bold}CONTAINER{reset_bold}>
-{tab}{tab}List available desktop files in the container root located at `/usr/share/applications/`.
-
-{sub_bold}-r, --remove{reset_bold} <{bold}APPLICATION{reset_bold}>
-{tab}{tab}Remove desktop file associated with application from `$HOME/.local/share/applications/`. 
 
 {sub_sect}EDITOR OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--edit{reset_bold} and {bold}--view{reset_bold} utility command modules.
@@ -581,21 +594,6 @@ pub fn utils(buf: &mut String, layout: &HelpLayout) -> Result {
 
 {sub_bold}-t, --target{reset_bold} <{bold}CONTAINER{reset_bold}>
 {tab}{tab}Target container to perform the operation.
-
-{sub_sect}LIST{reset_bold}
-{sub_para}These options are associated with the {bold}--list{reset_bold} utility command module.
-
-{sub_bold}-t, --total{reset_bold}
-{tab}{tab}Display a total column.
-
-{sub_bold}-d, --on-disk{reset_bold}
-{tab}{tab}Display a size on disk column.
-
-{sub_bold}-s, --summary{reset_bold}
-{tab}{tab}Print out a summary table to {bold}STDOUT{reset_bold}.
-
-{sub_bold}-b, --bytes{reset_bold}
-{tab}{tab}Toggle byte unit display for the proceeding item.
 
 {sub_sect}REMOVE OPTIONS{reset_bold}
 {sub_para}These options are associated with the {bold}--remove{reset_bold} utility command module.
@@ -750,7 +748,11 @@ pub fn authors(buf: &mut String, layout: &HelpLayout) -> Result {
     writeln!(
         buf,
         "{head}AUTHOR{reset}
-{tab}Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>\n"
+{tab}Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
+{tab}Copyright (C) 2024-2025 Pacwrap Contributors
+
+{tab}To find a current list of contributors, visit the following link:
+{tab}https://github.com/pacwrap/pacwrap/graphs/contributors\n"
     )
 }
 
