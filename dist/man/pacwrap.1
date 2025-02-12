@@ -1,5 +1,5 @@
 .nh
-.TH pacwrap 1 "14/09/2024" "pacwrap version_string_placeholder" "User Manual"
+.TH pacwrap 1 "11/02/2025 19:40:04-05:00" "pacwrap version_string_placeholder" "User Manual"
 
 .SH
 NAME\fR
@@ -54,6 +54,10 @@ Manage and show status of running container processes.
 .TP
 \fB-L, --list\fR
 List available containers managed by pacwrap.
+
+.TP
+\fB-d, --desktop\fR
+Manage desktop files associated with pacwrap containers.
 
 .TP
 \fB-U, --utils\fR
@@ -454,15 +458,47 @@ container name, second the total amount of bytes, and the last showing the total
 Then print a summation of total, actual consumption below.
 
 .SH
+DESKTOP\fR
+.PP
+Create and manage desktop files to launch applications in pacwrap from your favourite applications menu.
+
+.TP
+\fB-c, --create\fR <\fBCONTAINER\fR> <\fBAPPLICATION\fR>
+Create desktop file at `$HOME/.local/share/applications/` launching an associated container with pacwrap.
+
+.TP
+\fB-l, --list\fR <\fBCONTAINER\fR>
+Enumerate available desktop files in the container root located at `/usr/share/applications/`
+or `HOME/.local/share/applications/`.
+
+.TP
+\fB-r, --remove\fR <\fBAPPLICATION\fR>
+Remove desktop file associated with application from `$HOME/.local/share/applications/`.
+
+.TP
+\fB-f, --find\fR <\fBPREDICATE\fR>
+Filter desktop list enumeration based on a \fBpredicate\fR.
+
+.SS
+EXAMPLES\fR
+.TP
+`$ pacwrap desktop list firefox`
+Print tabulation of desktop files in the `firefox` container root.
+
+.TP
+`$ pacwrap desktop list --find libreoffice`
+Tabulate all entries with the predicate `libreoffice` from `$HOME/.local/share/applications/`.
+
+.TP
+`$ pacwrap desktop create firefox firefox`
+Install desktop file from the contaienr root into `$HOME/.local/share/applications/`.
+
+.SH
 UTILITIES\fR
 .PP
 Miscellaneous utilities which provide helpful auxiliary functionality to aid in configuration and
 maintenance of containers. Each utility is considered a command module and therefore can be shortcuted
 with a command verb.
-
-.TP
-\fB-d, --desktop\fR
-Create desktop file to launch application inside of a pacwrap container.
 
 .TP
 \fB-v, --view\fR
@@ -477,34 +513,12 @@ Invoke \fB$EDITOR\fR to edit file associated with pacwrap.
 Invoke default file viewer on specified target's home or root directory.
 
 .TP
-\fB-l, --list\fR
-Print a list of containers and basic metrics.
-
-.TP
 \fB-s, --symlink\fR
 Create a symbolic container.
 
 .TP
 \fB-r, --remove\fR
 Delete a container(s) root filesystem.
-
-.SS
-DESKTOP OPTIONS\fR
-.PP
-Create and manage desktop files to launch applications in pacwrap from your favourite applications menu.
-
-.TP
-\fB-c, --create\fR <\fBCONTAINER\fR> <\fBAPPLICATION\fR>
-Create desktop file associated with application at `$HOME/.local/share/applications/` launching an 
-application in pacwrap.
-
-.TP
-\fB-l, --list\fR <\fBCONTAINER\fR>
-List available desktop files in the container root located at `/usr/share/applications/`.
-
-.TP
-\fB-r, --remove\fR <\fBAPPLICATION\fR>
-Remove desktop file associated with application from `$HOME/.local/share/applications/`. 
 
 .SS
 EDITOR OPTIONS\fR
@@ -545,27 +559,6 @@ Specified container's root filesystem.
 .TP
 \fB-t, --target\fR <\fBCONTAINER\fR>
 Target container to perform the operation.
-
-.SS
-LIST\fR
-.PP
-These options are associated with the \fB--list\fR utility command module.
-
-.TP
-\fB-t, --total\fR
-Display a total column.
-
-.TP
-\fB-d, --on-disk\fR
-Display a size on disk column.
-
-.TP
-\fB-s, --summary\fR
-Print out a summary table to \fBSTDOUT\fR.
-
-.TP
-\fB-b, --bytes\fR
-Toggle byte unit display for the proceeding item.
 
 .SS
 REMOVE OPTIONS\fR
@@ -712,7 +705,11 @@ included here in this subsection are to be assumed to have inert values by defau
 
 .SH
 AUTHOR\fR
-Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
+Copyright (C) 2024-2025 Pacwrap Contributors
+
+To find a current list of contributors, visit the following link:
+https://github.com/pacwrap/pacwrap/graphs/contributors
 
 .SH
 LICENSE\fR
