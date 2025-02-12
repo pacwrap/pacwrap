@@ -112,7 +112,7 @@ fn conduct_transaction(
 
     if let TransactionType::Upgrade(upgrade, downgrade, _) = action {
         if upgrade {
-            handle.alpm().sync_sysupgrade(downgrade).expect("ALPM sync_sysupgrade")
+            handle.alpm().sync_sysupgrade(downgrade)?
         }
     }
 
@@ -133,7 +133,7 @@ fn conduct_transaction(
         erroneous_transaction(error)?
     }
 
-    handle.alpm_mut().trans_release().expect("ALPM trans_release");
+    handle.alpm_mut().trans_release()?;
     handle.mark_depends();
 
     if let Err(error) = fs::copy("/etc/ld.so.cache", "/mnt/fs/etc/ld.so.cache") {
