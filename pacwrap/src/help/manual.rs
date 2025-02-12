@@ -507,8 +507,10 @@ pub fn list(buf: &mut String, layout: &HelpLayout) -> Result {
 pub fn desktop(buf: &mut String, layout: &HelpLayout) -> Result {
     let head = layout.head();
     let tab = layout.tab();
+    let sub = layout.sub();
     let sub_para = layout.sub_paragraph();
     let sub_bold = layout.sub_bold();
+    let sub_sect = layout.sub_section();
     let reset = layout.reset();
     let reset_bold = layout.reset_bold();
     let bold = layout.bold();
@@ -522,14 +524,24 @@ pub fn desktop(buf: &mut String, layout: &HelpLayout) -> Result {
 {tab}{tab}Create desktop file at `$HOME/.local/share/applications/` launching an associated container with pacwrap.
 
 {sub_bold}-l, --list{reset_bold} <{bold}CONTAINER{reset_bold}>
-{tab}{tab}List available desktop files in the container root located at `/usr/share/applications/`
+{tab}{tab}Enumerate available desktop files in the container root located at `/usr/share/applications/`
 {tab}{tab}or `HOME/.local/share/applications/`.
 
 {sub_bold}-r, --remove{reset_bold} <{bold}APPLICATION{reset_bold}>
 {tab}{tab}Remove desktop file associated with application from `$HOME/.local/share/applications/`.
 
 {sub_bold}-f, --find{reset_bold} <{bold}PREDICATE{reset_bold}>
-{tab}{tab}Filter desktop list enumeration based on a {bold}predicate{reset_bold}.\n"
+{tab}{tab}Filter desktop list enumeration based on a {bold}predicate{reset_bold}.
+
+{sub_sect}EXAMPLES{reset_bold}
+{sub}`$ pacwrap desktop list firefox`
+{tab}{tab}Print tabulation of desktop files in the `firefox` container root.
+
+{sub}`$ pacwrap desktop list --find libreoffice`
+{tab}{tab}Tabulate all entries with the predicate `libreoffice` from `$HOME/.local/share/applications/`.
+
+{sub}`$ pacwrap desktop create firefox firefox`
+{tab}{tab}Install desktop file from the contaienr root into `$HOME/.local/share/applications/`.\n"
     )
 }
 

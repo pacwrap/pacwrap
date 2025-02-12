@@ -156,6 +156,7 @@ impl HelpTopic {
             "C" | "compose" => &HelpTopic::Compose,
             "Q" | "query" => &HelpTopic::Query,
             "V" | "version" => &HelpTopic::Version,
+            "d" | "desktop" => &HelpTopic::Desktop,
             "h" | "help" => &HelpTopic::Help,
             "env" | "environment" => &HelpTopic::Env,
             "author" | "authors" => &HelpTopic::Authors,
