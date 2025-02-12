@@ -48,7 +48,7 @@ impl Default for Root {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Root {
-    #[serde(skip_serializing_if = "Vec::is_empty", default = "volumes", rename = "volumes")]
+    #[serde(skip_serializing_if = "is_volumes", default = "volumes", rename = "volumes")]
     mounts: Vec<Mount>,
 }
 
@@ -113,6 +113,10 @@ fn check_mount(vars: &ContainerVariables, mount: &Mount) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn is_volumes(vols: &[Mount]) -> bool {
+    vols == volumes()
 }
 
 fn volumes() -> Vec<Mount> {
