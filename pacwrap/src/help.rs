@@ -29,6 +29,24 @@ use pacwrap_core::{
     Result,
 };
 
+use crate::help::{
+    config::PacwrapYml,
+    manual::{
+        compose::Compose,
+        default::Default,
+        desktop::Desktop,
+        env::Environment,
+        execute::Execute,
+        list::List,
+        meta::*,
+        process::Process,
+        query::Query,
+        remove::Remove,
+        sync::Synchronization,
+        utils::Utils,
+    },
+};
+
 mod config;
 mod manual;
 mod version;
@@ -124,6 +142,10 @@ fn ascertain_help<'a>(args: &'a mut Arguments, default_ht: &'a HelpTopic) -> Res
     Ok((topic.drain(start ..).collect(), layout))
 }
 
+trait HelpObject {
+    fn topic(buf: &mut String, layout: &HelpLayout) -> FmtResult;
+}
+
 #[derive(Eq, PartialEq, Hash)]
 pub enum HelpTopic {
     Sync,
@@ -169,22 +191,22 @@ impl HelpTopic {
 
     fn write(&self, buf: &mut String, layout: &HelpLayout) -> FmtResult {
         match self {
-            Self::Default => manual::default(buf, layout),
-            Self::Sync => manual::sync(buf, layout),
-            Self::Remove => manual::remove(buf, layout),
-            Self::Execute => manual::execute(buf, layout),
-            Self::Process => manual::process(buf, layout),
-            Self::Desktop => manual::desktop(buf, layout),
-            Self::Version => manual::version(buf, layout),
-            Self::Env => manual::environment(buf, layout),
-            Self::Compose => manual::compose(buf, layout),
-            Self::Utils => manual::utils(buf, layout),
-            Self::List => manual::list(buf, layout),
-            Self::Help => manual::meta(buf, layout),
-            Self::Query => manual::query(buf, layout),
-            Self::Authors => manual::authors(buf, layout),
-            Self::License => manual::license(buf, layout),
-            Self::PacwrapYml => config::default(buf, layout),
+            Self::Default => Default::topic(buf, layout),
+            Self::Sync => Synchronization::topic(buf, layout),
+            Self::Remove => Remove::topic(buf, layout),
+            Self::Execute => Execute::topic(buf, layout),
+            Self::Process => Process::topic(buf, layout),
+            Self::Desktop => Desktop::topic(buf, layout),
+            Self::Version => Version::topic(buf, layout),
+            Self::Env => Environment::topic(buf, layout),
+            Self::Compose => Compose::topic(buf, layout),
+            Self::Utils => Utils::topic(buf, layout),
+            Self::List => List::topic(buf, layout),
+            Self::Help => Meta::topic(buf, layout),
+            Self::Query => Query::topic(buf, layout),
+            Self::Authors => Authors::topic(buf, layout),
+            Self::License => License::topic(buf, layout),
+            Self::PacwrapYml => PacwrapYml::topic(buf, layout),
         }
     }
 }
