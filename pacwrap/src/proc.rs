@@ -77,6 +77,7 @@ pub fn process(args: &mut Arguments) -> Result<()> {
         Operand::Long("summary") | Operand::Short('s') => summary(args),
         Operand::Long("id-list") | Operand::Short('i') => process_id(args),
         Operand::Long("kill") | Operand::Short('k') => process_kill(args),
+        Operand::Short('h') | Operand::Long("help") => return help(args, &HelpTopic::Process),
         Operand::Nothing =>
             if let Operand::Value("ps") = args[0] {
                 summary(args)
@@ -105,7 +106,6 @@ fn summary(args: &mut Arguments) -> Result<()> {
         match arg {
             Operand::Value("ps") | Operand::Short('s') => continue,
             Operand::Short('d') | Operand::Short('t') | Operand::Long("depth") | Operand::Long("target") => continue,
-            Operand::Short('h') | Operand::Long("help") => return help(args, &HelpTopic::Process),
             Operand::Short('x') | Operand::Long("exec") => exec += 1,
             Operand::Short('a') | Operand::Long("all") => all = true,
             Operand::Short('c') | Operand::Long("command") => cmd += 1,
@@ -182,12 +182,9 @@ fn process_id(args: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = args.next() {
         match arg {
-            Operand::Short('d') => continue,
+            Operand::Short('t') | Operand::Long("target") => continue,
             Operand::Short('a') | Operand::Long("all") => all = true,
-            Operand::Value(val)
-            | Operand::ShortPos('i', val)
-            | Operand::ShortPos('d', val)
-            | Operand::LongPos("id-list", val) => instance.push(val),
+            Operand::ShortPos('t', val) | Operand::LongPos("target", val) => instance.push(val),
             _ => args.invalid_operand()?,
         }
     }
