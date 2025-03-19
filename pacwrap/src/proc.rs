@@ -77,7 +77,7 @@ pub fn process(args: &mut Arguments) -> Result<()> {
         Operand::Long("summary") | Operand::Short('s') => summary(args),
         Operand::Long("id-list") | Operand::Short('i') => process_id(args),
         Operand::Long("kill") | Operand::Short('k') => process_kill(args),
-        Operand::Short('h') | Operand::Long("help") => return help(args, &HelpTopic::Process),
+        Operand::Short('h') | Operand::Long("help") => help(args, &HelpTopic::Process),
         Operand::Nothing =>
             if let Operand::Value("ps") = args[0] {
                 summary(args)
