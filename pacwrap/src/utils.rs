@@ -33,7 +33,10 @@ use pacwrap_core::{
     Result,
 };
 
-use crate::help::{help, HelpTopic};
+use crate::{
+    help::{help, HelpTopic},
+    utils::edit::EditKind,
+};
 
 pub mod delete;
 pub mod desktop;
@@ -56,8 +59,8 @@ pub fn engage_utility(args: &mut Arguments) -> Result<()> {
     }
 
     match arg {
-        Operand::Short('v') | Operand::Long("view") | Operand::Value("view") => edit::edit(args, false),
-        Operand::Short('e') | Operand::Long("edit") | Operand::Value("edit") => edit::edit(args, true),
+        Operand::Short('v') | Operand::Long("view") | Operand::Value("view") => edit::edit(args, EditKind::View),
+        Operand::Short('e') | Operand::Long("edit") | Operand::Value("edit") => edit::edit(args, EditKind::Edit),
         Operand::Short('r') | Operand::Long("remove") | Operand::Value("remove") => delete::remove_containers(args),
         Operand::Short('l') | Operand::Long("list") | Operand::Value("list") => list::list_containers(args),
         Operand::Short('d') | Operand::Long("desktop") | Operand::Value("desktop") => desktop::file(args),

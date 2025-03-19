@@ -39,7 +39,7 @@ use pacwrap_core::{
 
 use crate::{
     help::{help, HelpTopic},
-    utils::edit::edit_file,
+    utils::edit::{edit_file, EditKind},
 };
 
 const GLOBAL_APP_DIR: &str = "/usr/share/applications";
@@ -152,7 +152,7 @@ fn edit(args: &mut Arguments) -> Result<()> {
     let app_dir = meta.app_dir;
 
     match desktop.first() {
-        Some(entry) => edit_file(&format!("{app_dir}/{}", entry.name), ".desktop", None, false),
+        Some(entry) => edit_file(&format!("{app_dir}/{}", entry.name), ".desktop", &EditKind::Edit, None),
         None => err!(ErrorKind::Message("Desktop file not found.")),
     }
 }

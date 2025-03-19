@@ -35,6 +35,11 @@ use pacwrap_core::{
 use rand::distributions::{Alphanumeric, DistString};
 use sha2::{Digest, Sha256};
 
+pub enum EditKind {
+    View,
+    Edit,
+}
+
 #[derive(Clone, Copy)]
 enum FileType<'a> {
     ContainerConfig(&'a str),
@@ -63,8 +68,12 @@ impl<'a> FileType<'a> {
         }
     }
 
-    fn can_edit(&self, edit: bool) -> bool {
-        !matches!(self, Self::LogFile) && edit
+    fn can_edit(&self, edit_type: EditKind) -> EditKind {
+        if matches!(self, Self::LogFile) {
+            EditKind::View
+        } else {
+            edit_type
+        }
     }
 }
 
@@ -80,7 +89,7 @@ impl Display for FileType<'_> {
     }
 }
 
-pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
+pub fn edit(args: &mut Arguments, edit_type: EditKind) -> Result<()> {
     let mut file = None;
 
     while let Some(arg) = args.next() {
@@ -104,8 +113,8 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
 
     let (file, ext, lock, edit) = &match file {
         Some(file) => {
-            let (edit, ext) = (file.can_edit(edit), file.ext());
-            let lock = if let (FileType::ContainerConfig(_), true) = (file, edit) {
+            let (edit, ext): (EditKind, &str) = (file.can_edit(edit_type), file.ext());
+            let lock = if let (FileType::ContainerConfig(_), &EditKind::Edit) = (file, &edit) {
                 Some(Lock::new().lock()?)
             } else {
                 None
@@ -116,7 +125,7 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
         }
         None => return args.invalid_operand(),
     };
-    let result = edit_file(file, ext, lock.as_ref(), *edit);
+    let result = edit_file(file, ext, edit, lock.as_ref());
 
     if let Some(lock) = lock {
         lock.unlock()?;
@@ -125,14 +134,15 @@ pub fn edit(args: &mut Arguments, edit: bool) -> Result<()> {
     result
 }
 
-pub fn edit_file(file: &str, ext: &str, lock: Option<&Lock>, edit: bool) -> Result<()> {
+pub fn edit_file(file: &str, ext: &str, edit_type: &EditKind, lock: Option<&Lock>) -> Result<()> {
     let prs = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
     let temporary_file = &format!("/tmp/tmp.{}{}", prs, ext);
+    let edit = matches!(edit_type, EditKind::Edit);
 
     copy(file, temporary_file).prepend_io(|| file)?;
     handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
 
-    if edit && hash_file(file)? != hash_file(temporary_file)? {
+    if matches!(edit_type, EditKind::Edit) && hash_file(file)? != hash_file(temporary_file)? {
         if let Some(lock) = lock {
             lock.assert()?;
         }
