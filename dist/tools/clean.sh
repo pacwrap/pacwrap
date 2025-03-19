@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #  pacwrap - clean.sh
 # 
@@ -17,11 +17,10 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed via the workspace root directory."; exit 2; fi
-if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
+set -eEo pipefail
 
 source ./dist/tools/common.sh
-ACTION_NOUN="Housekeeping"
+export ACTION_NOUN="Housekeeping"
 
 DIST_BIN="$PWD/dist/bin"
 DIST_RUNTIME="$PWD/dist/runtime"
@@ -63,6 +62,6 @@ main() {
     esac; done
 }
 
-main $@
+main "$@"
 
 # vim:set ts=4 sw=4 et:1
