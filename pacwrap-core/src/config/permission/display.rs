@@ -93,14 +93,6 @@ fn validate_xorg_socket() -> Result<Option<Condition>, PermError> {
         Err(Fail(format!("Expected value with colon delimiter: `DISPLAY={}`.", *X11_DISPLAY)))?
     }
 
-    if XAUTHORITY.is_empty() {
-        Err(Fail("XAUTHORITY environment variable unspecified.".into()))?
-    }
-
-    if !Path::new(*XAUTHORITY).exists() {
-        Err(Fail(format!("Xauthority file '{}' not found.", *XAUTHORITY)))?
-    }
-
     let display: Vec<&str> = X11_DISPLAY.split(":").collect();
     let xorg_socket = format!("/tmp/.X11-unix/X{}", display[1]);
 
@@ -132,8 +124,11 @@ fn configure_xorg(args: &mut ExecutionArgs) {
     let container_xauth = format!("{}/Xauthority", *XDG_RUNTIME_DIR);
 
     args.env("DISPLAY", *X11_DISPLAY);
-    args.env("XAUTHORITY", &container_xauth);
-    args.bind(&ReadOnly, *XAUTHORITY, &container_xauth);
+
+    if Path::new(*XAUTHORITY).exists() {
+        args.env("XAUTHORITY", &container_xauth);
+        args.bind(&ReadOnly, *XAUTHORITY, &container_xauth);
+    }
 
     if display[0].is_empty() || display[0] == "unix" {
         args.bind(&ReadOnly, &xorg_socket, &xorg_socket);
