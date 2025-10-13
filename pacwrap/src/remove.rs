@@ -20,7 +20,8 @@
 use std::collections::HashMap;
 
 use pacwrap_core::{
-    config::{cache, init::init, ContainerType},
+    ErrorKind,
+    config::{ContainerType, cache, init::init},
     err,
     error::*,
     lock::Lock,
@@ -30,11 +31,10 @@ use pacwrap_core::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
     },
-    ErrorKind,
 };
 
 use crate::{
-    help::{help, HelpTopic},
+    help::{HelpTopic, help},
     utils::delete::remove_containers,
 };
 

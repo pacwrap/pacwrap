@@ -20,8 +20,8 @@
 use std::fmt::{Display, Formatter};
 
 use pacwrap_core::{
-    constants::{BOLD, RESET},
     ErrorTrait,
+    constants::{BOLD, RESET},
 };
 
 #[derive(Debug)]

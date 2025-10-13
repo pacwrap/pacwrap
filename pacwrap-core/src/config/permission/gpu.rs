@@ -22,18 +22,18 @@ use std::{fs::read_dir, path::Path, sync::OnceLock};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
+    ErrorGeneric,
+    ErrorType,
     config::{
+        Permission,
         filesystem::Permission::ReadOnly,
         permission::{
             Condition::{self, *},
             PermError::{self, *},
         },
-        Permission,
     },
     exec::args::ExecutionArgs,
-    Error,
-    ErrorGeneric,
-    ErrorType,
 };
 
 static GPU_DEV: OnceLock<Vec<String>> = OnceLock::new();

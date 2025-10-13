@@ -22,9 +22,9 @@ use std::collections::HashSet;
 use alpm::{Alpm, Package};
 
 use crate::{
-    err,
-    sync::{utils::AlpmUtils, SyncError},
     Error,
+    err,
+    sync::{SyncError, utils::AlpmUtils},
 };
 
 pub struct DependencyResolver<'a> {

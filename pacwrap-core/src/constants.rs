@@ -22,7 +22,7 @@ use std::{env::var, process::id, time::Duration};
 use nix::unistd::{getegid, geteuid};
 use signal_hook::consts::*;
 
-use crate::{error, format_static, lazy_lock, utils::unix_epoch_time, Error, ErrorKind};
+use crate::{Error, ErrorKind, error, format_static, lazy_lock, utils::unix_epoch_time};
 
 pub use crate::utils::ansi::*;
 

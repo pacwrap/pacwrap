@@ -25,11 +25,11 @@ use std::{
 };
 
 use crate::{
-    constants::{GID, UID},
-    err,
     Error,
     ErrorKind,
     Result,
+    constants::{GID, UID},
+    err,
 };
 
 pub use arguments::Arguments;

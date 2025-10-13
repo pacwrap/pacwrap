@@ -19,18 +19,18 @@
 
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
-    fs::{copy, remove_file, File},
+    fs::{File, copy, remove_file},
     io::copy as copy_io,
     process::Command,
 };
 
 use pacwrap_core::{
+    ErrorGeneric,
+    Result,
     constants::{ARROW_CYAN, ARROW_GREEN, CONFIG_DIR, DATA_DIR, EDITOR, HOME},
     exec::utils::handle_process,
     lock::Lock,
-    utils::{arguments::Operand, Arguments},
-    ErrorGeneric,
-    Result,
+    utils::{Arguments, arguments::Operand},
 };
 use rand::distributions::{Alphanumeric, DistString};
 use sha2::{Digest, Sha256};

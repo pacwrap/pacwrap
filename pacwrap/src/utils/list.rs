@@ -28,18 +28,18 @@ use indexmap::IndexSet;
 use simplebyteunit::simplebyteunit::*;
 
 use pacwrap_core::{
-    config::{cache::populate, ContainerType},
-    constants::{BOLD, CONTAINER_DIR, RESET, UNDERLINE},
-    utils::{
-        arguments::Operand,
-        table::{ColumnAttribute, Table},
-        Arguments,
-    },
     ErrorGeneric,
     Result,
+    config::{ContainerType, cache::populate},
+    constants::{BOLD, CONTAINER_DIR, RESET, UNDERLINE},
+    utils::{
+        Arguments,
+        arguments::Operand,
+        table::{ColumnAttribute, Table},
+    },
 };
 
-use crate::help::{help, HelpTopic};
+use crate::help::{HelpTopic, help};
 
 use Display::*;
 

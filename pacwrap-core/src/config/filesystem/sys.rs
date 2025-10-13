@@ -21,14 +21,14 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
+    Result,
     config::{
-        filesystem::{BindError, Filesystem, Permission::ReadOnly},
         ContainerVariables,
+        filesystem::{BindError, Filesystem, Permission::ReadOnly},
     },
     err,
     exec::args::ExecutionArgs,
-    Error,
-    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

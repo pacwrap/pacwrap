@@ -20,13 +20,13 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter, Result as FmtResult},
-    fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename, File, Metadata},
-    io::{copy, BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
+    fs::{self, File, Metadata, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename},
+    io::{BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write, copy},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
-        mpsc::{self, Receiver, Sender},
         Arc,
+        mpsc::{self, Receiver, Sender},
     },
 };
 
@@ -34,7 +34,7 @@ use bincode::Options;
 use dialoguer::console::Term;
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use rayon::{prelude::*, ThreadPool, ThreadPoolBuilder};
+use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use signal_hook::iterator::Signals;
@@ -42,21 +42,21 @@ use walkdir::WalkDir;
 use zstd::{Decoder, Encoder};
 
 use crate::{
+    Error,
+    ErrorGeneric,
+    ErrorKind,
+    ErrorTrait,
+    Result,
     config::{ContainerCache, ContainerHandle, ContainerType::*},
     constants::{BAR_GREEN, BOLD, DATA_DIR, RESET, SIGNAL_LIST},
     err,
     impl_error,
     lock::{Lock, LockError},
     sync::{
-        transaction::aggregator::{BAR_CYAN_STYLE, BAR_GREEN_STYLE},
         SyncError,
+        transaction::aggregator::{BAR_CYAN_STYLE, BAR_GREEN_STYLE},
     },
     utils::bytebuffer::ByteBuffer,
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    ErrorTrait,
-    Result,
 };
 
 const VERSION: u32 = 2;
@@ -658,15 +658,15 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
 }
 
 fn link_filesystem(state: &FileSystemState, root: &str) {
-    state.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
+    state.files.par_iter().filter(|a| a.1.0 != FileType::Directory).for_each(|file| {
         let path = &format!("{}{}", root, file.0);
 
-        if let FileType::SymLink = file.1 .0 {
-            if let Err(error) = create_soft_link(&file.1 .1, path).prepend(|| format!("Failed to symlink '{path}'")) {
+        if let FileType::SymLink = file.1.0 {
+            if let Err(error) = create_soft_link(&file.1.1, path).prepend(|| format!("Failed to symlink '{path}'")) {
                 error.warn();
             }
-        } else if let FileType::HardLink = file.1 .0 {
-            if let Err(error) = create_hard_link(&file.1 .1, path).prepend(|| format!("Failed to hardlink '{path}'")) {
+        } else if let FileType::HardLink = file.1.0 {
+            if let Err(error) = create_hard_link(&file.1.1, path).prepend(|| format!("Failed to hardlink '{path}'")) {
                 error.warn();
             }
         }
@@ -677,18 +677,18 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
     let (tx, rx) = mpsc::sync_channel(0);
     let tx_clone: mpsc::SyncSender<()> = tx.clone();
 
-    state_res.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
+    state_res.files.par_iter().filter(|a| a.1.0 != FileType::Directory).for_each(|file| {
         let _ = tx_clone;
 
         if state.files.get(file.0).is_none() {
             let path_str = &format!("{}{}", root, file.0);
             let path = Path::new(path_str);
 
-            if let FileType::SymLink = file.1 .0 {
+            if let FileType::SymLink = file.1.0 {
                 if let Err(error) = remove_symlink(path).prepend(|| format!("Failed to remove symlink '{path_str}'")) {
                     error.warn();
                 }
-            } else if let (true, FileType::HardLink) = (path.exists(), &file.1 .0) {
+            } else if let (true, FileType::HardLink) = (path.exists(), &file.1.0) {
                 if let Err(error) = remove_file(path).prepend(|| format!("Failed to remove file '{path_str}'")) {
                     error.warn();
                 }
@@ -715,7 +715,7 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
                 return;
             }
 
-            if let FileType::Directory = file.1 .0 {
+            if let FileType::Directory = file.1.0 {
                 remove_dir_all(path).ok();
             }
         }

@@ -31,15 +31,15 @@ use tar::{Archive, EntryType};
 use zstd::Decoder;
 
 use crate::{
+    Error,
+    ErrorGeneric,
+    ErrorKind,
+    Result,
     config::ContainerHandle,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     eprintln_warn,
     err,
     utils::{ansi::*, bytebuffer::ByteBuffer},
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    Result,
 };
 
 use self::SchemaStatus::*;

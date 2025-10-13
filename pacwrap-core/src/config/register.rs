@@ -19,12 +19,12 @@
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem},
-        permission::*,
         ConfigError,
         ContainerVariables,
         Dbus,
         Permission,
+        filesystem::{BindError, Filesystem},
+        permission::*,
     },
     eprintln_warn,
     err,

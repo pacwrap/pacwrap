@@ -19,12 +19,12 @@
 
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     os::unix::fs::MetadataExt,
     path::Path,
 };
 
-use crate::{constants::LOCK_FILE, err, impl_error, Error, ErrorGeneric, ErrorTrait, Result};
+use crate::{Error, ErrorGeneric, ErrorTrait, Result, constants::LOCK_FILE, err, impl_error};
 
 #[derive(Debug)]
 pub enum LockError {

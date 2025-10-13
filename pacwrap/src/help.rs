@@ -21,12 +21,12 @@ use indexmap::IndexSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use pacwrap_core::{
-    err,
-    impl_error,
-    utils::{ansi::is_color_terminal, arguments::Operand, Arguments},
     Error,
     ErrorTrait,
     Result,
+    err,
+    impl_error,
+    utils::{Arguments, ansi::is_color_terminal, arguments::Operand},
 };
 
 use crate::help::{

@@ -27,11 +27,11 @@ use std::{
 use serde::Serialize;
 
 use crate::{
+    ErrorKind,
     constants::{BOLD, CONFIG_FILE, RESET},
     err,
     error::*,
     impl_error,
-    ErrorKind,
 };
 
 pub use self::{
@@ -39,7 +39,7 @@ pub use self::{
     container::{Container, ContainerHandle, ContainerType},
     dbus::Dbus,
     filesystem::{BindError, Filesystem},
-    global::{global, Global},
+    global::{Global, global},
     permission::{PermError, Permission},
     vars::ContainerVariables,
 };

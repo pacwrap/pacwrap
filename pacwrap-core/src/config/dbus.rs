@@ -19,7 +19,7 @@
 
 use crate::exec::args::ExecutionArgs;
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 
 mod appindicator;
 mod socket;

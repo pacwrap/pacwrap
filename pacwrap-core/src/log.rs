@@ -24,17 +24,17 @@ use std::{
     path::Path,
 };
 
-use time::{format_description::FormatItem, macros::format_description as fdesc, OffsetDateTime, UtcOffset};
+use time::{OffsetDateTime, UtcOffset, format_description::FormatItem, macros::format_description as fdesc};
 
 use crate::{
-    constants::{LOG_LOCATION, UNIX_TIMESTAMP},
-    err,
-    impl_error,
-    utils::unix_epoch_time,
     Error,
     ErrorGeneric,
     ErrorTrait,
     Result,
+    constants::{LOG_LOCATION, UNIX_TIMESTAMP},
+    err,
+    impl_error,
+    utils::unix_epoch_time,
 };
 
 const DATE_FORMAT_UTC: &[FormatItem<'static>] = fdesc!("[year]-[month]-[day]T[hour]:[minute]:[second]");

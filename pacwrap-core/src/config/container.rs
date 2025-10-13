@@ -27,15 +27,15 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{
         dbus::Dbus,
-        filesystem::{home::Home, root::Root, Filesystem},
-        permission::{none::None, Permission},
+        filesystem::{Filesystem, home::Home, root::Root},
+        permission::{Permission, none::None},
         save,
         vars::ContainerVariables,
     },
     constants::UNIX_TIMESTAMP,
-    Result,
 };
 
 #[derive(Deserialize, Serialize, Clone)]

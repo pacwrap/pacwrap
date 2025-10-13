@@ -18,16 +18,16 @@
  */
 
 use crate::{
+    Result,
     config::ContainerHandle,
     constants::ARROW_GREEN,
     sync::transaction::{
-        aggregator::BAR_GREEN_STYLE,
         Transaction,
         TransactionAggregator,
         TransactionHandle,
         TransactionState::{self, Skip},
+        aggregator::BAR_GREEN_STYLE,
     },
-    Result,
 };
 
 #[derive(Debug)]

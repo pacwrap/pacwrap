@@ -22,14 +22,14 @@ use std::{fs::read_dir, path::Path, result::Result as StdResult};
 use indexmap::IndexMap;
 
 use crate::{
-    config::{provide_handle, provide_new_handle, ConfigError, ContainerHandle, ContainerType},
+    ErrorKind,
+    config::{ConfigError, ContainerHandle, ContainerType, provide_handle, provide_new_handle},
     constants::{CONFIG_DIR, CONTAINER_DIR},
     err,
     error::*,
-    ErrorKind,
 };
 
-use super::{handle, ContainerVariables};
+use super::{ContainerVariables, handle};
 
 pub struct ContainerCache<'a> {
     instances: IndexMap<&'a str, ContainerHandle<'a>>,

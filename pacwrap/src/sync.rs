@@ -21,7 +21,8 @@ use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
 use pacwrap_core::{
-    config::{cache, init::init, ConfigError::AlreadyExists, ContainerCache, ContainerType},
+    ErrorKind,
+    config::{ConfigError::AlreadyExists, ContainerCache, ContainerType, cache, init::init},
     eprintln_warn,
     err,
     error::*,
@@ -37,10 +38,9 @@ use pacwrap_core::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
     },
-    ErrorKind,
 };
 
-use crate::help::{help, HelpTopic};
+use crate::help::{HelpTopic, help};
 
 pub fn synchronize(args: &mut Arguments) -> Result<()> {
     check_root()?;

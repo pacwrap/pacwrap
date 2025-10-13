@@ -22,12 +22,12 @@ use std::{
     error::Error as StdError,
     ffi::OsString,
     fmt::Write,
-    fs::{read_dir, DirEntry, File},
+    fs::{DirEntry, File, read_dir},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
     result::Result as StdResult,
 };
 
-use crate::{config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn, utils::ansi::*, ErrorGeneric, Result};
+use crate::{ErrorGeneric, Result, config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn, utils::ansi::*};
 use indexmap::IndexMap;
 
 pub struct ProcessList {

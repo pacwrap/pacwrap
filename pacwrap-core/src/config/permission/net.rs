@@ -21,9 +21,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        Permission,
         filesystem::Permission::ReadOnly,
         permission::{Condition::Success, *},
-        Permission,
     },
     exec::args::{Argument::HostNetworking, ExecutionArgs},
 };

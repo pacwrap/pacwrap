@@ -21,7 +21,7 @@ use std::{
     io::Read,
     os::fd::AsRawFd,
     path::Path,
-    process::{exit, Child},
+    process::{Child, exit},
     thread,
     time::Duration,
 };
@@ -31,18 +31,18 @@ use serde::Serialize;
 use serde_yaml::Value;
 
 use crate::{
+    ErrorKind,
     config::global,
     constants::BWRAP_EXECUTABLE,
     err,
     error::*,
     exec::{ExecutionError, ExecutionType},
     sync::{
+        SyncError,
         alpm_config,
         transaction::{TransactionMetadata, TransactionParameters},
-        SyncError,
     },
     utils::TermControl,
-    ErrorKind,
 };
 
 static PROCESS_SLEEP_DURATION: Duration = Duration::from_millis(250);

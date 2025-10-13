@@ -19,14 +19,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
+    Result,
     config::{
-        filesystem::{BindError, Filesystem, Mount},
         ContainerVariables,
+        filesystem::{BindError, Filesystem, Mount},
     },
     err,
     exec::args::ExecutionArgs,
-    Error,
-    Result,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

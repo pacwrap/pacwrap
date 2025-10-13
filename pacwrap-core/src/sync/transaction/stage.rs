@@ -19,9 +19,12 @@
 use alpm::TransFlag;
 
 use crate::{
+    Error,
+    Result,
     config::{ContainerHandle, ContainerType::Base},
     err,
     sync::{
+        SyncError,
         transaction::{
             Transaction,
             TransactionAggregator,
@@ -31,10 +34,7 @@ use crate::{
             TransactionState::{self, *},
             TransactionType::*,
         },
-        SyncError,
     },
-    Error,
-    Result,
 };
 
 #[derive(Debug)]

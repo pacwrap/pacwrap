@@ -21,7 +21,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::exec::args::ExecutionArgs;
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 
 mod dev;
 mod display;

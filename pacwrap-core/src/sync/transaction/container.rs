@@ -18,6 +18,7 @@
  */
 
 use crate::{
+    Result,
     config::ContainerHandle,
     constants::CHECKMARK,
     log::Level::Info,
@@ -30,7 +31,6 @@ use crate::{
             TransactionState::{self, *},
         },
     },
-    Result,
 };
 
 #[derive(Debug)]

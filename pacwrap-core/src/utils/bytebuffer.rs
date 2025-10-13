@@ -19,7 +19,7 @@
 
 use std::fmt::{Debug, Display};
 
-use crate::{err, impl_error, Error, ErrorTrait, Result};
+use crate::{Error, ErrorTrait, Result, err, impl_error};
 
 pub enum BufferMode {
     Write,

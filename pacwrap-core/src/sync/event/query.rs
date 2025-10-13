@@ -21,7 +21,7 @@ use std::path::Path;
 
 use alpm::{AnyQuestion, Question::*};
 
-use crate::{utils::prompt::prompt, ErrorGeneric};
+use crate::{ErrorGeneric, utils::prompt::prompt};
 
 pub fn callback(question: AnyQuestion, _: &mut ()) {
     match question.question() {

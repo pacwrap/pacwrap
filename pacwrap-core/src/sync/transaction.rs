@@ -26,20 +26,20 @@ use serde::{Deserialize, Serialize};
 
 use self::{SyncState::*, TransactionMode::*, TransactionType::*};
 use crate::{
-    config::{global, ContainerHandle, Global},
+    Error,
+    config::{ContainerHandle, Global, global},
     eprintln_warn,
     err,
     log::{Level, Logger},
     sync::{
+        SyncError,
         resolver::DependencyResolver,
         resolver_local::LocalDependencyResolver,
         schema::SchemaState,
         transaction::{commit::Commit, container::Schema, prepare::Prepare, stage::Stage, uptodate::UpToDate},
         utils::AlpmUtils,
-        SyncError,
     },
     utils::{ansi::*, prompt::prompt},
-    Error,
 };
 
 pub use self::aggregator::TransactionAggregator;

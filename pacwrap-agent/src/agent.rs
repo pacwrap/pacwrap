@@ -26,6 +26,9 @@ use std::{
 use serde::Deserialize;
 
 use pacwrap_core::{
+    Error,
+    ErrorGeneric,
+    Result,
     config::Global,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     eprintln_warn,
@@ -33,20 +36,17 @@ use pacwrap_core::{
     log::{Level, Logger},
     sync::{
         self,
+        AlpmConfigData,
+        SyncError,
         event::{
             download::{self, DownloadEvent},
             progress::{self, ProgressEvent},
             query,
         },
-        transaction::{TransactionHandle, TransactionMetadata, TransactionParameters, TransactionType, MAGIC_NUMBER},
+        transaction::{MAGIC_NUMBER, TransactionHandle, TransactionMetadata, TransactionParameters, TransactionType},
         utils::{erroneous_preparation, erroneous_transaction},
-        AlpmConfigData,
-        SyncError,
     },
     utils::{ansi::*, bytebuffer::ByteBuffer},
-    Error,
-    ErrorGeneric,
-    Result,
 };
 
 use crate::error::AgentError;

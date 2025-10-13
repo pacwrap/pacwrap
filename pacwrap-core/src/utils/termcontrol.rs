@@ -17,9 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use nix::sys::termios::{tcgetattr, tcsetattr, SetArg::TCSANOW, Termios};
+use nix::sys::termios::{SetArg::TCSANOW, Termios, tcgetattr, tcsetattr};
 
-use crate::{err, Error, ErrorKind, Result};
+use crate::{Error, ErrorKind, Result, err};
 
 /*******
  *

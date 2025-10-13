@@ -22,11 +22,11 @@ use std::fmt::{Display, Error as FmtError, Formatter};
 use dialoguer::console::Term;
 
 use crate::{
+    Error,
+    ErrorTrait,
     constants::{BOLD, BOLD_YELLOW, RESET, YELLOW},
     err,
     impl_error,
-    Error,
-    ErrorTrait,
 };
 
 #[derive(Debug)]

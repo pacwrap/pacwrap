@@ -22,14 +22,14 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
+    Result,
     config::{
-        filesystem::{BindError, Filesystem, Mount, Permission::ReadOnly},
         ContainerVariables,
+        filesystem::{BindError, Filesystem, Mount, Permission::ReadOnly},
     },
     err,
     exec::args::ExecutionArgs,
-    Error,
-    Result,
 };
 
 const VOLUMES: [&str; 2] = ["/usr", "/etc"];

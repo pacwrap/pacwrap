@@ -20,9 +20,11 @@
 use std::{os::unix::process::ExitStatusExt, process::Child};
 
 use crate::{
+    Error,
+    Result,
     config::{
-        global::{global, Global},
         ContainerHandle,
+        global::{Global, global},
     },
     constants::{BOLD, RESET},
     err,
@@ -30,6 +32,7 @@ use crate::{
     log::Level::Info,
     sync::{
         self,
+        SyncError,
         event::summary::Summary,
         transaction::{
             SyncState,
@@ -43,11 +46,8 @@ use crate::{
             TransactionType::{self, *},
         },
         utils::erroneous_preparation,
-        SyncError,
     },
     utils::prompt::prompt,
-    Error,
-    Result,
 };
 
 enum State {

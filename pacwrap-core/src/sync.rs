@@ -29,12 +29,16 @@ use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
+    ErrorGeneric,
+    ErrorTrait,
+    Result,
     config::{
-        global::{global, ProgressKind},
         ContainerHandle,
         ContainerType::*,
         ContainerVariables,
         Global,
+        global::{ProgressKind, global},
     },
     constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET, UNIX_TIMESTAMP, VERBOSE},
     err,
@@ -45,10 +49,6 @@ use crate::{
         transaction::{TransactionAggregator, TransactionFlags},
     },
     utils::{prompt::PromptError, unix_epoch_time},
-    Error,
-    ErrorGeneric,
-    ErrorTrait,
-    Result,
 };
 
 pub mod event;

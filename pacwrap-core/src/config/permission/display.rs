@@ -23,13 +23,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        Permission,
         filesystem::Permission::ReadOnly,
         permission::{
             Condition::{Success, SuccessWarn},
             PermError::Fail,
             *,
         },
-        Permission,
     },
     constants::{WAYLAND_DISPLAY, WAYLAND_SOCKET, X11_DISPLAY, XAUTHORITY, XDG_RUNTIME_DIR},
     exec::args::ExecutionArgs,

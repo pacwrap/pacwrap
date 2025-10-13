@@ -21,20 +21,20 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
+    Result,
     config::{
+        ContainerVariables,
         filesystem::{
             BindError,
             Filesystem,
             Mount,
             Permission::{self, ReadOnly},
         },
-        ContainerVariables,
     },
     constants::HOME,
     err,
     exec::args::ExecutionArgs,
-    Error,
-    Result,
 };
 
 const XDG_HOME_DIRS: [&str; 5] = ["Downloads", "Documents", "Pictures", "Videos", "Music"];

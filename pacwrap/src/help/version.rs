@@ -18,8 +18,8 @@
  */
 
 use pacwrap_core::{
-    utils::{ansi::is_truecolor_terminal, arguments::Operand, Arguments},
     Result,
+    utils::{Arguments, ansi::is_truecolor_terminal, arguments::Operand},
 };
 
 use crate::help::version_string;

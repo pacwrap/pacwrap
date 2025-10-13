@@ -18,9 +18,9 @@
  */
 
 use pacwrap_core::{
-    err,
-    utils::{arguments::Operand, Arguments},
     Error,
+    err,
+    utils::{Arguments, arguments::Operand},
 };
 
 use crate::error::AgentError;

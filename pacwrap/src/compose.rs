@@ -20,7 +20,12 @@
 use std::{collections::HashMap, path::Path};
 
 use pacwrap_core::{
-    config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType::*},
+    Error,
+    ErrorGeneric,
+    ErrorKind,
+    ErrorType,
+    Result,
+    config::{ContainerCache, ContainerHandle, ContainerType::*, cache, compose_handle, init::init},
     eprintln_warn,
     err,
     lock::Lock,
@@ -36,15 +41,10 @@ use pacwrap_core::{
         check_root,
         prompt::prompt_targets,
     },
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    ErrorType,
-    Result,
 };
 
 use crate::{
-    help::{help, HelpTopic},
+    help::{HelpTopic, help},
     utils::delete::delete_roots,
 };
 

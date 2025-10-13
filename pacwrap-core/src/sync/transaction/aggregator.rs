@@ -24,17 +24,20 @@ use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use signal_hook::iterator::Signals;
 
 use crate::{
-    config::{cache::ContainerCache, ContainerHandle, ContainerType::*},
+    Error,
+    Result,
+    config::{ContainerHandle, ContainerType::*, cache::ContainerCache},
     constants::{ARROW_GREEN, IS_COLOR_TERMINAL, SIGNAL_LIST, UNIX_TIMESTAMP, VERBOSE},
     err,
     error,
-    exec::{fakeroot_container, ExecutionType::NonInteractive},
+    exec::{ExecutionType::NonInteractive, fakeroot_container},
     lazy_lock,
     lock::{Lock, LockError},
     log::{Level, Logger},
     sync::{
         self,
-        filesystem::{validate_fs_states, FilesystemSync},
+        SyncError,
+        filesystem::{FilesystemSync, validate_fs_states},
         transaction::{
             Transaction,
             TransactionFlags,
@@ -44,11 +47,8 @@ use crate::{
             TransactionType::{self, *},
         },
         utils::signal_trap,
-        SyncError,
     },
     utils::arguments::InvalidArgument,
-    Error,
-    Result,
 };
 
 lazy_lock! {

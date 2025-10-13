@@ -24,15 +24,15 @@ use std::{
 };
 
 use crate::{
-    config::{ContainerHandle, ContainerType::Slice},
-    constants::{BOLD, RESET},
-    err,
-    exec::{ExecutionError, DIST_IMG},
-    impl_error,
     Error,
     ErrorGeneric,
     ErrorTrait,
     Result,
+    config::{ContainerHandle, ContainerType::Slice},
+    constants::{BOLD, RESET},
+    err,
+    exec::{DIST_IMG, ExecutionError},
+    impl_error,
 };
 
 #[derive(Debug, Clone)]

@@ -19,7 +19,7 @@
 
 use std::{
     fmt::{Display, Formatter},
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     os::unix::io::AsRawFd,
     path::Path,
     process::{Child, Command},
@@ -30,19 +30,24 @@ use std::{
 
 use command_fds::{CommandFdExt, FdMapping};
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use signal_hook::iterator::Signals;
 
 use pacwrap_core::{
+    Error,
+    ErrorGeneric,
+    ErrorKind,
+    ErrorTrait,
+    Result,
     config::{
         self,
-        filesystem::Permission::ReadOnly,
-        register::{register_dbus, register_filesystems, register_permissions},
         ContainerHandle,
         ContainerType::Slice,
         Dbus,
+        filesystem::Permission::ReadOnly,
+        register::{register_dbus, register_filesystems, register_permissions},
     },
     constants::{
         BWRAP_EXECUTABLE,
@@ -56,30 +61,25 @@ use pacwrap_core::{
     err,
     error,
     exec::{
+        ExecutionError,
+        ExecutionType::Interactive,
         args::{Argument, ExecutionArgs},
         fakeroot_container,
         path::check_path,
         seccomp::{configure_bpf_program, provide_bpf_program},
         utils::{decode_info_json, wait_on_container},
-        ExecutionError,
-        ExecutionType::Interactive,
     },
     impl_error,
     utils::{
         self,
+        TermControl,
         arguments::{Arguments, InvalidArgument, Operand as Op},
         check_root,
         env_var,
-        TermControl,
     },
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    ErrorTrait,
-    Result,
 };
 
-use crate::help::{help, HelpTopic};
+use crate::help::{HelpTopic, help};
 
 static SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 

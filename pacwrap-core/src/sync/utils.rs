@@ -31,7 +31,7 @@ use alpm::{
 };
 use signal_hook::iterator::Signals;
 
-use crate::{constants::SIGNAL_LIST, eprintln_error, eprintln_warn, err, error, sync::SyncError, utils::ansi::*, Error, Result};
+use crate::{Error, Result, constants::SIGNAL_LIST, eprintln_error, eprintln_warn, err, error, sync::SyncError, utils::ansi::*};
 
 pub trait AlpmUtils {
     fn get_local_package(&self, pkg: &str) -> Option<&Package>;

@@ -24,9 +24,9 @@ use serde_with::skip_serializing_none;
 
 use crate::{
     config::{
+        Permission,
         filesystem::Permission::ReadOnly,
         permission::{Condition::Success, PermError::Warn, *},
-        Permission,
     },
     constants::XDG_RUNTIME_DIR,
     exec::args::ExecutionArgs,

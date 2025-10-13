@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        permission::{Condition::Success, PermError::Fail, *},
         Permission,
+        permission::{Condition::Success, PermError::Fail, *},
     },
     exec::args::ExecutionArgs,
 };

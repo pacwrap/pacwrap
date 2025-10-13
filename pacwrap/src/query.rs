@@ -31,7 +31,7 @@ use pacwrap_core::{
     },
 };
 
-use crate::help::{help, HelpTopic};
+use crate::help::{HelpTopic, help};
 
 pub fn query(args: &mut Arguments) -> Result<()> {
     let mut flags: TransactionFlags = TransactionFlags::NONE;

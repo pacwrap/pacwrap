@@ -20,21 +20,21 @@
 use std::process::Command;
 
 use pacwrap_core::{
+    Error,
+    ErrorKind,
+    Result,
     config,
     eprintln_warn,
     err,
     utils::{
+        Arguments,
         ansi::*,
         arguments::{InvalidArgument, Operand},
-        Arguments,
     },
-    Error,
-    ErrorKind,
-    Result,
 };
 
 use crate::{
-    help::{help, HelpTopic},
+    help::{HelpTopic, help},
     utils::edit::EditKind,
 };
 

@@ -22,16 +22,16 @@ use std::{
     result::Result as StdResult,
 };
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 use serde::{
-    de::{Error as DeError, Visitor},
     Deserialize,
     Deserializer,
     Serialize,
     Serializer,
+    de::{Error as DeError, Visitor},
 };
 
-use crate::{config::ContainerVariables, exec::args::ExecutionArgs, impl_error, ErrorTrait, Result};
+use crate::{ErrorTrait, Result, config::ContainerVariables, exec::args::ExecutionArgs, impl_error};
 
 mod dir;
 pub mod home;

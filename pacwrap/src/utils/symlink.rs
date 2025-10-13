@@ -18,16 +18,16 @@
  */
 
 use pacwrap_core::{
-    config::{cache, ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables},
+    Error,
+    Result,
+    config::{ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables, cache},
     constants::{ARROW_CYAN, ARROW_GREEN, BOLD, RESET},
     err,
     sync::instantiate_container,
     utils::{
-        arguments::{InvalidArgument, Operand},
         Arguments,
+        arguments::{InvalidArgument, Operand},
     },
-    Error,
-    Result,
 };
 
 pub fn link(args: &mut Arguments) -> Result<()> {

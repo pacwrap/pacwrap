@@ -27,6 +27,10 @@ use std::{
 use command_fds::{CommandFdExt, FdMapping};
 
 use crate::{
+    Error,
+    ErrorKind,
+    ErrorTrait,
+    Result,
     config::{ContainerHandle, ContainerType},
     constants::{
         BOLD,
@@ -45,17 +49,13 @@ use crate::{
     },
     err,
     exec::{
-        seccomp::{provide_bpf_program, FilterType::*},
+        seccomp::{FilterType::*, provide_bpf_program},
         utils::{agent_params, decode_info_json, wait_on_fakeroot, wait_on_process},
     },
     lazy_lock,
     sync::transaction::{TransactionFlags, TransactionMetadata, TransactionParameters},
     to_static_str,
     utils::TermControl,
-    Error,
-    ErrorKind,
-    ErrorTrait,
-    Result,
 };
 
 pub mod args;

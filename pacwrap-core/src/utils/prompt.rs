@@ -23,18 +23,18 @@ use std::{
 };
 
 use dialoguer::{
-    console::{style, Style},
-    theme::ColorfulTheme,
     Input,
+    console::{Style, style},
+    theme::ColorfulTheme,
 };
 
 use crate::{
-    constants::{BAR_RED, BOLD, RESET},
-    err,
-    impl_error,
     Error,
     ErrorTrait,
     Result,
+    constants::{BAR_RED, BOLD, RESET},
+    err,
+    impl_error,
 };
 
 #[derive(Debug)]

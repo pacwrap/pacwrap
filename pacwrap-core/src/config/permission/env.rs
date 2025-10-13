@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        permission::{Condition::Success, *},
         Permission,
+        permission::{Condition::Success, *},
     },
     eprintln_warn,
     exec::args::ExecutionArgs,

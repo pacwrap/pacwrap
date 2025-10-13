@@ -22,10 +22,10 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{load_config, save},
     constants::CONFIG_FILE,
     sync::event::summary::SummaryKind,
-    Result,
 };
 
 static CONFIG: OnceLock<Global> = OnceLock::new();

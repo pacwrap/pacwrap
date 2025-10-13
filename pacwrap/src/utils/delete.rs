@@ -24,20 +24,20 @@ use std::{
 };
 
 use pacwrap_core::{
-    config::{cache, ContainerCache},
-    constants::{ARROW_GREEN, BOLD, DATA_DIR, RESET},
-    err,
-    impl_error,
-    lock::Lock,
-    log::{Level::Info, Logger},
-    process,
-    utils::{arguments::Operand, prompt::prompt_targets, Arguments},
     Error,
     ErrorGeneric,
     ErrorKind,
     ErrorTrait,
     ErrorType,
     Result,
+    config::{ContainerCache, cache},
+    constants::{ARROW_GREEN, BOLD, DATA_DIR, RESET},
+    err,
+    impl_error,
+    lock::Lock,
+    log::{Level::Info, Logger},
+    process,
+    utils::{Arguments, arguments::Operand, prompt::prompt_targets},
 };
 
 #[derive(Debug)]

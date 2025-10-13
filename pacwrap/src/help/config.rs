@@ -19,7 +19,7 @@
 
 use std::fmt::{Result, Write};
 
-use crate::help::{version_string, HelpLayout, HelpObject};
+use crate::help::{HelpLayout, HelpObject, version_string};
 
 pub struct PacwrapYml;
 

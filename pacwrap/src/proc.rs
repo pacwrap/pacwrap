@@ -24,10 +24,14 @@ use std::{
 
 use indexmap::IndexMap;
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use pacwrap_core::{
+    Error,
+    ErrorGeneric,
+    ErrorTrait,
+    Result,
     config::cache,
     constants::{ARROW_GREEN, BOLD, DIM, RESET},
     eprintln_warn,
@@ -35,19 +39,15 @@ use pacwrap_core::{
     impl_error,
     process::{self, Process},
     utils::{
+        Arguments,
         ansi::*,
         arguments::{InvalidArgument, Operand},
         prompt::prompt_targets,
         table::{ColumnAttribute, Table},
-        Arguments,
     },
-    Error,
-    ErrorGeneric,
-    ErrorTrait,
-    Result,
 };
 
-use crate::help::{help, HelpTopic};
+use crate::help::{HelpTopic, help};
 
 #[derive(Debug)]
 pub enum ProcError {

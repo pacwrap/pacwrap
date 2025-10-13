@@ -17,11 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::{
+    Error,
+    Result,
     config::{ContainerHandle, ContainerType},
     constants::UNIX_TIMESTAMP,
     err,
     sync::{
         self,
+        SyncError,
         schema::{self, *},
         transaction::{
             SyncState::*,
@@ -33,10 +36,7 @@ use crate::{
             TransactionState::{self, *},
             TransactionType::*,
         },
-        SyncError,
     },
-    Error,
-    Result,
 };
 
 #[derive(Debug)]

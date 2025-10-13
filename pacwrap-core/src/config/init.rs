@@ -20,12 +20,12 @@
 use std::{fs::File, io::Write, path::Path};
 
 use crate::{
-    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
-    err,
     Error,
     ErrorGeneric,
     ErrorKind,
     Result,
+    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
+    err,
 };
 
 static REPO_CONF_DEFAULT: &str = include_str!(env!("PACWRAP_DIST_REPO_CONF"));
