@@ -118,18 +118,18 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
     };
     let containers = &format!("Containers ({})", handles.len());
     let mut container_sizes: HashMap<&str, (i64, i64)> = HashMap::new();
+    let mut table_header: Vec<&str> = vec![];
     let mut actual_size = 0;
     let mut total_size = 0;
-    let mut table_header: Vec<&str> = vec![];
 
     for column in &table_type {
-        match column {
-            Name => table_header.push(containers),
-            Type => table_header.push("Type"),
-            Total(_) => table_header.push("Total"),
-            Organic(_) => table_header.push("Size on Disk"),
+        table_header.push(match column {
+            Name => containers,
+            Type => "Type",
+            Total(_) => "Total",
+            Organic(_) => "Size on Disk",
             _ => continue,
-        }
+        })
     }
 
     let mut table = Table::new().header(&table_header).spacing(4);
@@ -169,19 +169,19 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
         let mut row = vec![];
 
         for column in &table_type {
-            match column {
-                Name => row.push(container_name.to_string()),
-                Type => row.push(container_type.to_string()),
-                Total(bytes) => row.push(match bytes {
+            row.push(match column {
+                Name => container_name.to_string(),
+                Type => container_type.to_string(),
+                Total(bytes) => match bytes {
                     false => total.to_byteunit(SI).to_string(),
                     true => total.to_string(),
-                }),
-                Organic(bytes) => row.push(match bytes {
+                },
+                Organic(bytes) => match bytes {
                     false => organic.to_byteunit(SI).to_string(),
                     true => organic.to_string(),
-                }),
+                },
                 _ => continue,
-            }
+            });
         }
 
         table.insert(row);

@@ -93,7 +93,7 @@ pub fn transact() -> Result<()> {
 fn conduct_transaction(
     config: &Global,
     logger: &mut Logger,
-    handle: &mut TransactionHandle,
+    handle: &'_ mut TransactionHandle<'_>,
     agent: TransactionParameters,
 ) -> Result<()> {
     let flags = handle.metadata().retrieve_flags();

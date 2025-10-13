@@ -560,7 +560,7 @@ impl<'a> TransactionHandle<'a> {
         self.alpm = alpm;
     }
 
-    pub fn metadata(&self) -> &TransactionMetadata {
+    pub fn metadata(&'_ self) -> &'_ TransactionMetadata<'_> {
         self.meta
     }
 }

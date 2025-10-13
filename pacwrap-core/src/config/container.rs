@@ -121,7 +121,7 @@ impl<'a> ContainerHandle<'a> {
         &mut self.inner.metadata
     }
 
-    pub fn metadata(&self) -> &ContainerMetadata {
+    pub fn metadata(&'a self) -> &'a ContainerMetadata<'a> {
         &self.inner.metadata
     }
 

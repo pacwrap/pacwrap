@@ -4,8 +4,8 @@ members = ["pacwrap", "pacwrap-agent", "pacwrap-core"]
 
 [workspace.package]
 version = "0.8.7"
-edition = "2021"
-rust-version = "1.80"
+edition = "2024"
+rust-version = "1.85"
 readme = "README.md"
 
 license = "GPL-3.0-only"

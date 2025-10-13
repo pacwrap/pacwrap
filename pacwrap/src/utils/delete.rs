@@ -107,7 +107,7 @@ pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger
     let containers = cache.filter_target_handle(targets, vec![]);
 
     if !processes.is_empty() && !force {
-        for process in processes {
+        if let Some(process) = processes.first() {
             err!(DeleteError::ContainerRunning(process.instance().to_string()))?;
         }
     }

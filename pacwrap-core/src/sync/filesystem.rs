@@ -397,7 +397,7 @@ impl<'a> FilesystemSync<'a> {
             err!(SyncError::from(&err))?;
         }
 
-        for _ in self.signals.pending() {
+        if self.signals.pending().next().is_some() {
             self.discard_state()?;
             err!(SyncError::SignalInterrupt)?;
         }

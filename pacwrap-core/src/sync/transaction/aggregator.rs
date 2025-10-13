@@ -339,7 +339,7 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     fn signal(&mut self, handle: &mut Option<Alpm>) -> Result<()> {
-        for _ in self.signals.pending() {
+        if self.signals.pending().next().is_some() {
             if let Some(handle) = handle {
                 handle.trans_interrupt().ok();
             }
@@ -360,7 +360,7 @@ impl<'a> TransactionAggregator<'a> {
         self.lock.map_or_else(|| err!(LockError::NotAcquired), Ok)
     }
 
-    pub fn cache(&self) -> &ContainerCache {
+    pub fn cache(&'a self) -> &'a ContainerCache<'a> {
         self.cache
     }
 

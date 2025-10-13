@@ -87,7 +87,7 @@ impl From<&Error> for ConfigError {
     }
 }
 
-pub fn provide_handle(instance: &str) -> Result<ContainerHandle> {
+pub fn provide_handle<'a>(instance: &str) -> Result<ContainerHandle<'a>> {
     let vars = ContainerVariables::new(instance);
 
     if !Path::new(vars.root()).exists() {

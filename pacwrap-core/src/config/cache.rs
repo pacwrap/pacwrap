@@ -107,7 +107,7 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().map(|a| a.1).collect()
     }
 
-    pub fn filter_target(&'a self, target: &[&'a str], filter: Vec<ContainerType>) -> Vec<&'a str> {
+    pub fn filter_target(&'_ self, target: &[&'_ str], filter: Vec<ContainerType>) -> Vec<&'_ str> {
         self.instances
             .iter()
             .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
@@ -115,7 +115,7 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn filter_target_handle(&'a self, target: &[&'a str], filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+    pub fn filter_target_handle(&'_ self, target: &[&'_ str], filter: Vec<ContainerType>) -> Vec<&'_ ContainerHandle<'_>> {
         self.instances
             .iter()
             .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
@@ -127,7 +127,7 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().filter(|a| filter.contains(a.1.metadata().container_type())).count()
     }
 
-    pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'a str> {
+    pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'_ str> {
         self.instances
             .iter()
             .filter(|a| filter.contains(a.1.metadata().container_type()))
@@ -135,7 +135,7 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn filter_handle(&'a self, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+    pub fn filter_handle(&'_ self, filter: Vec<ContainerType>) -> Vec<&'_ ContainerHandle<'_>> {
         self.instances
             .iter()
             .filter(|a| filter.contains(a.1.metadata().container_type()))
@@ -143,21 +143,21 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn obtain_base_handle(&self) -> Option<&ContainerHandle> {
+    pub fn obtain_base_handle(&'_ self) -> Option<&'_ ContainerHandle<'_>> {
         self.filter_handle(vec![ContainerType::Base])
             .iter()
             .find(|a| Path::new(a.vars().root()).exists())
             .copied()
     }
 
-    pub fn get_instance(&self, ins: &str) -> Result<&ContainerHandle> {
+    pub fn get_instance(&'_ self, ins: &'_ str) -> Result<&'_ ContainerHandle<'_>> {
         match self.instances.get(ins) {
             Some(ins) => Ok(ins),
             None => err!(ErrorKind::InstanceNotFound(ins.into())),
         }
     }
 
-    pub fn get_instance_option(&self, ins: &str) -> Option<&ContainerHandle> {
+    pub fn get_instance_option(&'_ self, ins: &'_ str) -> Option<&'a ContainerHandle<'_>> {
         self.instances.get(ins)
     }
 }

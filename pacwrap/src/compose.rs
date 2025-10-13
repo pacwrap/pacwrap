@@ -213,7 +213,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
             Op::LongPos(_, config) | Op::ShortPos(_, config) | Op::Value(config) => {
                 let target = match current_target {
                     Some(target) => target,
-                    None => match config.char_indices().filter(|a| a.1 == '.').last() {
+                    None => match config.char_indices().filter(|a| a.1 == '.').next_back() {
                         Some((index, ..)) => config.split_at(index).0,
                         None => config,
                     },
