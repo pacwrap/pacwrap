@@ -20,26 +20,26 @@
 use regex::Regex;
 use std::{
     cmp::Ordering::{self, *},
-    fs::{read_dir, remove_file, File},
+    fs::{File, read_dir, remove_file},
     io::{Read, Write},
     result::Result as StdResult,
 };
 
 use pacwrap_core::{
-    config::{provide_handle, ContainerHandle},
-    constants::{ARROW_GREEN, HOME},
-    err,
-    exec::path::resolve_path,
-    utils::{arguments::Operand, table::Table, Arguments},
     Error,
     ErrorGeneric,
     ErrorKind,
     Result,
+    config::{ContainerHandle, provide_handle},
+    constants::{ARROW_GREEN, HOME},
+    err,
+    exec::path::resolve_path,
+    utils::{Arguments, arguments::Operand, table::Table},
 };
 
 use crate::{
-    help::{help, HelpTopic},
-    utils::edit::{edit_file, EditKind},
+    help::{HelpTopic, help},
+    utils::edit::{EditKind, edit_file},
 };
 
 const GLOBAL_APP_DIR: &str = "/usr/share/applications";
@@ -307,11 +307,11 @@ fn create_desktop_entry(handle: &ContainerHandle, file_name: &str, target: &str)
     contents.push_str(&format!("\n[pacwrap]\ncontainer={target}"));
 
     let file_name = &file_name[.. file_name.len() - 8];
-    let desktop_file = &format!("{}{LOCAL_APP_DIR}/{file_name}.pacwrap.desktop", *HOME);
+    let desktop_file = &format!("{}{LOCAL_APP_DIR}/pacwrap.{file_name}.desktop", *HOME);
     let mut output = File::create(desktop_file).prepend_io(|| desktop_file)?;
 
     write!(output, "{}", contents).prepend_io(|| desktop_file)?;
-    eprintln!("{} Created '{file_name}.pacwrap.desktop'.", *ARROW_GREEN);
+    eprintln!("{} Created 'pacwrap.{file_name}.desktop'.", *ARROW_GREEN);
     Ok(())
 }
 
@@ -324,7 +324,7 @@ fn desktop_entries<'a>(meta: &DesktopMeta<'a>, predicate: &str) -> Result<Vec<De
             let file = file.to_string_lossy();
             let name = file.split_at(file.len() - 8).0;
 
-            if name.starts_with(predicate) || name.starts_with(predicate) {
+            if name.ends_with(&(predicate.to_string() + ".desktop")) || name.starts_with(&("pacwrap.".to_string() + predicate)) {
                 Some(file.to_string())
             } else {
                 None
