@@ -23,8 +23,6 @@ use alpm::{
     Alpm,
     CommitData,
     CommitError,
-    Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps},
-    FileConflictType,
     Package,
     PrepareData,
     PrepareError,
@@ -70,44 +68,20 @@ impl AlpmUtils for Alpm {
 }
 
 pub fn erroneous_transaction(error: CommitError) -> Result<()> {
-    /*
-     * Qualify error type to ensure no segfault for error conditions of which are
-     * unhandled by the upstream data function provided by the CommitError impl.
-     *
-     * TODO: Possibly submit PR upstream to provide Option encapsulate with None
-     * instead of hint::unreachable_unchecked?
-     *
-     * Then the following block of code could be structured like:
-     *
-     * ```
-     * if let Some(data) = error.data() {
-     *  match data {
-     *      _ => ()
-     *  }
-     * }
-     * ```
-     */
-    if let PkgInvalid | PkgInvalidSig | PkgInvalidChecksum | FileConflicts = error.error() {
-        match error.data() {
+    if let Some(data) = error.data() {
+        match data {
             CommitData::FileConflict(file) => {
                 for conflict in file {
-                    match conflict.conflict_type() {
-                        FileConflictType::Filesystem => {
-                            let file = conflict.file();
-                            let target = conflict.target();
-                            eprintln_warn!("{}: '{}' already exists.", target, file);
-                        }
-                        FileConflictType::Target => {
-                            let file = conflict.file();
-                            let target = format!("{}{}{}", *BOLD_WHITE, conflict.target(), *RESET);
-                            if let Some(conflicting) = conflict.conflicting_target() {
-                                let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
-                                eprintln_warn!("{conflicting}: '{target}' is owned by {file}");
-                            } else {
-                                eprintln_warn!("{target}: '{file}' is owned by foreign target");
-                            }
-                        }
-                    }
+                    eprintln_warn!(
+                        "Conflict between {}{}{} and {}{}{}: {}",
+                        *BOLD,
+                        conflict.package1().name(),
+                        *RESET,
+                        *BOLD,
+                        conflict.package2().name(),
+                        *RESET,
+                        conflict.reason()
+                    );
                 }
 
                 err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
@@ -123,25 +97,8 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
 }
 
 pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
-    /*
-     * Qualify error type to ensure no segfault for error conditions of which are
-     * unhandled by the upstream data function provided by the PrepareError impl.
-     *
-     * TODO: Possibly submit PR upstream to provide Option encapsulate with None
-     * instead of hint::unreachable_unchecked?
-     *
-     * Then the following block of code could be structured like:
-     *
-     * ```
-     * if let Some(data) = error.data() {
-     *  match data {
-     *      _ => ()
-     *  }
-     * }
-     * ```
-     */
-    if let PkgInvalidArch | UnsatisfiedDeps | ConflictingDeps = error.error() {
-        match error.data() {
+    if let Some(data) = error.data() {
+        match data {
             PrepareData::PkgInvalidArch(list) =>
                 for package in list.iter() {
                     eprintln_error!(

@@ -216,7 +216,7 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transfl
     }
 
     if disable_sandbox {
-        handle.set_disable_sandbox(true);
+        handle.set_disable_sandbox_syscalls(true);
         handle.set_sandbox_user(None::<&str>).expect("set sandbox user");
     }
 
@@ -251,7 +251,7 @@ fn alpm_handle(
     }
 
     if disable_sandbox {
-        handle.set_disable_sandbox(true);
+        handle.set_disable_sandbox_syscalls(true);
         handle.set_sandbox_user(None::<&str>).expect("set sandbox user");
     }
 

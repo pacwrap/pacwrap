@@ -18,7 +18,7 @@ repository = "https://github.com/pacwrap/pacwrap"
 
 [workspace.dependencies]
 pacwrap-core = { version = "0.8.7", path = "pacwrap-core" }
-alpm = { version = "4.0.1", features = ["checkver"] }
+alpm = { version = "5.0.0", features = ["checkver"] }
 
 [profile.release]
 lto = "thin"
