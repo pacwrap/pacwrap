@@ -59,7 +59,7 @@ use crate::{
     utils::bytebuffer::ByteBuffer,
 };
 
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const MAGIC_NUMBER: u32 = 408948530;
 const BYTE_LIMIT: u64 = 134217728;
 
@@ -299,27 +299,23 @@ impl<'a> FilesystemSync<'a> {
 
         if magic != MAGIC_NUMBER {
             err!(FilesystemSyncError::MagicMismatch(path.into(), magic))?
-        } else if version != VERSION {
-            let state = match version {
-                1 => deserialize::<File, FileSystemState>(instance, file)?,
-                _ => err!(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
-            };
-
-            self.state_map_prev.insert(instance.clone(), Some(state.clone()));
-            Ok(Some(state))
-        } else {
-            let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path)?;
-
-            if !checksum_valid {
-                err!(FilesystemSyncError::ChecksumMismatch(path.into()))?
-            }
-
-            let buf_reader = BufReader::new(state_buffer.as_slice());
-            let state = deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?;
-
-            self.state_map_prev.insert(instance.clone(), Some(state.clone()));
-            Ok(Some(state))
         }
+
+        let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path)?;
+
+        if !checksum_valid {
+            err!(FilesystemSyncError::ChecksumMismatch(path.into()))?
+        }
+
+        let buf_reader = BufReader::new(state_buffer.as_slice());
+        let state = match version {
+            1 | 2 => bincode_deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?,
+            3 => deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?,
+            _ => err!(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
+        };
+
+        self.state_map_prev.insert(instance.clone(), Some(state.clone()));
+        Ok(Some(state))
     }
 
     fn blank_state(&mut self, instance: &Arc<str>) -> Option<FileSystemState> {
@@ -524,7 +520,18 @@ pub fn create_blank_state(container: &str) -> Result<()> {
     serialize(&format!("{}/state/{}.dat", *DATA_DIR, container), FileSystemState::new())
 }
 
-fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T> {
+fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, mut reader: R) -> Result<T> {
+    let mut bytes = Vec::new();
+
+    reader.read_to_end(&mut bytes)?;
+
+    match postcard::from_bytes(&bytes) {
+        Ok(state) => Ok(state),
+        Err(err) => err!(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string())),
+    }
+}
+
+fn bincode_deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T> {
     match bincode::options()
         .with_fixint_encoding()
         .allow_trailing_bytes()
@@ -538,16 +545,10 @@ fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R)
 
 fn serialize(path: &str, ds: FileSystemState) -> Result<()> {
     let mut hasher = Sha256::new();
-    let mut state_data = Vec::new();
-
-    if let Err(err) = bincode::options()
-        .with_fixint_encoding()
-        .allow_trailing_bytes()
-        .with_limit(BYTE_LIMIT)
-        .serialize_into(&mut state_data, &ds)
-    {
-        err!(FilesystemSyncError::SerializationFailure(path.into(), err.as_ref().to_string()))?
-    }
+    let state_data = match postcard::to_allocvec(&ds) {
+        Ok(vec) => vec,
+        Err(err) => err!(FilesystemSyncError::SerializationFailure(path.into(), err.to_string()))?,
+    };
 
     copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| path)?;
     encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| path)?;
