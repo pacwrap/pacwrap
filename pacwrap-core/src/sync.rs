@@ -58,7 +58,6 @@ pub mod transaction;
 pub mod utils;
 
 mod resolver;
-mod resolver_local;
 
 static PACMAN_CONFIG: OnceLock<pacmanconf::Config> = OnceLock::new();
 static ALPM_CONFIG_DATA: OnceLock<AlpmConfigData> = OnceLock::new();

@@ -33,8 +33,7 @@ use crate::{
     log::{Level, Logger},
     sync::{
         SyncError,
-        resolver::DependencyResolver,
-        resolver_local::LocalDependencyResolver,
+        resolver::{Resolver, ResolverFlags, ResolverKeys, local::LocalDependencyResolver, remote::DependencyResolver},
         schema::SchemaState,
         transaction::{commit::Commit, container::Schema, prepare::Prepare, stage::Stage, uptodate::UpToDate},
         utils::AlpmUtils,
@@ -431,8 +430,11 @@ impl<'a> TransactionHandle<'a> {
                     err!(SyncError::TargetNotInstalled(not_installed.into()))?
                 }
 
-                for pkg in LocalDependencyResolver::new(alpm, ignored, trans_type)
+                for pkg in LocalDependencyResolver::new(alpm)
+                    .set_ignored(ignored)
+                    .set_flags(trans_type)
                     .enumerate(&queue)?
+                    .packages()
                     .iter()
                     .filter(|a| !self.meta.held_pkgs.contains(a.name()))
                     .copied()
@@ -455,9 +457,10 @@ impl<'a> TransactionHandle<'a> {
                     err!(SyncError::TargetNotAvailable(not_available.into()))?
                 }
 
-                let (deps, packages) = DependencyResolver::new(alpm, ignored).enumerate(&queue)?;
+                let resolver = DependencyResolver::new(alpm).set_ignored(ignored).enumerate(&queue)?;
 
-                for pkg in packages
+                for pkg in resolver
+                    .packages()
                     .iter()
                     .filter(|a| !self.meta.ignored_pkgs.contains(a.name()))
                     .filter_map(|a| {
@@ -480,7 +483,7 @@ impl<'a> TransactionHandle<'a> {
                     alpm.trans_add_pkg(pkg).unwrap();
                 }
 
-                self.deps = deps;
+                self.deps = resolver.keys();
             }
         }
 
