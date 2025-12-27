@@ -19,14 +19,7 @@
 
 use std::thread::Builder;
 
-use alpm::{
-    Alpm,
-    CommitData,
-    CommitError,
-    Package,
-    PrepareData,
-    PrepareError,
-};
+use alpm::{Alpm, CommitData, CommitError, Package, PrepareData, PrepareError};
 use signal_hook::iterator::Signals;
 
 use crate::{Error, Result, constants::SIGNAL_LIST, eprintln_error, eprintln_warn, err, error, sync::SyncError, utils::ansi::*};

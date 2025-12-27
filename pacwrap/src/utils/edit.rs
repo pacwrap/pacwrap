@@ -32,7 +32,7 @@ use pacwrap_core::{
     lock::Lock,
     utils::{Arguments, arguments::Operand},
 };
-use rand::distributions::{Alphanumeric, DistString};
+use rand::distr::{Alphanumeric, SampleString};
 use sha2::{Digest, Sha256};
 
 pub enum EditKind {
@@ -135,7 +135,7 @@ pub fn edit(args: &mut Arguments, edit_type: EditKind) -> Result<()> {
 }
 
 pub fn edit_file(file: &str, ext: &str, edit_type: &EditKind, lock: Option<&Lock>) -> Result<()> {
-    let prs = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+    let prs = Alphanumeric.sample_string(&mut rand::rng(), 10);
     let temporary_file = &format!("/tmp/tmp.{}{}", prs, ext);
     let edit = matches!(edit_type, EditKind::Edit);
 
