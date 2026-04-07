@@ -322,9 +322,13 @@ fn desktop_entries<'a>(meta: &DesktopMeta<'a>, predicate: &str) -> Result<Vec<De
         .filter_map(|entry| {
             let file = entry.file_name();
             let file = file.to_string_lossy();
-            let name = file.split_at(file.len() - 8).0;
+            let name = file.split_at(8).1;
+            let is_desktop = entry.path().extension().is_some_and(|e| e == "desktop");
+            let is_pacwrap = meta
+                .handle
+                .map_or(file.starts_with("pacwrap.") && name.starts_with(predicate), |_| file.starts_with(predicate));
 
-            if name.ends_with(&(predicate.to_string() + ".desktop")) || name.starts_with(&("pacwrap.".to_string() + predicate)) {
+            if is_desktop && is_pacwrap {
                 Some(file.to_string())
             } else {
                 None
