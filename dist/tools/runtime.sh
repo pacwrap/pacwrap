@@ -110,6 +110,7 @@ LIB_BINS=(
     "ls"
     "gpg"
     "grep"
+    "sed"
 )
 
 #
