@@ -19,7 +19,8 @@
 
 use std::{
     fmt::{Display, Formatter},
-    fs::{remove_dir_all, remove_file},
+    fs::{Permissions, remove_dir_all, remove_file, set_permissions},
+    os::unix::fs::PermissionsExt,
     path::Path,
 };
 
@@ -39,6 +40,7 @@ use pacwrap_core::{
     process,
     utils::{Arguments, arguments::Operand, prompt::prompt_targets},
 };
+use walkdir::WalkDir;
 
 #[derive(Debug)]
 enum DeleteError {
@@ -118,6 +120,17 @@ pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger
         let state = format!("{}/state/{instance}.dat", *DATA_DIR);
 
         lock.assert()?;
+
+        for entry in WalkDir::new(root) {
+            let Ok(path) = entry else {
+                continue;
+            };
+            let path = path.path();
+            let permissions = Permissions::from_mode(0o755);
+
+            set_permissions(path, permissions).ok();
+        }
+
         remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}'"))?;
 
         if Path::new(&state).exists() {

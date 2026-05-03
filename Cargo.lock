@@ -717,6 +717,7 @@ dependencies = [
  "sha2",
  "signal-hook",
  "simplebyteunit",
+ "walkdir",
 ]
 
 [[package]]

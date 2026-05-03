@@ -20,6 +20,7 @@ repository = "https://github.com/pacwrap/pacwrap"
 pacwrap-core = { version = "0.8.7", path = "pacwrap-core" }
 alpm = { version = "5.0.0", features = ["checkver"] }
 simplebyteunit = "0.3.0"
+walkdir = "2.3"
 
 [profile.release]
 lto = "thin"
