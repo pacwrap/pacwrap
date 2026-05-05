@@ -19,6 +19,7 @@
 
 use pacwrap_core::{
     Error,
+    ErrorExt,
     err,
     utils::{Arguments, arguments::Operand},
 };

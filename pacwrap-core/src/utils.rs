@@ -54,7 +54,7 @@ macro_rules! lazy_lock {
 #[macro_export]
 macro_rules! eprintln_warn {
     ( $( $x:expr ),+ ) => {
-        eprint!("{}warning:{} ", *BOLD_YELLOW, *RESET);
+        eprint!("{}warning:{} ", *$crate::utils::ansi::BOLD_YELLOW, *$crate::utils::ansi::RESET);
         eprintln!($( $x, )+);
     };
 }
@@ -62,7 +62,15 @@ macro_rules! eprintln_warn {
 #[macro_export]
 macro_rules! eprintln_error {
     ( $( $x:expr ),+ ) => {
-        eprint!("{}error:{} ", *BOLD_RED, *RESET);
+        eprint!("{}error:{} ", *$crate::utils::ansi::BOLD_RED, *$crate::utils::ansi::RESET);
+        eprintln!($( $x, )+);
+    };
+}
+
+#[macro_export]
+macro_rules! eprintln_fatal {
+    ( $( $x:expr ),+ ) => {
+        eprint!("{}fatal:{} ", *$crate::utils::ansi::BOLD_RED, *$crate::utils::ansi::RESET);
         eprintln!($( $x, )+);
     };
 }

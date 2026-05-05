@@ -22,7 +22,7 @@ use std::{env::var, process::id, time::Duration};
 use nix::unistd::{getegid, geteuid};
 use signal_hook::consts::*;
 
-use crate::{Error, ErrorKind, error, format_static, lazy_lock, utils::unix_epoch_time};
+use crate::{ErrorExt, ErrorKind, format_static, lazy_lock, utils::unix_epoch_time};
 
 pub use crate::utils::ansi::*;
 
@@ -69,7 +69,7 @@ lazy_lock! {
 }
 
 fn env(env: &'static str) -> &'static str {
-    var(env).map_or_else(|_| error!(ErrorKind::EnvVarUnset(env)).fatal(), |var| var.leak())
+    var(env).map_or_else(|_| ErrorKind::EnvVarUnset(env).fatal(), |var| var.leak())
 }
 
 fn env_opt(env: &str) -> &'static str {

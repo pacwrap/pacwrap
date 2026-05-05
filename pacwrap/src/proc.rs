@@ -29,6 +29,7 @@ use nix::{
 };
 use pacwrap_core::{
     Error,
+    ErrorExt,
     ErrorGeneric,
     ErrorTrait,
     Result,
@@ -40,7 +41,6 @@ use pacwrap_core::{
     process::{self, Process},
     utils::{
         Arguments,
-        ansi::*,
         arguments::{InvalidArgument, Operand},
         prompt::prompt_targets,
         table::{ColumnAttribute, Table},

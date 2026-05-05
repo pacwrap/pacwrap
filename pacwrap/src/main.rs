@@ -17,7 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use pacwrap_core::utils::arguments::{Arguments, Operand as Op};
+use pacwrap_core::{
+    ErrorExt,
+    utils::arguments::{Arguments, Operand as Op},
+};
 use utils::desktop;
 
 use crate::{help::HelpTopic, utils::list};

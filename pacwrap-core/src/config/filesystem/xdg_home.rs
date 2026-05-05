@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Error,
+    ErrorExt,
     Result,
     config::{
         ContainerVariables,

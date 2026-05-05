@@ -18,33 +18,21 @@
  */
 
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     fs::{File, remove_file},
     os::unix::fs::MetadataExt,
     path::Path,
 };
 
+use thiserror::Error as ThisError;
+
 use crate::{Error, ErrorGeneric, ErrorTrait, Result, constants::LOCK_FILE, err, impl_error};
 
-#[derive(Debug)]
+#[derive(ThisError, Debug)]
 pub enum LockError {
+    #[error("Lock file is present: '{0}'")]
     Locked(&'static str),
+    #[error("Lock not acquired.")]
     NotAcquired,
-}
-
-impl Display for LockError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::Locked(lock) => write!(fmter, "Lock file is present: '{}'", lock),
-            Self::NotAcquired => write!(fmter, "Lock not acquired."),
-        }?;
-
-        if let Self::Locked(_) = self {
-            write!(fmter, "\nTry 'pacwrap -h' for more information on valid operational parameters.")?
-        }
-
-        Ok(())
-    }
 }
 
 impl_error!(LockError);

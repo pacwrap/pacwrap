@@ -25,7 +25,12 @@ use std::{
     result::Result as StdResult,
 };
 
-use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
+use crate::{
+    constants::{BOLD_RED, BOLD_YELLOW, RESET},
+    eprintln_error,
+    eprintln_fatal,
+    eprintln_warn,
+};
 
 pub type Result<T> = StdResult<T, Error>;
 
@@ -56,6 +61,12 @@ macro_rules! impl_error {
 
 pub trait ErrorTrait: Debug + Display + Downcast {
     fn code(&self) -> i32;
+}
+
+pub trait ErrorExt {
+    fn fatal(&self) -> !;
+    fn error(&self) -> !;
+    fn warn(&self);
 }
 
 pub trait Downcast {
@@ -95,20 +106,6 @@ pub struct Error {
 impl Error {
     pub fn new(err: Box<dyn ErrorTrait>) -> Self {
         Self { kind: err }
-    }
-
-    pub fn fatal(&self) -> ! {
-        eprintln!("{}", ErrorType::Fatal(self));
-        exit(self.kind.code())
-    }
-
-    pub fn error(&self) -> ! {
-        eprintln!("{}", ErrorType::Error(self));
-        exit(self.kind.code())
-    }
-
-    pub fn warn(&self) {
-        eprintln!("{}", ErrorType::Warn(self))
     }
 
     #[allow(clippy::borrowed_box)]
@@ -166,6 +163,39 @@ where
 
     fn generic(self) -> Result<R> {
         self.prepend(|| "An error has occurred")
+    }
+}
+
+impl ErrorExt for Error {
+    fn fatal(&self) -> ! {
+        self.kind().fatal()
+    }
+
+    fn error(&self) -> ! {
+        self.kind().error()
+    }
+
+    fn warn(&self) {
+        self.kind().warn()
+    }
+}
+
+impl<T> ErrorExt for T
+where
+    T: ErrorTrait + ?Sized,
+{
+    fn fatal(&self) -> ! {
+        eprintln_fatal!("{self}");
+        exit(self.code())
+    }
+
+    fn error(&self) -> ! {
+        eprintln_error!("{self}");
+        exit(self.code())
+    }
+
+    fn warn(&self) {
+        eprintln_warn!("{self}");
     }
 }
 

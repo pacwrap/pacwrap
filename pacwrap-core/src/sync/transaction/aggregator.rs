@@ -25,6 +25,7 @@ use signal_hook::iterator::Signals;
 
 use crate::{
     Error,
+    ErrorExt,
     Result,
     config::{ContainerHandle, ContainerType::*, cache::ContainerCache},
     constants::{ARROW_GREEN, IS_COLOR_TERMINAL, SIGNAL_LIST, UNIX_TIMESTAMP, VERBOSE},

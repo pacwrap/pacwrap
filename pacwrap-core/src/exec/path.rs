@@ -18,10 +18,11 @@
  */
 
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     io::ErrorKind::NotFound,
     path::{Path, PathBuf},
 };
+
+use thiserror::Error as ThisError;
 
 use crate::{
     Error,
@@ -35,21 +36,14 @@ use crate::{
     impl_error,
 };
 
-#[derive(Debug, Clone)]
+#[derive(ThisError, Debug, Clone)]
 pub enum PathError {
+    #[error("'{0}': {bold}PATH{reset} variable must be absolute", bold=*BOLD, reset=*RESET)]
     UnabsolutePath(String),
+    #[error("'{0}': Executable path must be absolute.")]
     UnabsoluteExec(String),
+    #[error("'{0}': No such file or directory in container.")]
     PathUnresolvable(String),
-}
-
-impl Display for PathError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::UnabsolutePath(path) => write!(fmter, "'{}': {}PATH{} variable must be absolute", path, *BOLD, *RESET),
-            Self::UnabsoluteExec(path) => write!(fmter, "'{}': Executable path must be absolute.", path),
-            Self::PathUnresolvable(path) => write!(fmter, "'{}': No such file or directory in container.", path),
-        }
-    }
 }
 
 impl_error!(PathError);

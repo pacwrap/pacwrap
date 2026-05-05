@@ -32,6 +32,7 @@ use zstd::Decoder;
 
 use crate::{
     Error,
+    ErrorExt,
     ErrorGeneric,
     ErrorKind,
     Result,
@@ -39,7 +40,7 @@ use crate::{
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     eprintln_warn,
     err,
-    utils::{ansi::*, bytebuffer::ByteBuffer},
+    utils::bytebuffer::ByteBuffer,
 };
 
 use self::SchemaStatus::*;

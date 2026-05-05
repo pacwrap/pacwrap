@@ -22,6 +22,7 @@ indexmap = "2.0"
 nix = "0.22.3, <= 0.22.3"
 simplebyteunit.workspace = true
 walkdir.workspace = true
+thiserror.workspace = true
 
 # Container runtime
 command-fds = "0.2.2"

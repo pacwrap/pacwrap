@@ -31,7 +31,6 @@ use crate::{
     error,
     error::*,
     exec::args::ExecutionArgs,
-    utils::ansi::*,
 };
 
 pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {

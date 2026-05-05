@@ -22,7 +22,18 @@ use std::thread::Builder;
 use alpm::{Alpm, CommitData, CommitError, Package, PrepareData, PrepareError};
 use signal_hook::iterator::Signals;
 
-use crate::{Error, Result, constants::SIGNAL_LIST, eprintln_error, eprintln_warn, err, error, sync::SyncError, utils::ansi::*};
+use crate::{
+    Error,
+    ErrorExt,
+    Result,
+    constants::SIGNAL_LIST,
+    eprintln_error,
+    eprintln_warn,
+    err,
+    error,
+    sync::SyncError,
+    utils::ansi::*,
+};
 
 pub trait AlpmUtils {
     fn get_local_package(&self, pkg: &str) -> Option<&Package>;

@@ -27,6 +27,7 @@ use std::{
 
 use pacwrap_core::{
     Error,
+    ErrorExt,
     ErrorGeneric,
     ErrorKind,
     Result,

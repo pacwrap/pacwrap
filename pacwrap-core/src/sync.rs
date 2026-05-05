@@ -17,7 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     fs::{create_dir, create_dir_all},
     os::unix::fs::symlink,
     path::Path,
@@ -27,9 +26,11 @@ use std::{
 use alpm::{Alpm, LogLevel, SigLevel, Usage};
 use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
+use thiserror::Error as ThisError;
 
 use crate::{
     Error,
+    ErrorExt,
     ErrorGeneric,
     ErrorTrait,
     Result,
@@ -62,58 +63,48 @@ mod resolver;
 static PACMAN_CONFIG: OnceLock<pacmanconf::Config> = OnceLock::new();
 static ALPM_CONFIG_DATA: OnceLock<AlpmConfigData> = OnceLock::new();
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(ThisError, Serialize, Deserialize, Clone, Debug)]
 pub enum SyncError {
+    #[error("Agent process terminated due to upstream error.")]
     TransactionAgentError,
+    #[error("Agent process terminated due to upstream error.")]
     TransactionAgentFailure,
+    #[error("Failure to acquire agent runtime parameters.")]
     ParameterAcquisitionFailure,
+    #[error("Deserialization of input parameters failed.")]
     DeserializationFailure,
+    #[error("Deserialization of input parameters failed: Invalid magic number.")]
     InvalidMagicNumber,
+    #[error("Signal interrupt was triggered.")]
     SignalInterrupt,
+    #[error("Agent binary mismatch.")]
     AgentVersionMismatch,
+    #[error("Nothing to do.")]
     NothingToDo,
+    #[error("Dependent container '{bold}{0}{reset}' is misconfigured or otherwise is missing.", bold=*BOLD, reset=*RESET)]
     DependentContainerMissing(String),
+    #[error("Recursion depth exceeded maximum of {bold}{0}{reset}.", bold=*BOLD, reset=*RESET)]
     RecursionDepthExceeded(isize),
+    #[error("Target package {bold}{0}{reset}: Installed in upstream container.", bold=*BOLD, reset=*RESET)]
     TargetUpstream(String),
+    #[error("Target package {bold}{0}{reset}: Not installed.", bold=*BOLD, reset=*RESET)]
     TargetNotInstalled(String),
+    #[error("Target package {bold}{0}{reset}: Not available in sync databases.", bold=*BOLD, reset=*RESET)]
     TargetNotAvailable(String),
+    #[error("Failure to prepare transaction: {0}")]
     PreparationFailure(String),
+    #[error("Failure to commit transaction: {0}")]
     TransactionFailure(String),
+    #[error("Failure to initialize transaction: {0}")]
     InitializationFailure(String),
+    #[error("Internal failure: {0}")]
     InternalError(String),
+    #[error("No compatible containers available to synchronize remote database.")]
     NoCompatibleContainers,
+    #[error("Unable to locate pacman keyrings.")]
     UnableToLocateKeyrings,
+    #[error("'{0}': {1}")]
     RepoConfError(String, String),
-}
-
-impl Display for SyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::DependentContainerMissing(u) =>
-                write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET),
-            Self::TargetNotAvailable(pkg) =>
-                write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
-            Self::TargetUpstream(pkg) =>
-                write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
-            Self::TransactionAgentError | Self::TransactionAgentFailure =>
-                write!(fmter, "Agent process terminated due to upstream error."),
-            Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::NoCompatibleContainers => write!(fmter, "No compatible containers available to synchronize remote database."),
-            Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."),
-            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
-            Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
-            Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
-            Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
-            Self::DeserializationFailure => write!(fmter, "Deserialization of input parameters failed."),
-            Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
-            Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
-            Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
-            Self::SignalInterrupt => write!(fmter, "Signal interrupt was triggered."),
-            Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
-            Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
-            Self::NothingToDo => write!(fmter, "Nothing to do."),
-        }
-    }
 }
 
 impl ErrorTrait for SyncError {

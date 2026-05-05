@@ -18,13 +18,13 @@
  */
 
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     io::ErrorKind as IOErrorKind,
     os::{fd::AsRawFd, unix::process::ExitStatusExt},
     process::{Child, Command, ExitStatus, Stdio},
 };
 
 use command_fds::{CommandFdExt, FdMapping};
+use thiserror::Error as ThisError;
 
 use crate::{
     Error,
@@ -69,33 +69,26 @@ lazy_lock! {
     static ref DIST_TLS: &'static str = option_env!("PACWRAP_DIST_TLS").unwrap_or(RUNTIME_TLS_STORE);
 }
 
-#[derive(Debug, Clone)]
+#[derive(ThisError, Debug, Clone)]
 pub enum ExecutionError {
+    #[error("Invalid {bold}PATH{reset} variable '{0}': {1}", bold=*BOLD, reset=*RESET)]
     InvalidPathVar(String, IOErrorKind),
+    #[error("'{0}': Not available in container {bold}PATH{reset}.", bold=*BOLD, reset=*RESET)]
     ExecutableUnavailable(String),
+    #[error("Invalid runtime arguments.")]
     RuntimeArguments,
+    #[error("'{0}': {bold}PATH{reset} variable must be absolute.", bold=*BOLD, reset=*RESET)]
     UnabsolutePath(String),
+    #[error("'{0}': Executable path must be absolute.")]
     UnabsoluteExec(String),
+    #[error("'{0}': Directories are not executables.")]
     DirectoryNotExecutable(String),
+    #[error("Socket '{0}': timed out.")]
     SocketTimeout(String),
+    #[error("Container exited with code: {0}")]
     Container(i32),
+    #[error("bubblewrap exited with {0}")]
     Bwrap(ExitStatus),
-}
-
-impl Display for ExecutionError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::InvalidPathVar(dir, err) => write!(fmter, "Invalid {}PATH{} variable '{dir}': {err}", *BOLD, *RESET),
-            Self::ExecutableUnavailable(exec) => write!(fmter, "'{}': Not available in container {}PATH{}.", exec, *BOLD, *RESET),
-            Self::UnabsolutePath(path) => write!(fmter, "'{}': {}PATH{} variable must be absolute", path, *BOLD, *RESET),
-            Self::UnabsoluteExec(path) => write!(fmter, "'{}': Executable path must be absolute.", path),
-            Self::DirectoryNotExecutable(path) => write!(fmter, "'{}': Directories are not executables.", path),
-            Self::SocketTimeout(socket) => write!(fmter, "Socket '{socket}': timed out."),
-            Self::Container(status) => write!(fmter, "Container exited with code: {}", status),
-            Self::Bwrap(status) => write!(fmter, "bubblewrap exited with {}", status),
-            Self::RuntimeArguments => write!(fmter, "Invalid runtime arguments."),
-        }
-    }
 }
 
 impl ErrorTrait for ExecutionError {

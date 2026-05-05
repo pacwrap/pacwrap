@@ -19,7 +19,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{Display, Formatter, Result as FmtResult},
     fs::{self, File, Metadata, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename},
     io::{BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write, copy},
     os::unix::{fs::symlink, prelude::MetadataExt},
@@ -38,11 +37,13 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use signal_hook::iterator::Signals;
+use thiserror::Error as ThisError;
 use walkdir::WalkDir;
 use zstd::{Decoder, Encoder};
 
 use crate::{
     Error,
+    ErrorExt,
     ErrorGeneric,
     ErrorKind,
     ErrorTrait,
@@ -74,36 +75,27 @@ impl FileSystemState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(ThisError, Debug, Clone)]
 pub enum FilesystemSyncError {
+    #[error("'{0}': Magic number mismatch ({MAGIC_NUMBER} != {1})")]
     MagicMismatch(String, u32),
+    #[error("'{0}': Checksum mismatch")]
     ChecksumMismatch(String),
+    #[error("'{0}': Unsupported filesystem version: {bold}{1}{reset}", bold=*BOLD, reset=*RESET)]
     UnsupportedVersion(String, u32),
+    #[error("Deserialization failure occurred with '{bold}{1}{reset}.dat': {1}", bold=*BOLD, reset=*RESET)]
     DeserializationFailure(String, String),
+    #[error("Serialization failure occurred with '{0}': {1}")]
     SerializationFailure(String, String),
+    #[error("Data length exceeded maximum {0} >= {1}")]
     DataLengthMaximum(u64, u64),
+    #[error("Data length provided is zero")]
     DataLengthZero,
+    #[error("Hash length provided is invalid.")]
     InvalidHashLength,
 }
 
 impl_error!(FilesystemSyncError);
-
-impl Display for FilesystemSyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::SerializationFailure(file, err) => write!(fmter, "Serialization failure occurred with '{file}': {err}"),
-            Self::UnsupportedVersion(file, ver) =>
-                write!(fmter, "'{file}': Unsupported filesystem version: {}{ver}{}", *BOLD, *RESET),
-            Self::DeserializationFailure(file, err) =>
-                write!(fmter, "Deserialization failure occurred with '{}{file}{}.dat': {err}", *BOLD, *RESET),
-            Self::ChecksumMismatch(file) => write!(fmter, "'{file}': Checksum mismatch"),
-            Self::MagicMismatch(file, magic) => write!(fmter, "'{file}': Magic number mismatch ({MAGIC_NUMBER} != {magic})"),
-            Self::DataLengthZero => write!(fmter, "Data length provided is zero"),
-            Self::InvalidHashLength => write!(fmter, "Hash length provided is invalid."),
-            Self::DataLengthMaximum(cur, max) => write!(fmter, "Data length exceeded maximum {cur} >= {max}"),
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 enum FileType {

@@ -27,7 +27,7 @@ use std::{
     result::Result as StdResult,
 };
 
-use crate::{ErrorGeneric, Result, config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn, utils::ansi::*};
+use crate::{ErrorGeneric, Result, config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn};
 use indexmap::IndexMap;
 
 pub struct ProcessList {

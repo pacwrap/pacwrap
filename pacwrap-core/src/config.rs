@@ -18,13 +18,13 @@
  */
 
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     fs::File,
     io::{ErrorKind::NotFound, Write},
     path::Path,
 };
 
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::{
     ErrorKind,
@@ -54,32 +54,25 @@ pub mod permission;
 pub mod register;
 pub mod vars;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ConfigError {
+    #[error("Failed to register filesystem module '{0}': {1}'")]
     Permission(&'static str, PermError),
+    #[error("Failed to register permission module '{0}': {1}")]
     Filesystem(&'static str, Error),
+    #[error("Failed to save '{0}': {1}")]
     Save(String, String),
+    #[error("Failed to load '{0}': {1}")]
     Load(String, String),
+    #[error("Container '{bold}{0}{reset}' already exists.", bold=*BOLD, reset=*RESET)]
     AlreadyExists(String),
+    #[error("'{0}': Configuration not found.")]
     ConfigNotFound(String),
+    #[error("Internal error: {0}")]
     InternalError(String),
 }
 
 impl_error!(ConfigError);
-
-impl Display for ConfigError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::Filesystem(module, err) => write!(fmter, "Failed to register filesystem module '{}': {} ", module, err.kind()),
-            Self::Permission(module, err) => write!(fmter, "Failed to register permission module '{}': {} ", module, err),
-            Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
-            Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
-            Self::AlreadyExists(ins) => write!(fmter, "Container '{}{ins}{}' already exists.", *BOLD, *RESET),
-            Self::ConfigNotFound(path) => write!(fmter, "'{path}': Configuration not found."),
-            Self::InternalError(error) => write!(fmter, "Internal error: {error}"),
-        }
-    }
-}
 
 impl From<&Error> for ConfigError {
     fn from(error: &Error) -> ConfigError {

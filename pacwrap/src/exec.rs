@@ -18,7 +18,6 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
     fs::{File, remove_file},
     os::unix::io::AsRawFd,
     path::Path,
@@ -34,9 +33,11 @@ use nix::{
     unistd::Pid,
 };
 use signal_hook::iterator::Signals;
+use thiserror::Error as ThisError;
 
 use pacwrap_core::{
     Error,
+    ErrorExt,
     ErrorGeneric,
     ErrorKind,
     ErrorTrait,
@@ -83,28 +84,17 @@ use crate::help::{HelpTopic, help};
 
 static SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
-#[derive(Debug)]
+#[derive(ThisError, Debug)]
 enum ExecError {
+    #[error("Namespace nesting has been known in the past to enable container escape vulnerabilities.")]
     NestedNamespaceEnablement,
+    #[error("Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details.")]
     ConsoleSessionRetention,
+    #[error("Disabling seccomp filtering can allow for sandbox escape.")]
     SeccompDisablement,
 }
 
 impl_error!(ExecError);
-
-impl Display for ExecError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        match self {
-            Self::SeccompDisablement => write!(fmter, "Disabling seccomp filtering can allow for sandbox escape."),
-            Self::NestedNamespaceEnablement =>
-                write!(fmter, "Namespace nesting has been known in the past to enable container escape vulnerabilities."),
-            Self::ConsoleSessionRetention => write!(
-                fmter,
-                "Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details."
-            ),
-        }
-    }
-}
 
 enum ExecParams<'a> {
     FakeRoot(i8, bool, Vec<&'a str>, ContainerHandle<'a>),

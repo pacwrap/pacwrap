@@ -21,6 +21,8 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use crate::constants::{BOLD, RESET};
 
+use thiserror::Error;
+
 pub mod config;
 pub mod constants;
 pub mod error;
@@ -33,7 +35,7 @@ pub mod utils;
 
 pub use error::*;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ErrorKind {
     EnvVarUnset(&'static str),
     ProcessInitFailure(&'static str, std::io::ErrorKind),

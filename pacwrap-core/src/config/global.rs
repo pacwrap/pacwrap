@@ -22,6 +22,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    ErrorExt,
     Result,
     config::{load_config, save},
     constants::CONFIG_FILE,

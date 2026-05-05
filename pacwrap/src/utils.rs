@@ -28,7 +28,6 @@ use pacwrap_core::{
     err,
     utils::{
         Arguments,
-        ansi::*,
         arguments::{InvalidArgument, Operand},
     },
 };

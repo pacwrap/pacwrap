@@ -19,9 +19,10 @@ repository.workspace = true
 bitflags = "2.4"
 nix = "0.22.3, <= 0.22.3"
 time = { version = "0.3.28", features = ["formatting", "macros", "local-offset", "parsing"] }
-indexmap = { version = "2.0.0", features = ["serde", "rayon"] }
+indexmap.workspace = true
 simplebyteunit.workspace = true
 walkdir.workspace = true
+thiserror.workspace = true
 
 # Serialization
 serde = { version = "1.0", features = ["derive", "rc"] }
@@ -42,7 +43,7 @@ tar = "0.4"
 zstd = "0.13"
 
 # Threading
-rayon = "1.7"
+rayon.workspace = true
 
 # CLI libraries
 dialoguer = "0.10.4"

@@ -17,34 +17,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Display, Formatter};
+use thiserror::Error as ThisError;
 
 use pacwrap_core::{
     ErrorTrait,
     constants::{BOLD, RESET},
 };
 
-#[derive(Debug)]
+#[derive(ThisError, Debug)]
 pub enum AgentError {
+    #[error("Deserilization error: {0}")]
     DeserializationError(String),
+    #[error("Version mismatch {0}.{1}.{2} != {3}.{4}.{5}")]
     InvalidVersion(u8, u8, u8, u8, u8, u8),
+    #[error("Magic mismatch {0} != {1}")]
     InvalidMagic(u32, u32),
+    #[error("'{bold}{0}{reset}' {1}", bold=*BOLD, reset=*RESET)]
     IOError(&'static str, std::io::ErrorKind),
+    #[error("Direct execution of this binary is unsupported.")]
     DirectExecution,
-}
-
-impl Display for AgentError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        match self {
-            Self::DirectExecution => write!(fmter, "Direct execution of this binary is unsupported."),
-            Self::InvalidMagic(magic, comparator) => write!(fmter, "Magic mismatch {} != {}", magic, comparator),
-            Self::InvalidVersion(a, b, c, d, e, f) => {
-                write!(fmter, "Version mismatch {}.{}.{} != {}.{}.{}", a, b, c, d, e, f)
-            }
-            Self::DeserializationError(error) => write!(fmter, "Deserilization error: {}", error),
-            Self::IOError(file, error) => write!(fmter, "'{}{}{}' {}", *BOLD, file, *RESET, error),
-        }
-    }
 }
 
 impl ErrorTrait for AgentError {
