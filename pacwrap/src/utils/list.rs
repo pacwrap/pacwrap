@@ -19,9 +19,9 @@
 
 use std::{
     collections::HashMap,
-    fs::read_dir,
     hash::{Hash, Hasher},
     os::unix::fs::MetadataExt,
+    path::Path,
 };
 
 use indexmap::IndexSet;
@@ -30,7 +30,7 @@ use simplebyteunit::simplebyteunit::*;
 use pacwrap_core::{
     ErrorGeneric,
     Result,
-    config::{ContainerType, cache::populate},
+    config::{ContainerHandle, ContainerType, cache::populate},
     constants::{BOLD, CONTAINER_DIR, RESET, UNDERLINE},
     utils::{
         Arguments,
@@ -38,6 +38,7 @@ use pacwrap_core::{
         table::{ColumnAttribute, Table},
     },
 };
+use walkdir::WalkDir;
 
 use crate::help::{HelpTopic, help};
 
@@ -116,11 +117,8 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
         Some((measure_disk, table_type)) => (measure_disk, table_type),
         None => return Ok(()),
     };
-    let containers = &format!("Containers ({})", handles.len());
-    let mut container_sizes: HashMap<&str, (i64, i64)> = HashMap::new();
     let mut table_header: Vec<&str> = vec![];
-    let mut actual_size = 0;
-    let mut total_size = 0;
+    let containers = &format!("Containers ({})", handles.len());
 
     for column in &table_type {
         table_header.push(match column {
@@ -148,24 +146,12 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
     handles.sort_by_key(|f| *f.metadata().container_type() == ContainerType::Aggregate);
     handles.sort_by_key(|f| *f.metadata().container_type() == ContainerType::Symbolic);
 
+    let (container_sizes, total_size, actual_size) = enumerate_containers(&handles, measure_disk)?;
+
     for container in handles.iter() {
-        let instance = container.vars().instance();
-        let container_path = &format!("{}/{}", *CONTAINER_DIR, instance);
-        let (len, organic, total) = if measure_disk && container.metadata().container_type() != &ContainerType::Symbolic {
-            directory_size(container_path).prepend_io(|| container_path)?
-        } else {
-            (0, 0, 0)
-        };
-
-        total_size += total;
-        actual_size += len + organic;
-        container_sizes.insert(instance, (len + organic, total));
-    }
-
-    for container in handles {
         let container_name = container.vars().instance();
         let container_type = container.metadata().container_type();
-        let (organic, total) = container_sizes.get(container_name).unwrap();
+        let (organic, total) = container_sizes.get(container_name).expect("Container size");
         let mut row = vec![];
 
         for column in &table_type {
@@ -225,25 +211,42 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
     Ok(())
 }
 
+fn enumerate_containers<'a>(
+    handles: &'a Vec<&'a ContainerHandle<'a>>,
+    measure_disk: bool,
+) -> Result<(HashMap<&'a str, (i64, i64)>, i64, i64)> {
+    let mut actual_size = 0;
+    let mut total_size = 0;
+    let mut container_sizes: HashMap<&str, (i64, i64)> = HashMap::new();
+
+    for container in handles.iter() {
+        let instance = container.vars().instance();
+        let container_path = Path::new(*CONTAINER_DIR).join(instance);
+        let (len, organic, total) = if measure_disk && container.metadata().container_type() != &ContainerType::Symbolic {
+            directory_size(&container_path).prepend_io(|| container_path.display().to_string())?
+        } else {
+            (0, 0, 0)
+        };
+
+        total_size += total;
+        actual_size += len + organic;
+        container_sizes.insert(instance, (len + organic, total));
+    }
+
+    Ok((container_sizes, total_size, actual_size))
+}
+
 //There might be some value in threading this routine in future.
-fn directory_size(dir: &str) -> Result<(i64, i64, i64)> {
+fn directory_size(dir: &Path) -> Result<(i64, i64, i64)> {
     let mut len = 0;
     let mut total = 0;
     let mut unique = 0;
 
-    for entry in read_dir(dir)? {
-        let entry = entry?;
-        let meta = entry.metadata()?;
+    for entry in WalkDir::new(dir) {
+        let Ok(entry) = entry else { continue };
+        let Ok(meta) = entry.metadata() else { continue };
 
-        if entry.file_type()?.is_dir() {
-            let path = entry.file_name();
-            let path = path.to_str().expect("UTF-8 path");
-            let (l, u, t) = directory_size(&format!("{dir}/{path}"))?;
-
-            len += l;
-            unique += u;
-            total += t;
-        } else if meta.nlink() == 1 {
+        if meta.nlink() == 1 {
             unique += meta.len() as i64;
         } else {
             len += (meta.len() / meta.nlink()) as i64;
