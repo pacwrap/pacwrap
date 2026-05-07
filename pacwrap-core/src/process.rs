@@ -27,7 +27,7 @@ use std::{
     result::Result as StdResult,
 };
 
-use crate::{ErrorGeneric, Result, config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn};
+use crate::{PathContext, Result, config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn};
 use indexmap::IndexMap;
 
 pub struct ProcessList {
@@ -212,7 +212,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList> {
 
 fn procfs() -> Result<Vec<(i32, u64)>> {
     Ok(read_dir("/proc/")
-        .prepend_io(|| "/proc/")?
+        .context_path("/proc/")?
         .filter_map(StdResult::ok)
         .filter_map(|s| procfs_meta(s).unwrap_or(None))
         .filter_map(|(name, mtime)| {

@@ -26,13 +26,10 @@ use std::{
 use serde::Deserialize;
 
 use pacwrap_core::{
-    Error,
-    ErrorGeneric,
-    Result,
+    PathContext,
     config::Global,
     constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
     eprintln_warn,
-    err,
     log::{Level, Logger},
     sync::{
         self,
@@ -49,7 +46,7 @@ use pacwrap_core::{
     utils::bytebuffer::ByteBuffer,
 };
 
-use crate::error::AgentError;
+use crate::error::{Error, Result};
 
 const AGENT_PARAMS: &str = "/mnt/agent_params";
 
@@ -60,15 +57,15 @@ pub fn transact() -> Result<()> {
         Err(error) => {
             if let Ok(var) = env::var("SHELL") {
                 if !var.is_empty() {
-                    err!(AgentError::DirectExecution)?
+                    Err(Error::DirectExecution)?
                 }
             }
 
-            err!(AgentError::IOError(AGENT_PARAMS, error.kind()))?
+            Err(error).context_path(AGENT_PARAMS)?
         }
     };
 
-    file.read_exact_at(header.as_slice_mut(), 0).prepend_io(|| AGENT_PARAMS)?;
+    file.read_exact_at(header.as_slice_mut(), 0).context_path(AGENT_PARAMS)?;
     decode_header(&mut header)?;
 
     let params: TransactionParameters = deserialize(&mut file)?;
@@ -105,7 +102,7 @@ fn conduct_transaction(
     let files = agent.files();
 
     if let Err(error) = handle.alpm_mut().trans_init(flags.1.expect("ALPM TransFlag")) {
-        err!(SyncError::InitializationFailure(error.to_string()))?
+        Err(SyncError::InitializationFailure(error.to_string()))?
     }
 
     handle.ignore(&mut None)?;
@@ -155,11 +152,11 @@ fn decode_header(buffer: &mut ByteBuffer) -> Result<()> {
     let patch: (u8, u8) = (*VERSION_PATCH as u8, buffer.read_byte());
 
     if magic != MAGIC_NUMBER {
-        err!(AgentError::InvalidMagic(magic, MAGIC_NUMBER))?
+        Err(Error::InvalidMagic(magic, MAGIC_NUMBER))?
     }
 
     if major.0 != major.1 || minor.0 != minor.1 || patch.0 != patch.1 {
-        err!(AgentError::InvalidVersion(major.0, minor.0, patch.0, major.1, minor.1, patch.1))?;
+        Err(Error::InvalidVersion(major.0, minor.0, patch.0, major.1, minor.1, patch.1))?;
     }
 
     Ok(())
@@ -168,6 +165,6 @@ fn decode_header(buffer: &mut ByteBuffer) -> Result<()> {
 fn deserialize<T: for<'de> Deserialize<'de>>(stdin: &mut File) -> Result<T> {
     match bincode::deserialize_from::<&mut File, T>(stdin) {
         Ok(meta) => Ok(meta),
-        Err(error) => err!(AgentError::DeserializationError(error.as_ref().to_string())),
+        Err(error) => Err(Error::Deserialization(error.as_ref().to_string()))?,
     }
 }

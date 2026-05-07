@@ -26,10 +26,8 @@ use serde::{Deserialize, Serialize};
 
 use self::{SyncState::*, TransactionMode::*, TransactionType::*};
 use crate::{
-    Error,
     config::{ContainerHandle, Global, global},
     eprintln_warn,
-    err,
     log::{Level, Logger},
     sync::{
         SyncError,
@@ -416,7 +414,7 @@ impl<'a> TransactionHandle<'a> {
             let forced = flags.contains(TransactionFlags::FORCE_DATABASE);
 
             if let (false, Some(upstream)) = (forced, upstream) {
-                err!(SyncError::TargetUpstream(upstream.into()))?
+                Err(SyncError::TargetUpstream(upstream.into()))?
             }
         }
 
@@ -427,7 +425,7 @@ impl<'a> TransactionHandle<'a> {
                     .copied()
                     .find(|a| !ignored.contains(*a) && alpm.get_local_package(a).is_none())
                 {
-                    err!(SyncError::TargetNotInstalled(not_installed.into()))?
+                    Err(SyncError::TargetNotInstalled(not_installed.into()))?
                 }
 
                 for pkg in LocalDependencyResolver::new(alpm)
@@ -454,7 +452,7 @@ impl<'a> TransactionHandle<'a> {
             }
             Upgrade(..) => {
                 if let Some(not_available) = queue.iter().copied().find(|a| alpm.get_package(a).is_none()) {
-                    err!(SyncError::TargetNotAvailable(not_available.into()))?
+                    Err(SyncError::TargetNotAvailable(not_available.into()))?
                 }
 
                 let resolver = DependencyResolver::new(alpm).set_ignored(ignored).enumerate(&queue)?;
@@ -525,7 +523,7 @@ impl<'a> TransactionHandle<'a> {
             Ok(NotRequired)
         } else {
             match self.state {
-                Required => err!(SyncError::NothingToDo),
+                Required => Err(SyncError::NothingToDo)?,
                 NotRequired => Ok(NotRequired),
             }
         }

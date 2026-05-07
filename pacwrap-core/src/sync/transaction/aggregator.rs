@@ -24,13 +24,11 @@ use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use signal_hook::iterator::Signals;
 
 use crate::{
-    Error,
     ErrorExt,
+    ErrorType,
     Result,
     config::{ContainerHandle, ContainerType::*, cache::ContainerCache},
     constants::{ARROW_GREEN, IS_COLOR_TERMINAL, SIGNAL_LIST, UNIX_TIMESTAMP, VERBOSE},
-    err,
-    error,
     exec::{ExecutionType::NonInteractive, fakeroot_container},
     lazy_lock,
     lock::{Lock, LockError},
@@ -143,7 +141,7 @@ impl<'a> TransactionAggregator<'a> {
                     && !refresh
                     && !self.flags.intersects(TransactionFlags::FILESYSTEM_SYNC | TransactionFlags::TARGET_ONLY)
                 {
-                    err!(InvalidArgument::OperationUnspecified)?
+                    Err(InvalidArgument::OperationUnspecified)?
                 }
 
                 if refresh {
@@ -167,7 +165,7 @@ impl<'a> TransactionAggregator<'a> {
         let mut linker = FilesystemSync::new(self.cache).assert_lock(self.lock);
 
         if upstream.is_empty() && downstream.is_empty() {
-            err!(SyncError::NothingToDo)?
+            Err(SyncError::NothingToDo)?
         }
 
         if let Some(progress) = self.progress.as_ref() {
@@ -234,9 +232,7 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     fn transact(&mut self, inshandle: &'a ContainerHandle) -> Result<()> {
-        if let Err(err) = self.lock()?.assert() {
-            err!(SyncError::from(&err))?
-        }
+        self.lock()?.assert()?;
 
         let queue = match self.pkg_queue.get(inshandle.vars().instance()) {
             Some(some) => some.clone(),
@@ -291,22 +287,25 @@ impl<'a> TransactionAggregator<'a> {
                     }
 
                     handle.release();
-                    return match err.downcast::<SyncError>().map_err(|err| error!(SyncError::from(err)))? {
-                        SyncError::TransactionAgentFailure
+
+                    if let ErrorType::Sync(ref err) = err.error {
+                        self.logger().log(Level::Error, &format!("Transaction error: {}", err))?;
+
+                        if let SyncError::TransactionAgentFailure
                         | SyncError::ParameterAcquisitionFailure
-                        | SyncError::DeserializationFailure => {
-                            self.logger().log(Level::Fatal, &format!("Transaction error: {}", err))?;
-                            err.fatal()
+                        | SyncError::DeserializationFailure
+                        | SyncError::AgentVersionMismatch
+                        | SyncError::InvalidMagicNumber = err
+                        {
+                            err.fatal();
                         }
-                        SyncError::AgentVersionMismatch | SyncError::InvalidMagicNumber => {
-                            self.logger().log(Level::Error, &format!("Transaction error: {}", err))?;
-                            err.error()
+                    } else if let ErrorType::IoError(ref err) = err.error {
+                        if err.kind() == std::io::ErrorKind::Interrupted {
+                            Err(SyncError::SignalInterrupt)?
                         }
-                        _ => {
-                            self.logger().log(Level::Error, &format!("Transaction error: {}", err))?;
-                            Err(err)
-                        }
-                    };
+                    }
+
+                    return Err(err)?;
                 }
             }
             .from(self);
@@ -345,7 +344,7 @@ impl<'a> TransactionAggregator<'a> {
                 handle.trans_interrupt().ok();
             }
 
-            err!(SyncError::SignalInterrupt)?;
+            Err(SyncError::SignalInterrupt)?;
         }
 
         Ok(())
@@ -358,7 +357,7 @@ impl<'a> TransactionAggregator<'a> {
     }
 
     pub fn lock(&mut self) -> Result<&Lock> {
-        self.lock.map_or_else(|| err!(LockError::NotAcquired), Ok)
+        self.lock.map_or_else(|| Err(LockError::NotAcquired)?, Ok)
     }
 
     pub fn cache(&'a self) -> &'a ContainerCache<'a> {

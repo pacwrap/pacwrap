@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use alpm::{Alpm, Package};
 
 use crate::{
-    Error,
+    Result,
     sync::{
         resolver::{Resolver, ResolverDepth, ResolverDepthExt, ResolverKeys},
         utils::AlpmUtils,
@@ -55,7 +55,7 @@ impl<'a> Resolver<'a> for DependencyResolver<'a> {
         self
     }
 
-    fn enumerate(mut self, packages: &[&'a str]) -> Result<Self, Error> {
+    fn enumerate(mut self, packages: &[&'a str]) -> Result<Self> {
         let mut synchronize: Vec<&'a str> = Vec::new();
         let ignored = self.ignored.expect("Ignore list not enumerated");
 

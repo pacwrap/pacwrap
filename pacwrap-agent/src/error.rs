@@ -19,32 +19,40 @@
 
 use thiserror::Error as ThisError;
 
-use pacwrap_core::{
-    ErrorTrait,
-    constants::{BOLD, RESET},
-};
+use pacwrap_core::{ErrorTrait, ErrorType};
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(ThisError, Debug)]
-pub enum AgentError {
+#[allow(clippy::enum_variant_names)]
+pub enum Error {
     #[error("Deserilization error: {0}")]
-    DeserializationError(String),
+    Deserialization(String),
     #[error("Version mismatch {0}.{1}.{2} != {3}.{4}.{5}")]
     InvalidVersion(u8, u8, u8, u8, u8, u8),
     #[error("Magic mismatch {0} != {1}")]
     InvalidMagic(u32, u32),
-    #[error("'{bold}{0}{reset}' {1}", bold=*BOLD, reset=*RESET)]
-    IOError(&'static str, std::io::ErrorKind),
     #[error("Direct execution of this binary is unsupported.")]
     DirectExecution,
+    #[error(transparent)]
+    Sync(#[from] pacwrap_core::sync::SyncError),
+    #[error(transparent)]
+    Alpm(#[from] alpm::Error),
+    #[error(transparent)]
+    Internal(#[from] pacwrap_core::Error<ErrorType>),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error(transparent)]
+    Error(#[from] anyhow::Error),
 }
 
-impl ErrorTrait for AgentError {
+impl ErrorTrait for Error {
     fn code(&self) -> i32 {
         match self {
             Self::InvalidMagic(..) => 6,
             Self::InvalidVersion(..) => 5,
-            Self::DeserializationError(..) => 4,
-            Self::IOError(..) => 3,
+            Self::Deserialization(..) => 4,
+            Self::IoError(..) => 3,
             _ => 2,
         }
     }

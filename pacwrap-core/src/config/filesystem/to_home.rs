@@ -21,14 +21,12 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
     Result,
     config::{
         ContainerVariables,
         filesystem::{BindError, Filesystem, Mount, Permission},
     },
     constants::HOME,
-    err,
     exec::args::ExecutionArgs,
 };
 
@@ -42,12 +40,12 @@ pub struct ToHome {
 impl Filesystem for ToHome {
     fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.mounts.is_empty() {
-            err!(BindError::Warn("Mount volumes undeclared.".into()))?
+            Err(BindError::Warn("Mount volumes undeclared.".into()))?
         }
 
         for m in self.mounts.iter() {
             if m.path.is_empty() {
-                err!(BindError::Warn("Mount volumes undeclared.".into()))?
+                Err(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
             check_mount(&m.path)?
@@ -80,7 +78,7 @@ fn bind_filesystem(args: &mut ExecutionArgs, vars: &ContainerVariables, permissi
 
 fn check_mount(path: &String) -> Result<()> {
     if !Path::new(&format!("{}/{}", *HOME, &path)).exists() {
-        err!(BindError::Fail(format!("~/{} not found.", path)))?
+        Err(BindError::Fail(format!("~/{} not found.", path)))?
     }
 
     Ok(())

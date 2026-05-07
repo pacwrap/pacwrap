@@ -20,13 +20,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
     Result,
     config::{
         ContainerVariables,
         filesystem::{BindError, Filesystem},
     },
-    err,
     exec::args::ExecutionArgs,
 };
 
@@ -40,7 +38,7 @@ pub struct Dir {
 impl Filesystem for Dir {
     fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.path.is_empty() {
-            err!(BindError::Fail("Path not specified.".into()))?
+            Err(BindError::Fail("Path not specified.".into()))?
         }
 
         Ok(())

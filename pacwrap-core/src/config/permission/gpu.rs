@@ -22,9 +22,7 @@ use std::{fs::read_dir, path::Path, sync::OnceLock};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
-    ErrorGeneric,
-    ErrorType,
+    PathContext,
     config::{
         Permission,
         filesystem::Permission::ReadOnly,
@@ -33,6 +31,7 @@ use crate::{
             PermError::{self, *},
         },
     },
+    eprintln_error,
     exec::args::ExecutionArgs,
 };
 
@@ -45,7 +44,8 @@ struct Graphics;
 impl Permission for Graphics {
     fn qualify(&self) -> Result<Option<Condition>, PermError> {
         let gpu_dev = populate_dev().map_err(|error| {
-            eprintln!("{}", ErrorType::Error(&error));
+            eprintln_error!("{error}");
+
             Fail("No graphics devices are available.".into())
         })?;
         let nvidia = gpu_dev.iter().any(|a| a.contains("nvidia"));
@@ -79,9 +79,9 @@ impl Permission for Graphics {
     }
 }
 
-fn populate_dev() -> Result<Vec<String>, Error> {
+fn populate_dev() -> Result<Vec<String>, std::io::Error> {
     Ok(read_dir("/dev/")
-        .prepend_io(|| "/dev")?
+        .context_path("/dev")?
         .filter_map(|f| {
             f.map_or_else(
                 |_| None,

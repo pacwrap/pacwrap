@@ -25,11 +25,9 @@ use std::{
 };
 
 use crate::{
-    Error,
     ErrorKind,
     Result,
     constants::{GID, UID},
-    err,
 };
 
 pub use arguments::Arguments;
@@ -53,25 +51,31 @@ macro_rules! lazy_lock {
 
 #[macro_export]
 macro_rules! eprintln_warn {
-    ( $( $x:expr ),+ ) => {
-        eprint!("{}warning:{} ", *$crate::utils::ansi::BOLD_YELLOW, *$crate::utils::ansi::RESET);
-        eprintln!($( $x, )+);
+    ( $( $x:expr ),+  ) => {
+        {
+            eprint!("{}warning:{} ", *$crate::utils::ansi::BOLD_YELLOW, *$crate::utils::ansi::RESET);
+            eprintln!($( $x, )+);
+        }
     };
 }
 
 #[macro_export]
 macro_rules! eprintln_error {
     ( $( $x:expr ),+ ) => {
-        eprint!("{}error:{} ", *$crate::utils::ansi::BOLD_RED, *$crate::utils::ansi::RESET);
-        eprintln!($( $x, )+);
+        {
+            eprint!("{}error:{} ", *$crate::utils::ansi::BOLD_RED, *$crate::utils::ansi::RESET);
+            eprintln!($( $x, )+);
+        }
     };
 }
 
 #[macro_export]
 macro_rules! eprintln_fatal {
     ( $( $x:expr ),+ ) => {
-        eprint!("{}fatal:{} ", *$crate::utils::ansi::BOLD_RED, *$crate::utils::ansi::RESET);
-        eprintln!($( $x, )+);
+        {
+            eprint!("{}fatal:{} ", *$crate::utils::ansi::BOLD_RED, *$crate::utils::ansi::RESET);
+            eprintln!($( $x, )+);
+        }
     };
 }
 
@@ -92,13 +96,13 @@ macro_rules! to_static_str {
 pub fn env_var(env: &'static str) -> Result<String> {
     match var(env) {
         Ok(var) => Ok(var),
-        Err(_) => err!(ErrorKind::EnvVarUnset(env)),
+        Err(_) => Err(ErrorKind::EnvVarUnset(env))?,
     }
 }
 
 pub fn check_root() -> Result<()> {
     if *UID == 0 || *GID == 0 {
-        err!(ErrorKind::ElevatedPrivileges)?
+        Err(ErrorKind::ElevatedPrivileges)?
     }
 
     Ok(())

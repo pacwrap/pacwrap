@@ -25,13 +25,10 @@ use std::{
 use thiserror::Error as ThisError;
 
 use crate::{
-    Error,
-    ErrorGeneric,
     ErrorTrait,
     Result,
     config::{ContainerHandle, ContainerType::Slice},
     constants::{BOLD, RESET},
-    err,
     exec::{DIST_IMG, ExecutionError},
     impl_error,
 };
@@ -54,11 +51,11 @@ pub fn check_path(ins: &ContainerHandle, args: &[&str], path: Vec<&str>) -> Resu
             return Ok(());
         }
 
-        err!(ExecutionError::ExecutableUnavailable(args[0].into()))?
+        Err(ExecutionError::ExecutableUnavailable(args[0].into()))?
     }
 
     if args.is_empty() {
-        err!(ExecutionError::RuntimeArguments)?
+        Err(ExecutionError::RuntimeArguments)?
     }
 
     for dir in path {
@@ -67,24 +64,24 @@ pub fn check_path(ins: &ContainerHandle, args: &[&str], path: Vec<&str>) -> Resu
                 if resolve_path(ins.vars().root(), dir, args[0]).is_ok() {
                     return Ok(());
                 },
-            Err(error) => err!(ExecutionError::InvalidPathVar(dir.into(), error.kind()))?,
+            Err(error) => Err(ExecutionError::InvalidPathVar(dir.into(), error.kind()))?,
         }
     }
 
-    err!(ExecutionError::ExecutableUnavailable(args[0].into()))?
+    Err(ExecutionError::ExecutableUnavailable(args[0].into()))?
 }
 
 pub fn resolve_path(root: &str, dir: &str, file: &str) -> Result<PathBuf> {
     if file.contains("..") {
-        err!(PathError::UnabsoluteExec(file.into()))?
+        Err(PathError::UnabsoluteExec(file.into()))?
     } else if dir.contains("..") {
-        err!(PathError::UnabsolutePath(file.into()))?
+        Err(PathError::UnabsolutePath(file.into()))?
     }
 
     let path = format!("{}{}/{}", root, dir, file);
-    let path = obtain_path(Path::new(&path)).prepend_io(|| file)?;
+    let path = obtain_path(Path::new(&path))?;
     let path_direct = format!("{}/{}", root, file);
-    let path_direct = obtain_path(Path::new(&path_direct)).prepend_io(|| file)?;
+    let path_direct = obtain_path(Path::new(&path_direct))?;
 
     if let Ok(path) = path.read_link() {
         if let Some(path) = path.as_os_str().to_str() {
@@ -101,7 +98,7 @@ pub fn resolve_path(root: &str, dir: &str, file: &str) -> Result<PathBuf> {
     } else if path.exists() {
         Ok(path)
     } else {
-        err!(PathError::PathUnresolvable(format!("{dir}/{file}")))
+        Err(PathError::PathUnresolvable(format!("{dir}/{file}")))?
     }
 }
 

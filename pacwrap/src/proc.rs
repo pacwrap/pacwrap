@@ -22,22 +22,17 @@ use std::{
     str::FromStr,
 };
 
+use anyhow::{Context, anyhow};
 use indexmap::IndexMap;
 use nix::{
     sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use pacwrap_core::{
-    Error,
-    ErrorExt,
-    ErrorGeneric,
-    ErrorTrait,
     Result,
     config::cache,
     constants::{ARROW_GREEN, BOLD, DIM, RESET},
     eprintln_warn,
-    err,
-    impl_error,
     process::{self, Process},
     utils::{
         Arguments,
@@ -46,18 +41,17 @@ use pacwrap_core::{
         table::{ColumnAttribute, Table},
     },
 };
+use thiserror::Error;
 
 use crate::help::{HelpTopic, help};
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ProcError {
     NotEnumerable,
     SpecifiedNotEnumerable,
     InvalidSignalSpecified,
     InvalidDepthInput,
 }
-
-impl_error!(ProcError);
 
 impl Display for ProcError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
@@ -82,7 +76,7 @@ pub fn process(args: &mut Arguments) -> Result<()> {
             if let Operand::Value("ps") = args[0] {
                 summary(args)
             } else {
-                err!(InvalidArgument::OperationUnspecified)
+                Err(InvalidArgument::OperationUnspecified)?
             },
         _ =>
             if let Operand::Value("ps") = args[0] {
@@ -112,7 +106,7 @@ fn summary(args: &mut Arguments) -> Result<()> {
             Operand::ShortPos('t', val) | Operand::LongPos("target", val) => instances.push(val),
             Operand::ShortPos('d', val) | Operand::LongPos("depth", val) => match val.parse() {
                 Ok(val) => max_depth = val,
-                Err(_) => err!(ProcError::InvalidDepthInput)?,
+                Err(_) => Err(anyhow!(ProcError::InvalidDepthInput))?,
             },
             _ => args.invalid_operand()?,
         }
@@ -134,7 +128,7 @@ fn summary(args: &mut Arguments) -> Result<()> {
     };
 
     if list.is_empty() {
-        err!(ProcError::NotEnumerable)?
+        Err(anyhow!(ProcError::NotEnumerable))?
     }
 
     let table_header = &match col {
@@ -190,7 +184,7 @@ fn process_id(args: &mut Arguments) -> Result<()> {
     }
 
     if instance.is_empty() && !all {
-        err!(InvalidArgument::TargetUnspecified)?
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     let cache = cache::populate()?;
@@ -201,7 +195,7 @@ fn process_id(args: &mut Arguments) -> Result<()> {
     };
 
     if list.is_empty() {
-        err!(ProcError::NotEnumerable)?
+        Err(anyhow!(ProcError::NotEnumerable))?
     }
 
     for idx in 0 .. list.len() {
@@ -235,7 +229,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
             Operand::ShortPos('s', val) | Operand::LongPos("signal", val) =>
                 sigint = match Signal::from_str(&val.to_uppercase()) {
                     Ok(sig) => sig,
-                    Err(_) => err!(ProcError::InvalidSignalSpecified)?,
+                    Err(_) => Err(anyhow!(ProcError::InvalidSignalSpecified))?,
                 },
             Operand::ShortPos(_, val) | Operand::LongPos(_, val) | Operand::Value(val) => process.push(val),
             _ => args.invalid_operand()?,
@@ -243,7 +237,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     }
 
     if process.is_empty() && !all {
-        err!(InvalidArgument::TargetUnspecified)?
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     let mut instances = IndexMap::new();
@@ -262,7 +256,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     };
 
     if list.is_empty() {
-        err!(ProcError::SpecifiedNotEnumerable)?
+        Err(anyhow!(ProcError::SpecifiedNotEnumerable))?
     }
 
     for process in list.iter() {
@@ -299,8 +293,8 @@ fn fork_warn(process: &Process) {
 
 fn kill_processes(process_list: &Vec<&Process>, sigint: Signal) -> Result<()> {
     for list in process_list {
-        if let Err(err) = kill(Pid::from_raw(list.pid()), sigint).prepend(|| format!("Error killing '{}'", list.pid())) {
-            err.warn();
+        if let Err(err) = kill(Pid::from_raw(list.pid()), sigint).with_context(|| format!("Error killing '{}'", list.pid())) {
+            eprintln_warn!("{err}");
             continue;
         }
 

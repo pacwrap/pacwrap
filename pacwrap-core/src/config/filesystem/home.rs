@@ -22,13 +22,11 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
     Result,
     config::{
         ContainerVariables,
         filesystem::{BindError, Filesystem, Permission::ReadWrite},
     },
-    err,
     exec::args::ExecutionArgs,
 };
 
@@ -39,7 +37,7 @@ pub struct Home;
 impl Filesystem for Home {
     fn qualify(&self, vars: &ContainerVariables) -> Result<()> {
         if !Path::new(vars.home()).exists() {
-            err!(BindError::Fail("Specified home directory not found.".into()))?
+            Err(BindError::Fail("Specified home directory not found.".into()))?
         }
 
         Ok(())

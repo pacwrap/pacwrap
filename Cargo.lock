@@ -40,6 +40,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "atomic-polyfill"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -707,6 +713,7 @@ name = "pacwrap"
 version = "0.8.7"
 dependencies = [
  "alpm",
+ "anyhow",
  "command-fds",
  "indexmap 2.12.1",
  "nix 0.22.3",
@@ -726,6 +733,7 @@ name = "pacwrap-agent"
 version = "0.8.7"
 dependencies = [
  "alpm",
+ "anyhow",
  "bincode",
  "pacwrap-core",
  "serde",
@@ -737,6 +745,7 @@ name = "pacwrap-core"
 version = "0.8.7"
 dependencies = [
  "alpm",
+ "anyhow",
  "bincode",
  "bitflags 2.10.0",
  "command-fds",

@@ -17,11 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
-    io::ErrorKind::{Interrupted, NotConnected},
-};
-
 use dialoguer::{
     Input,
     console::{Style, style},
@@ -29,30 +24,9 @@ use dialoguer::{
 };
 
 use crate::{
-    Error,
-    ErrorTrait,
     Result,
     constants::{BAR_RED, BOLD, RESET},
-    err,
-    impl_error,
 };
-
-#[derive(Debug)]
-pub enum PromptError {
-    PromptInterrupted,
-    PromptNotTerminal,
-}
-
-impl Display for PromptError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::PromptInterrupted => write!(fmter, "Prompt was interrupted."),
-            Self::PromptNotTerminal => write!(fmter, "Input is not a terminal."),
-        }
-    }
-}
-
-impl_error!(PromptError);
 
 pub fn prompt(prefix: impl AsRef<str>, prompt: impl AsRef<str>, yn_prompt: bool) -> Result<bool> {
     let value = create_prompt(prompt.as_ref(), prefix.as_ref(), yn_prompt)?;
@@ -77,16 +51,10 @@ fn create_prompt<T: AsRef<str>>(message: T, prefix: T, yn_prompt: bool) -> Resul
         values_style: Style::new(),
         ..ColorfulTheme::default()
     };
-    let input: String = match Input::with_theme(&theme).with_prompt(message.as_ref()).allow_empty(true).interact_text() {
-        Ok(prompt) => prompt,
-        Err(error) => match error.kind() {
-            Interrupted => err!(PromptError::PromptInterrupted)?,
-            NotConnected => err!(PromptError::PromptNotTerminal)?,
-            _ => Err(error)?,
-        },
-    };
-
-    Ok(input)
+    Ok(Input::with_theme(&theme)
+        .with_prompt(message.as_ref())
+        .allow_empty(true)
+        .interact_text()?)
 }
 
 pub fn prompt_targets(targets: &[&str], ins_prompt: &str, yn_prompt: bool) -> Result<bool> {

@@ -23,6 +23,7 @@ nix = "0.22.3, <= 0.22.3"
 simplebyteunit.workspace = true
 walkdir.workspace = true
 thiserror.workspace = true
+anyhow.workspace = true
 
 # Container runtime
 command-fds = "0.2.2"

@@ -24,7 +24,6 @@ use pacwrap_core::{
     ErrorKind,
     config::{ConfigError::AlreadyExists, ContainerCache, ContainerType, cache, init::init},
     eprintln_warn,
-    err,
     error::*,
     lock::Lock,
     log::{Level::Info, Logger},
@@ -53,7 +52,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(&mut cache, &mut logger, args, &lock, action, create);
 
     if let Err(error) = lock.unlock() {
-        eprintln!("{}", ErrorType::Error(&error));
+        eprintln_warn!("{error}");
     }
 
     result
@@ -85,24 +84,24 @@ fn instantiate<'a>(
     targets: IndexMap<&'a str, (ContainerType, Vec<&'a str>)>,
 ) -> Result<()> {
     if targets.is_empty() {
-        err!(OperationUnspecified)?;
+        Err(OperationUnspecified)?;
     }
 
     if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
         if !refresh {
-            err!(UnsuppliedOperand("--refresh", "Required for container creation."))?
+            Err(UnsuppliedOperand("--refresh", "Required for container creation."))?
         } else if !upgrade {
-            err!(UnsuppliedOperand("--upgrade", "Required for container creation."))?
+            Err(UnsuppliedOperand("--upgrade", "Required for container creation."))?
         }
     }
 
     for (container, (container_type, deps)) in targets.iter() {
         if let (ContainerType::Base, true) = (container_type, !deps.is_empty()) {
-            err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
+            Err(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
         } else if let (ContainerType::Aggregate | ContainerType::Slice, true) = (container_type, deps.is_empty()) {
-            err!(ErrorKind::Message("Dependencies not specified."))?
+            Err(ErrorKind::Message("Dependencies not specified."))?
         } else if cache.get_instance_option(container).is_some() {
-            err!(AlreadyExists(container.to_string()))?;
+            Err(AlreadyExists(container.to_string()))?;
         }
     }
 
@@ -134,7 +133,7 @@ fn acquire_targets<'a>(
         match flags.contains(TransactionFlags::FILESYSTEM_SYNC) {
             false => {
                 if targets.is_empty() {
-                    err!(TargetUnspecified)?;
+                    Err(TargetUnspecified)?;
                 }
 
                 Some(targets.into_iter().collect())
@@ -163,7 +162,7 @@ fn engage_aggregator<'a>(
     let mut create = init;
 
     if let Op::Nothing = args.next().unwrap_or_default() {
-        err!(OperationUnspecified)?
+        Err(OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -192,7 +191,7 @@ fn engage_aggregator<'a>(
                         Some(_) => {
                             let current_target = match current_target {
                                 Some(target) => target,
-                                None => err!(TargetUnspecified)?,
+                                None => Err(TargetUnspecified)?,
                             };
                             let (_, deps) = create_targets.get_mut(current_target).unwrap();
 
@@ -204,11 +203,11 @@ fn engage_aggregator<'a>(
                                 deps.push(dep);
                             }
                         }
-                        None => err!(ErrorKind::Message("Container type not specified."))?,
+                        None => Err(ErrorKind::Message("Container type not specified."))?,
                     },
                     _ => args.invalid_operand()?,
                 },
-                None => err!(ErrorKind::Message("Dependencies not specified."))?,
+                None => Err(ErrorKind::Message("Dependencies not specified."))?,
             },
             Op::Short('t') | Op::Long("target") => match args.next() {
                 Some(arg) => match arg {
@@ -224,14 +223,14 @@ fn engage_aggregator<'a>(
                             create_targets.insert(target, (container_type, vec![]));
                             create = init;
                         } else if let (true, None) = (create, container_type) {
-                            err!(ErrorKind::Message("Container type not specified."))?;
+                            Err(ErrorKind::Message("Container type not specified."))?;
                         } else if let ContainerType::Symbolic = cache.get_instance(target)?.metadata().container_type() {
-                            err!(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
+                            Err(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
                         }
                     }
                     _ => args.invalid_operand()?,
                 },
-                None => err!(TargetUnspecified)?,
+                None => Err(TargetUnspecified)?,
             },
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(current_target) = current_target {
@@ -253,7 +252,7 @@ fn engage_aggregator<'a>(
 
     if !create_targets.is_empty() || init {
         if flags.intersects(TransactionFlags::PREVIEW) {
-            err!(ErrorKind::Message("Container creation cannot be previewed."))?;
+            Err(ErrorKind::Message("Container creation cannot be previewed."))?;
         }
 
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;

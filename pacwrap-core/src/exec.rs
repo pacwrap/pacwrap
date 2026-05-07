@@ -28,8 +28,9 @@ use thiserror::Error as ThisError;
 
 use crate::{
     Error,
-    ErrorKind,
     ErrorTrait,
+    ErrorType,
+    PathContext,
     Result,
     config::{ContainerHandle, ContainerType},
     constants::{
@@ -47,10 +48,9 @@ use crate::{
         TERM,
         UID,
     },
-    err,
     exec::{
         seccomp::{FilterType::*, provide_bpf_program},
-        utils::{agent_params, decode_info_json, wait_on_fakeroot, wait_on_process},
+        utils::{agent_params, decode_info_json, wait_on_fakeroot},
     },
     lazy_lock,
     sync::transaction::{TransactionFlags, TransactionMetadata, TransactionParameters},
@@ -101,31 +101,45 @@ impl ErrorTrait for ExecutionError {
     }
 }
 
+impl From<ExecutionError> for Error<ErrorType> {
+    fn from(value: ExecutionError) -> Self {
+        Self {
+            code: value.code(),
+            error: value.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ExecutionType {
     Interactive,
     NonInteractive,
 }
 
-#[rustfmt::skip]
-pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: &ContainerHandle, arguments: Vec<&str>) -> Result<()> {
+pub fn fakeroot_container(
+    exec_type: ExecutionType,
+    trap: Option<fn(i32)>,
+    ins: &ContainerHandle,
+    arguments: Vec<&str>,
+) -> Result<()> {
     let term_control = TermControl::new(0);
     let info_pipe = os_pipe::pipe().expect("bwrap pipe");
     let sec_pipe = os_pipe::pipe().expect("eBPF pipe");
-	let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).expect("eBPF program");
-    let info_fd = info_pipe.1.as_raw_fd();  
+    let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).expect("eBPF program");
+    let info_fd = info_pipe.1.as_raw_fd();
     let fd_mappings = vec![
-	    FdMapping { 
-	        parent_fd: sec_fd, 
-	        child_fd: sec_fd 
-	    },
-        FdMapping { 
-	        parent_fd: info_fd, 
-	        child_fd: info_fd 
-	    },
-	];
-	let mut process = Command::new(BWRAP_EXECUTABLE);
+        FdMapping {
+            parent_fd: sec_fd,
+            child_fd: sec_fd,
+        },
+        FdMapping {
+            parent_fd: info_fd,
+            child_fd: info_fd,
+        },
+    ];
+    let mut process = Command::new(BWRAP_EXECUTABLE);
 
+    #[rustfmt::skip]
 	process.env_clear()
         .arg("--tmpfs").arg("/tmp")
         .arg("--proc").arg("/proc")
@@ -155,6 +169,7 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
         .arg("--info-fd")
         .arg(info_fd.to_string());
 
+    #[rustfmt::skip]
     if let ContainerType::Slice = ins.metadata().container_type() {
         process.arg("--dir").arg("/root")  
             .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/mnt/fs/bin")
@@ -162,11 +177,9 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
             .arg("--dir").arg("/mnt/fs/root") ;
 
         if arguments[0] == "ash" {
-            process.arg("--hostname").arg("BusyBox")
-                .arg("--setenv").arg("ENV").arg("/etc/profile") 
+            process.arg("--hostname").arg("BusyBox").arg("--setenv").arg("ENV").arg("/etc/profile")
         } else {
-            process.arg("--hostname").arg("FakeChroot")
-                .arg("fakeroot").arg("chroot").arg("/mnt/fs")
+            process.arg("--hostname").arg("FakeChroot").arg("fakeroot").arg("chroot").arg("/mnt/fs")
         }
     } else {
         process.arg("--hostname").arg("FakeChroot")
@@ -179,39 +192,43 @@ pub fn fakeroot_container(exec_type: ExecutionType, trap: Option<fn(i32)>, ins: 
             .arg("fakeroot").arg("chroot").arg("/mnt/fs")
     };
 
-    match process.args(arguments)
-        .fd_mappings(fd_mappings)
-        .expect("FD Mappings")
-        .spawn() 
-	{
-		Ok(child) => wait_on_fakeroot(exec_type, child, term_control, decode_info_json(info_pipe)?, trap),
-		Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
-	}
+    wait_on_fakeroot(
+        exec_type,
+        process
+            .args(arguments)
+            .fd_mappings(fd_mappings)
+            .expect("FD Mappings")
+            .spawn()
+            .context_path(BWRAP_EXECUTABLE)?,
+        term_control,
+        decode_info_json(info_pipe)?,
+        trap,
+    )
 }
 
-#[rustfmt::skip]
 pub fn transaction_agent(
     ins: &ContainerHandle,
     flags: &TransactionFlags,
     params: TransactionParameters,
     metadata: &TransactionMetadata,
-) -> Result<Child> {	
+) -> Result<Child> {
     let params_pipe = os_pipe::pipe().expect("params pipe");
-    let params_fd = agent_params(&params_pipe.0, &params_pipe.1, &params, metadata)?;	
+    let params_fd = agent_params(&params_pipe.0, &params_pipe.1, &params, metadata)?;
     let sec_pipe = os_pipe::pipe().expect("eBPF pipe");
     let sec_fd = provide_bpf_program(vec![Standard, Namespaces], &sec_pipe.0, sec_pipe.1).expect("eBPF program");
     let fd_mappings = vec![
-        FdMapping { 
-            parent_fd: sec_fd, 
-            child_fd: sec_fd 
-        }, 
-        FdMapping { 
-            parent_fd: params_fd, 
-            child_fd: params_fd 
+        FdMapping {
+            parent_fd: sec_fd,
+            child_fd: sec_fd,
         },
-    ]; 
+        FdMapping {
+            parent_fd: params_fd,
+            child_fd: params_fd,
+        },
+    ];
     let mut process = Command::new(BWRAP_EXECUTABLE);
 
+    #[rustfmt::skip]
     process.arg("--bind").arg(ins.vars().root()).arg("/mnt/fs")
         .arg("--symlink").arg("/mnt/fs/usr").arg("/usr")
         .arg("--ro-bind").arg(format!("{}/bin", *DIST_IMG)).arg("/bin")
@@ -253,25 +270,23 @@ pub fn transaction_agent(
         process.arg("--setenv").arg("RUST_BACKTRACE").arg("full");
     }
 
-    match process.arg("agent")
+    Ok(process
+        .arg("agent")
         .arg("transact")
         .fd_mappings(fd_mappings)
         .expect("FD Mappings")
-        .spawn() 
-    {
-        Ok(child) => Ok(child),
-        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
-    }
+        .spawn()
+        .context_path(BWRAP_EXECUTABLE)?)
 }
 
 pub fn pacwrap_key(cmd: Vec<&str>) -> Result<()> {
-    match Command::new(PACMAN_KEY_SCRIPT)
+    Command::new(PACMAN_KEY_SCRIPT)
         .stderr(Stdio::null())
         .env("COLOURTERM", *COLORTERM)
         .args(cmd)
-        .spawn()
-    {
-        Ok(proc) => wait_on_process(PACMAN_KEY_SCRIPT, proc),
-        Err(error) => err!(ErrorKind::ProcessInitFailure(PACMAN_KEY_SCRIPT, error.kind()))?,
-    }
+        .spawn()?
+        .wait()
+        .context_path(PACMAN_KEY_SCRIPT)?;
+
+    Ok(())
 }

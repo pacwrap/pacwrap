@@ -22,7 +22,6 @@ use alpm::PackageReason;
 use pacwrap_core::{
     config,
     constants::{BOLD_GREEN, RESET},
-    err,
     error::*,
     sync::{instantiate_alpm, transaction::TransactionFlags},
     utils::{
@@ -54,7 +53,7 @@ pub fn query(args: &mut Arguments) -> Result<()> {
     }
 
     if target.is_empty() {
-        err!(InvalidArgument::TargetUnspecified)?
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     let handle = config::provide_handle(target)?;

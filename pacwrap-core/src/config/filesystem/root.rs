@@ -22,14 +22,12 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
-    ErrorExt,
     Result,
     config::{
         ContainerVariables,
         filesystem::{BindError, Filesystem, Mount, Permission::ReadOnly},
     },
-    err,
+    eprintln_warn,
     exec::args::ExecutionArgs,
 };
 
@@ -59,26 +57,26 @@ impl Filesystem for Root {
         let volumes = volumes();
 
         if !Path::new(vars.root()).exists() {
-            err!(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
+            Err(BindError::Fail(format!("Container {} not found. ", vars.instance())))?
         }
 
         if self.mounts.is_empty() {
-            err!(BindError::Fail("Mount volumes are undeclared.".to_string()))?
+            Err(BindError::Fail("Mount volumes are undeclared.".to_string()))?
         }
 
         for mount in volumes.iter() {
             if mount.path.is_empty() {
-                err!(BindError::Warn("Path is undeclared.".into()))?
+                Err(BindError::Warn("Path is undeclared.".into()))?
             }
 
             if let Err(err) = check_mount(vars, mount) {
-                err.warn();
+                eprintln_warn!("{err}");
             }
         }
 
         for mount in self.mounts.iter().filter(|a| !volumes.contains(a)) {
             if mount.path.is_empty() {
-                err!(BindError::Warn("Path is undeclared.".into()))?
+                Err(BindError::Warn("Path is undeclared.".into()))?
             }
 
             check_mount(vars, mount)?;
@@ -110,7 +108,7 @@ impl Filesystem for Root {
 
 fn check_mount(vars: &ContainerVariables, mount: &Mount) -> Result<()> {
     if !Path::new(&format!("{}/{}", vars.root(), &mount.path)).exists() {
-        err!(BindError::Fail(format!("{} not found in container root.", &mount.path)))?
+        Err(BindError::Fail(format!("{} not found in container root.", &mount.path)))?
     }
 
     Ok(())

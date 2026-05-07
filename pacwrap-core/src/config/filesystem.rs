@@ -30,6 +30,7 @@ use serde::{
     Serializer,
     de::{Error as DeError, Visitor},
 };
+use thiserror::Error;
 
 use crate::{ErrorTrait, Result, config::ContainerVariables, exec::args::ExecutionArgs, impl_error};
 
@@ -50,7 +51,7 @@ pub trait Filesystem: DynClone {
     fn module(&self) -> &'static str;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Error, Debug, Clone)]
 pub enum BindError {
     Fail(String),
     Warn(String),

@@ -23,6 +23,7 @@ indexmap.workspace = true
 simplebyteunit.workspace = true
 walkdir.workspace = true
 thiserror.workspace = true
+anyhow.workspace = true
 
 # Serialization
 serde = { version = "1.0", features = ["derive", "rc"] }

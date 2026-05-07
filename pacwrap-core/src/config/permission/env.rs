@@ -28,7 +28,6 @@ use crate::{
     },
     eprintln_warn,
     exec::args::ExecutionArgs,
-    utils::ansi::*,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

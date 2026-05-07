@@ -20,12 +20,9 @@
 use std::process::Command;
 
 use pacwrap_core::{
-    Error,
-    ErrorKind,
     Result,
     config,
     eprintln_warn,
-    err,
     utils::{
         Arguments,
         arguments::{InvalidArgument, Operand},
@@ -86,15 +83,13 @@ fn open(args: &mut Arguments) -> Result<()> {
         Operand::ShortPos('r', val) | Operand::LongPos("root", val) => val,
         Operand::ShortPos('t', val) | Operand::LongPos("target", val) => val,
         Operand::Value(val) => val,
-        _ => return err!(InvalidArgument::TargetUnspecified),
+        _ => return Err(InvalidArgument::TargetUnspecified)?,
     })?;
     let directory = match directory {
         DirectoryType::Root => instance.vars().root(),
         DirectoryType::Home => instance.vars().home(),
     };
 
-    match Command::new(GIO).arg("open").arg(directory).spawn() {
-        Ok(_) => Ok(()),
-        Err(err) => err!(ErrorKind::ProcessInitFailure(GIO, err.kind())),
-    }
+    Command::new(GIO).arg("open").arg(directory).spawn()?;
+    Ok(())
 }

@@ -18,13 +18,11 @@
  */
 
 use pacwrap_core::{
-    Error,
     ErrorExt,
-    err,
     utils::{Arguments, arguments::Operand},
 };
 
-use crate::error::AgentError;
+use crate::error::Error;
 
 mod agent;
 mod error;
@@ -34,7 +32,7 @@ fn main() {
     let param = arguments.next().unwrap_or_default();
     let result = match param {
         Operand::Value("transact") => agent::transact(),
-        _ => err!(AgentError::DirectExecution),
+        _ => Err(Error::DirectExecution),
     };
 
     if let Err(error) = result {

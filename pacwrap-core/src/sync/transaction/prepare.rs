@@ -17,11 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::{
-    Error,
     Result,
     config::{ContainerHandle, ContainerType},
     constants::UNIX_TIMESTAMP,
-    err,
     sync::{
         self,
         SyncError,
@@ -71,7 +69,7 @@ impl Transaction for Prepare {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
                             Some(dep_handle) => handle.enumerate_package_lists(&sync::instantiate_alpm(dep_handle, ag.flags())?),
-                            None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
+                            None => Err(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
                     }
 
@@ -87,10 +85,10 @@ impl Transaction for Prepare {
 
                 if let Upgrade(upgrade, ..) = action {
                     if !upgrade && handle.meta.queue.is_empty() {
-                        err!(SyncError::NothingToDo)?
+                        Err(SyncError::NothingToDo)?
                     }
                 } else if handle.meta.queue.is_empty() {
-                    err!(SyncError::NothingToDo)?
+                    Err(SyncError::NothingToDo)?
                 }
 
                 if handle.meta.queue.is_empty() {

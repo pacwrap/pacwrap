@@ -33,8 +33,7 @@ use serde_yaml::Value;
 use crate::{
     ErrorKind,
     config::global,
-    constants::BWRAP_EXECUTABLE,
-    err,
+    eprintln_warn,
     error::*,
     exec::{ExecutionError, ExecutionType},
     sync::{
@@ -58,41 +57,38 @@ pub fn wait_on_container(
 ) -> Result<()> {
     trap_cb(bwrap_pid);
 
-    match process.wait() {
-        Ok(status) => {
-            if block {
-                let proc: &str = &format!("/proc/{}/", bwrap_pid);
-                let proc = Path::new(proc);
+    let status = process.wait()?;
 
-                while proc.exists() {
-                    thread::sleep(PROCESS_SLEEP_DURATION);
-                }
-            }
+    if block {
+        let proc: &str = &format!("/proc/{}/", bwrap_pid);
+        let proc = Path::new(proc);
 
-            if let Some(mut jobs) = jobs {
-                for job in jobs.iter_mut() {
-                    job.kill().unwrap();
-                }
-            }
-
-            if let Err(err) = exit_cb() {
-                err.warn();
-            }
-
-            if let Err(err) = term.reset_terminal() {
-                err.warn();
-            }
-
-            match status.code() {
-                Some(code) => exit(code),
-                None => {
-                    eprint!("\nbwrap process {status}");
-                    println!();
-                    exit(ExecutionError::Bwrap(status).code())
-                }
-            }
+        while proc.exists() {
+            thread::sleep(PROCESS_SLEEP_DURATION);
         }
-        Err(error) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind())),
+    }
+
+    if let Some(mut jobs) = jobs {
+        for job in jobs.iter_mut() {
+            job.kill().unwrap();
+        }
+    }
+
+    if let Err(err) = exit_cb() {
+        eprintln_warn!("{err}");
+    }
+
+    if let Err(err) = term.reset_terminal() {
+        eprintln_warn!("{err}");
+    }
+
+    match status.code() {
+        Some(code) => exit(code),
+        None => {
+            eprint!("\nbwrap process {status}");
+            println!();
+            exit(ExecutionError::Bwrap(status).code())
+        }
     }
 }
 
@@ -107,29 +103,25 @@ pub fn wait_on_fakeroot(
         trap(bwrap_pid)
     }
 
-    match process.wait() {
-        Ok(status) => {
-            if let Err(err) = term.reset_terminal() {
-                err.warn();
-            }
+    let status = process.wait()?;
+    if let Err(err) = term.reset_terminal() {
+        eprintln_warn!("{err}");
+    }
 
-            match status.code() {
-                Some(code) => match (exec_type, code) {
-                    (_, 0) => Ok(()),
-                    (ExecutionType::Interactive, _) => exit(code),
-                    (ExecutionType::NonInteractive, _) => err!(ExecutionError::Container(code)),
-                },
-                None => match exec_type {
-                    ExecutionType::Interactive => {
-                        eprint!("\nbwrap process {status}");
-                        println!();
-                        exit(ExecutionError::Bwrap(status).code())
-                    }
-                    ExecutionType::NonInteractive => err!(ExecutionError::Bwrap(status)),
-                },
+    match status.code() {
+        Some(code) => match (exec_type, code) {
+            (_, 0) => Ok(()),
+            (ExecutionType::Interactive, _) => exit(code),
+            (ExecutionType::NonInteractive, _) => Err(ExecutionError::Container(code))?,
+        },
+        None => match exec_type {
+            ExecutionType::Interactive => {
+                eprint!("\nbwrap process {status}");
+                println!();
+                exit(ExecutionError::Bwrap(status).code())
             }
-        }
-        Err(error) => err!(ErrorKind::ProcessWaitFailure(BWRAP_EXECUTABLE, error.kind())),
+            ExecutionType::NonInteractive => Err(ExecutionError::Bwrap(status))?,
+        },
     }
 }
 
@@ -142,9 +134,9 @@ pub fn decode_info_json(mut info_pipe: (PipeReader, PipeWriter)) -> Result<i32> 
     match serde_yaml::from_str::<Value>(&output) {
         Ok(value) => match value["child-pid"].as_u64() {
             Some(value) => Ok(value as i32),
-            None => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
+            None => Err(ErrorKind::Message("Unable to acquire child pid from bwrap process."))?,
         },
-        Err(_) => err!(ErrorKind::Message("Unable to acquire child pid from bwrap process.")),
+        Err(_) => Err(ErrorKind::Message("Unable to acquire child pid from bwrap process."))?,
     }
 }
 
@@ -164,20 +156,6 @@ pub fn agent_params(
 fn serialize<T: for<'de> Serialize>(input: &T, file: &PipeWriter) -> Result<()> {
     match bincode::serialize_into::<&PipeWriter, T>(file, input) {
         Ok(()) => Ok(()),
-        Err(error) => err!(SyncError::TransactionFailure(format!("Agent data serialization failed: {}", error))),
-    }
-}
-
-pub fn handle_process(name: &'static str, result: std::result::Result<Child, std::io::Error>) -> Result<()> {
-    match result {
-        Ok(child) => wait_on_process(name, child),
-        Err(error) => err!(ErrorKind::ProcessInitFailure(name, error.kind())),
-    }
-}
-
-pub fn wait_on_process(name: &'static str, mut child: Child) -> Result<()> {
-    match child.wait() {
-        Ok(_) => Ok(()),
-        Err(error) => err!(ErrorKind::ProcessWaitFailure(name, error.kind())),
+        Err(error) => Err(SyncError::TransactionFailure(format!("Agent data serialization failed: {}", error)))?,
     }
 }

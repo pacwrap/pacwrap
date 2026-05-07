@@ -22,18 +22,7 @@ use std::thread::Builder;
 use alpm::{Alpm, CommitData, CommitError, Package, PrepareData, PrepareError};
 use signal_hook::iterator::Signals;
 
-use crate::{
-    Error,
-    ErrorExt,
-    Result,
-    constants::SIGNAL_LIST,
-    eprintln_error,
-    eprintln_warn,
-    err,
-    error,
-    sync::SyncError,
-    utils::ansi::*,
-};
+use crate::{ErrorExt, Result, constants::SIGNAL_LIST, eprintln_error, eprintln_warn, sync::SyncError, utils::ansi::*};
 
 pub trait AlpmUtils {
     fn get_local_package(&self, pkg: &str) -> Option<&Package>;
@@ -88,7 +77,7 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
                     );
                 }
 
-                err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
+                Err(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
             }
             CommitData::PkgInvalid(p) =>
                 for pkg in p.iter() {
@@ -97,7 +86,7 @@ pub fn erroneous_transaction(error: CommitError) -> Result<()> {
         }
     }
 
-    err!(SyncError::TransactionFailure(error.to_string()))
+    Err(SyncError::TransactionFailure(error.to_string()))?
 }
 
 pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
@@ -143,7 +132,7 @@ pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
         }
     }
 
-    err!(SyncError::PreparationFailure(error.to_string()))
+    Err(SyncError::PreparationFailure(error.to_string()))?
 }
 
 pub fn signal_trap() {
@@ -158,7 +147,7 @@ pub fn signal_trap() {
                 println!();
 
                 if count == 3 {
-                    error!(SyncError::SignalInterrupt).error()
+                    SyncError::SignalInterrupt.error();
                 }
             }
         })

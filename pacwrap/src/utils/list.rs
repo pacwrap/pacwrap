@@ -28,7 +28,6 @@ use indexmap::IndexSet;
 use simplebyteunit::simplebyteunit::*;
 
 use pacwrap_core::{
-    ErrorGeneric,
     Result,
     config::{ContainerHandle, ContainerType, cache::populate},
     constants::{BOLD, CONTAINER_DIR, RESET, UNDERLINE},
@@ -223,7 +222,7 @@ fn enumerate_containers<'a>(
         let instance = container.vars().instance();
         let container_path = Path::new(*CONTAINER_DIR).join(instance);
         let (len, organic, total) = if measure_disk && container.metadata().container_type() != &ContainerType::Symbolic {
-            directory_size(&container_path).prepend_io(|| container_path.display().to_string())?
+            directory_size(&container_path)
         } else {
             (0, 0, 0)
         };
@@ -237,7 +236,7 @@ fn enumerate_containers<'a>(
 }
 
 //There might be some value in threading this routine in future.
-fn directory_size(dir: &Path) -> Result<(i64, i64, i64)> {
+fn directory_size(dir: &Path) -> (i64, i64, i64) {
     let mut len = 0;
     let mut total = 0;
     let mut unique = 0;
@@ -254,5 +253,5 @@ fn directory_size(dir: &Path) -> Result<(i64, i64, i64)> {
         }
     }
 
-    Ok((len, unique, total))
+    (len, unique, total)
 }

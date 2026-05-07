@@ -25,7 +25,7 @@ use std::{
 
 use thiserror::Error as ThisError;
 
-use crate::{Error, ErrorGeneric, ErrorTrait, Result, constants::LOCK_FILE, err, impl_error};
+use crate::{ErrorTrait, PathContext, Result, constants::LOCK_FILE, impl_error};
 
 #[derive(ThisError, Debug)]
 pub enum LockError {
@@ -58,33 +58,24 @@ impl Lock {
 
     pub fn lock(mut self) -> Result<Self> {
         if self.exists() {
-            err!(LockError::Locked(self.lock))?
+            Err(LockError::Locked(self.lock))?
         }
 
-        File::create(self.lock).prepend(|| format!("Failed to create lock file '{}'", self.lock))?;
-        self.time = Path::new(self.lock)
-            .metadata()
-            .prepend(|| format!("Failed to acquire metadata on lock file '{}'", self.lock))?
-            .ctime();
+        File::create(self.lock).context_path(self.lock)?;
+        self.time = Path::new(self.lock).metadata().context_path(self.lock)?.ctime();
         Ok(self)
     }
 
     pub fn assert(&self) -> Result<()> {
-        if !self.exists()
-            || Path::new(self.lock)
-                .metadata()
-                .prepend(|| format!("Failed to acquire metadata on lock file '{}'", self.lock))?
-                .ctime()
-                != self.time
-        {
-            err!(LockError::NotAcquired)?
+        if !self.exists() || Path::new(self.lock).metadata().context_path(self.lock)?.ctime() != self.time {
+            Err(LockError::NotAcquired)?
         }
 
         Ok(())
     }
 
     pub fn unlock(&self) -> Result<()> {
-        remove_file(self.lock).prepend(|| format!("Failed to remove lock file '{}'", self.lock))
+        Ok(remove_file(self.lock).context_path(self.lock)?)
     }
 
     pub fn exists(&self) -> bool {

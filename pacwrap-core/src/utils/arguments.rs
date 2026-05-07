@@ -23,7 +23,9 @@ use std::{
     ops::Index,
 };
 
-use crate::{err, error::*, impl_error};
+use thiserror::Error;
+
+use crate::{error::*, impl_error};
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Operand<'a> {
@@ -44,7 +46,7 @@ pub struct Arguments<'a> {
     cur: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Error, Debug, Clone)]
 pub enum InvalidArgument {
     InvalidOperand(String),
     UnsuppliedOperand(&'static str, &'static str),
@@ -125,7 +127,7 @@ impl<'a> Arguments<'a> {
             }
         }
 
-        err!(InvalidArgument::TargetUnspecified)
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     pub fn set_index(&mut self, index: usize) {
@@ -135,8 +137,8 @@ impl<'a> Arguments<'a> {
 
     pub fn invalid_operand(&self) -> Result<()> {
         match self.operands.get(self.cur) {
-            Some(oper) => err!(InvalidArgument::InvalidOperand(oper.to_string())),
-            None => err!(InvalidArgument::OperationUnspecified),
+            Some(oper) => Err(InvalidArgument::InvalidOperand(oper.to_string()))?,
+            None => Err(InvalidArgument::OperationUnspecified)?,
         }
     }
 

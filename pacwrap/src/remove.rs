@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use pacwrap_core::{
     ErrorKind,
     config::{ContainerType, cache, init::init},
-    err,
+    eprintln_warn,
     error::*,
     lock::Lock,
     log::Logger,
@@ -52,7 +52,7 @@ pub fn remove(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(action, args, &mut logger, &lock);
 
     if let Err(error) = lock.unlock() {
-        eprintln!("{}", ErrorType::Error(&error));
+        eprintln_warn!("{error}");
     }
 
     result
@@ -86,7 +86,7 @@ fn engage_aggregator<'a>(
     let mut current_target = None;
 
     if let Op::Nothing = args.next().unwrap_or_default() {
-        err!(OperationUnspecified)?
+        Err(OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -109,7 +109,7 @@ fn engage_aggregator<'a>(
                 Some(arg) => match arg {
                     Op::ShortPos('t', target) | Op::LongPos("target", target) => {
                         if let ContainerType::Symbolic = cache.get_instance(target)?.metadata().container_type() {
-                            err!(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
+                            Err(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
                         }
 
                         current_target = Some(target);
@@ -117,7 +117,7 @@ fn engage_aggregator<'a>(
                     }
                     _ => args.invalid_operand()?,
                 },
-                None => err!(TargetUnspecified)?,
+                None => Err(TargetUnspecified)?,
             },
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(target) = current_target {
@@ -133,7 +133,7 @@ fn engage_aggregator<'a>(
     }
 
     if current_target.is_none() {
-        err!(TargetUnspecified)?
+        Err(TargetUnspecified)?
     }
 
     TransactionAggregator::new(&cache, log, action_type)

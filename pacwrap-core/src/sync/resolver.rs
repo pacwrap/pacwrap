@@ -22,8 +22,8 @@ use std::collections::HashSet;
 use alpm::{Alpm, Package};
 
 use crate::{
-    err,
-    sync::{Error, SyncError, transaction::TransactionType},
+    Result,
+    sync::{SyncError, transaction::TransactionType},
 };
 
 const RECURSION_DEPTH_LIMIT: isize = 50;
@@ -34,7 +34,7 @@ pub mod remote;
 pub trait Resolver<'a>: Sized {
     fn new(alpm: &'a Alpm) -> Self;
     fn set_ignored(self, ignorelist: &'a HashSet<String>) -> Self;
-    fn enumerate(self, packages: &[&'a str]) -> Result<Self, Error>;
+    fn enumerate(self, packages: &[&'a str]) -> Result<Self>;
     fn packages(&self) -> &Vec<&'a Package>;
 }
 
@@ -47,7 +47,7 @@ pub trait ResolverFlags {
 }
 
 trait ResolverDepth {
-    fn check_depth(&mut self) -> Result<(), Error>;
+    fn check_depth(&mut self) -> Result<()>;
 }
 
 trait ResolverDepthExt {
@@ -59,9 +59,9 @@ impl<'a, T> ResolverDepth for T
 where
     T: Resolver<'a> + ResolverDepthExt,
 {
-    fn check_depth(&mut self) -> Result<(), Error> {
+    fn check_depth(&mut self) -> Result<()> {
         if self.depth() == RECURSION_DEPTH_LIMIT {
-            err!(SyncError::RecursionDepthExceeded(self.depth()))?
+            Err(SyncError::RecursionDepthExceeded(self.depth()))?
         }
 
         self.set_depth(self.depth() + 1);

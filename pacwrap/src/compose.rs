@@ -20,14 +20,11 @@
 use std::{collections::HashMap, path::Path};
 
 use pacwrap_core::{
-    Error,
-    ErrorGeneric,
     ErrorKind,
-    ErrorType,
+    PathContext,
     Result,
     config::{ContainerCache, ContainerHandle, ContainerType::*, cache, compose_handle, init::init},
     eprintln_warn,
-    err,
     lock::Lock,
     log::{Level::Info, Logger},
     sync::{
@@ -56,7 +53,7 @@ pub fn compose(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(args, &lock);
 
     if let Err(error) = lock.unlock() {
-        eprintln!("{}", ErrorType::Error(&error));
+        eprintln_warn!("{error}");
     }
 
     result
@@ -95,11 +92,11 @@ fn compose_handles<'a>(
 
         if let Symbolic = container_type {
             if depends.is_empty() {
-                err!(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
+                Err(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
             }
         } else if let Base = container_type {
             if !depends.is_empty() {
-                err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
+                Err(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
             }
         }
 
@@ -178,7 +175,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     let mut current_target = None;
 
     if args.len() <= 1 {
-        err!(OperationUnspecified)?
+        Err(OperationUnspecified)?
     }
 
     args.set_index(1);
@@ -208,7 +205,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                     Op::ShortPos('t', t) | Op::LongPos("target", t) => current_target = Some(t),
                     _ => args.invalid_operand()?,
                 },
-                None => err!(TargetUnspecified)?,
+                None => Err(TargetUnspecified)?,
             },
             Op::LongPos(_, config) | Op::ShortPos(_, config) | Op::Value(config) => {
                 let target = match current_target {
@@ -225,7 +222,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                         delete.push(target);
                     }
 
-                    Path::new(target).try_exists().prepend_io(|| target)?;
+                    Path::new(target).try_exists().context_path(target)?;
 
                     current_target.map(|_| config)
                 } else {
@@ -241,7 +238,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     }
 
     if compose.is_empty() {
-        err!(ErrorKind::Message("Composition targets not specified."))?
+        Err(ErrorKind::Message("Composition targets not specified."))?
     }
 
     if !delete.is_empty() {

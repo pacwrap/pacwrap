@@ -27,8 +27,6 @@ use crate::{
         permission::*,
     },
     eprintln_warn,
-    err,
-    error,
     error::*,
     exec::args::ExecutionArgs,
 };
@@ -37,10 +35,13 @@ pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVari
     for filesystem in per {
         match filesystem.qualify(vars) {
             Ok(_) => filesystem.register(args, vars),
-            Err(condition) => match condition.downcast::<BindError>().map_err(|e| error!(ConfigError::from(e)))? {
-                BindError::Warn(_) => error!(ConfigError::Filesystem(filesystem.module(), condition)).warn(),
-                BindError::Fail(_) => err!(ConfigError::Filesystem(filesystem.module(), condition))?,
-            },
+            Err(condition) =>
+                if let ErrorType::Bind(condition) = condition.error {
+                    match condition {
+                        BindError::Warn(_) => ConfigError::Filesystem(filesystem.module(), condition).warn(),
+                        BindError::Fail(_) => Err(ConfigError::Filesystem(filesystem.module(), condition))?,
+                    }
+                },
         }
     }
 
@@ -61,8 +62,8 @@ pub fn register_permissions(per: &[Box<dyn Permission>], args: &mut ExecutionArg
                 None => continue,
             },
             Err(condition) => match condition {
-                PermError::Warn(_) => error!(ConfigError::Permission(p.module(), condition)).warn(),
-                PermError::Fail(_) => err!(ConfigError::Permission(p.module(), condition))?,
+                PermError::Warn(_) => ConfigError::Permission(p.module(), condition).warn(),
+                PermError::Fail(_) => Err(ConfigError::Permission(p.module(), condition))?,
             },
         }
     }

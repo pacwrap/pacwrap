@@ -19,13 +19,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
     Result,
     config::{
         ContainerVariables,
         filesystem::{BindError, Filesystem, Mount},
     },
-    err,
     exec::args::ExecutionArgs,
 };
 
@@ -39,12 +37,12 @@ pub struct TemporaryFilesystem {
 impl Filesystem for TemporaryFilesystem {
     fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.mounts.is_empty() {
-            err!(BindError::Warn("Mount volumes undeclared.".into()))?
+            Err(BindError::Warn("Mount volumes undeclared.".into()))?
         }
 
         for m in self.mounts.iter() {
             if m.path.is_empty() {
-                err!(BindError::Warn("Mount volumes undeclared.".into()))?
+                Err(BindError::Warn("Mount volumes undeclared.".into()))?
             }
         }
 

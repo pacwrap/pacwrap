@@ -17,34 +17,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Display, Error as FmtError, Formatter};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use dialoguer::console::Term;
+use thiserror::Error;
 
 use crate::{
-    Error,
     ErrorTrait,
+    Result,
     constants::{BOLD, BOLD_YELLOW, RESET, YELLOW},
-    err,
     impl_error,
 };
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum TableError {
+    #[error("Table is empty")]
     Empty,
+    #[error("Table contains no columns")]
     NoColumns,
 }
 
 impl_error!(TableError);
-
-impl Display for TableError {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
-        match self {
-            TableError::Empty => write!(fmt, "Table is empty"),
-            TableError::NoColumns => write!(fmt, "Table contains no columns"),
-        }
-    }
-}
 
 pub enum ColumnAttribute {
     AlignRight,
@@ -162,11 +155,11 @@ impl<'a> Table<'a> {
         !self.marker.is_empty()
     }
 
-    pub fn build(&'a mut self) -> Result<&'a Self, Error> {
+    pub fn build(&'a mut self) -> Result<&'a Self> {
         if let (0, 0) = self.dimensions {
-            err!(TableError::Empty)?
+            Err(TableError::Empty)?
         } else if let (_, 0) = self.dimensions {
-            err!(TableError::NoColumns)?
+            Err(TableError::NoColumns)?
         }
 
         for row in 0 .. self.dimensions.0 {
@@ -257,7 +250,7 @@ impl<'a> Entry<'a> {
 }
 
 impl Display for Table<'_> {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
         if !self.built {
             return writeln!(fmt, "Table object not built");
         }

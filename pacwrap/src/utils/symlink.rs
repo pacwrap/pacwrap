@@ -18,11 +18,9 @@
  */
 
 use pacwrap_core::{
-    Error,
     Result,
     config::{ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables, cache},
     constants::{ARROW_CYAN, ARROW_GREEN, BOLD, RESET},
-    err,
     sync::instantiate_container,
     utils::{
         Arguments,
@@ -50,16 +48,16 @@ pub fn link(args: &mut Arguments) -> Result<()> {
 
     let dest = match dest {
         Some(dest) => dest,
-        None => return err!(InvalidArgument::TargetUnspecified),
+        None => return Err(InvalidArgument::TargetUnspecified)?,
     };
     let src = match src {
         Some(src) => src,
-        None => return err!(InvalidArgument::TargetUnspecified),
+        None => return Err(InvalidArgument::TargetUnspecified)?,
     };
     let cache = cache::populate()?;
     let dest_handle = cache.get_instance(dest)?;
     let src_handle = match cache.get_instance_option(src) {
-        Some(src) => err!(ConfigError::AlreadyExists(src.vars().instance().into()))?,
+        Some(src) => Err(ConfigError::AlreadyExists(src.vars().instance().into()))?,
         None =>
             if new {
                 let container = Container::new(ContainerType::Symbolic, vec![], vec![]);

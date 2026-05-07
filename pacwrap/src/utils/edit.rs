@@ -25,10 +25,9 @@ use std::{
 };
 
 use pacwrap_core::{
-    ErrorGeneric,
+    PathContext,
     Result,
     constants::{ARROW_CYAN, ARROW_GREEN, CONFIG_DIR, DATA_DIR, EDITOR, HOME},
-    exec::utils::handle_process,
     lock::Lock,
     utils::{Arguments, arguments::Operand},
 };
@@ -139,27 +138,27 @@ pub fn edit_file(file: &str, ext: &str, edit_type: &EditKind, lock: Option<&Lock
     let temporary_file = &format!("/tmp/tmp.{}{}", prs, ext);
     let edit = matches!(edit_type, EditKind::Edit);
 
-    copy(file, temporary_file).prepend_io(|| file)?;
-    handle_process(*EDITOR, Command::new(*EDITOR).arg(temporary_file).spawn())?;
+    copy(file, temporary_file).context_path(file)?;
+    Command::new(*EDITOR).arg(temporary_file).spawn().context_path(*EDITOR)?;
 
     if matches!(edit_type, EditKind::Edit) && hash_file(file)? != hash_file(temporary_file)? {
         if let Some(lock) = lock {
             lock.assert()?;
         }
 
-        copy(temporary_file, file).prepend_io(|| temporary_file)?;
+        copy(temporary_file, file).context_path(file)?;
         eprintln!("{} Changes written to file.", *ARROW_GREEN);
     } else if edit {
         eprintln!("{} No changes made.", *ARROW_CYAN);
     }
 
-    remove_file(temporary_file).prepend_io(|| temporary_file)
+    Ok(remove_file(temporary_file)?)
 }
 
 fn hash_file(file_path: &str) -> Result<Vec<u8>> {
-    let mut file = File::open(file_path).prepend_io(|| file_path)?;
+    let mut file = File::open(file_path).context_path(file_path)?;
     let mut hasher = Sha256::new();
 
-    copy_io(&mut file, &mut hasher).prepend_io(|| file_path)?;
+    copy_io(&mut file, &mut hasher).context_path(file_path)?;
     Ok(hasher.finalize().to_vec())
 }

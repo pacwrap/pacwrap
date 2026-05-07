@@ -21,13 +21,11 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error,
     Result,
     config::{
         ContainerVariables,
         filesystem::{BindError, Filesystem, Permission::ReadOnly},
     },
-    err,
     exec::args::ExecutionArgs,
 };
 
@@ -42,7 +40,7 @@ impl Filesystem for System {
     fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         for dir in self.path.iter() {
             if !Path::new(&format!("/sys/{}", dir)).exists() {
-                err!(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
+                Err(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
             }
         }
 

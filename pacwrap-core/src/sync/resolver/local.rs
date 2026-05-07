@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use alpm::{Alpm, Package, PackageReason};
 
 use crate::{
-    Error,
+    Result,
     sync::{
         resolver::{Resolver, ResolverDepth, ResolverDepthExt, ResolverFlags},
         transaction::TransactionType,
@@ -56,7 +56,7 @@ impl<'a> Resolver<'a> for LocalDependencyResolver<'a> {
         self
     }
 
-    fn enumerate(mut self, packages: &[&'a str]) -> Result<Self, Error> {
+    fn enumerate(mut self, packages: &[&'a str]) -> Result<Self> {
         let mut synchronize: Vec<&'a str> = Vec::new();
         let (enumerate, cascade, _) = self.flags.expect("Transaction flags not set");
         let ignored = self.ignored.expect("Ignore list not enumerated");

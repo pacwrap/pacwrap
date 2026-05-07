@@ -20,12 +20,8 @@
 use std::{fs::File, io::Write, path::Path};
 
 use crate::{
-    Error,
-    ErrorGeneric,
-    ErrorKind,
     Result,
     constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
-    err,
 };
 
 static REPO_CONF_DEFAULT: &str = include_str!(env!("PACWRAP_DIST_REPO_CONF"));
@@ -45,9 +41,7 @@ impl DirectoryLayout {
                 continue;
             }
 
-            if let Err(error) = std::fs::create_dir_all(path) {
-                err!(ErrorKind::IOError(path.into(), error.kind()))?
-            }
+            std::fs::create_dir_all(path)?;
         }
 
         Ok(())
@@ -80,7 +74,7 @@ fn initialize_file(location: &str, contents: &str) -> Result<()> {
         return Ok(());
     }
 
-    write!(File::create(location).prepend_io(|| location)?, "{contents}").prepend_io(|| location)?;
+    write!(File::create(location)?, "{contents}")?;
     Ok(())
 }
 

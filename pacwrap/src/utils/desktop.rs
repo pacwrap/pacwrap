@@ -17,6 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use anyhow::anyhow;
 use regex::Regex;
 use std::{
     cmp::Ordering::{self, *},
@@ -26,14 +27,12 @@ use std::{
 };
 
 use pacwrap_core::{
-    Error,
     ErrorExt,
-    ErrorGeneric,
     ErrorKind,
+    PathContext,
     Result,
     config::{ContainerHandle, provide_handle},
     constants::{ARROW_GREEN, HOME},
-    err,
     exec::path::resolve_path,
     utils::{Arguments, arguments::Operand, table::Table},
 };
@@ -154,7 +153,7 @@ fn edit(args: &mut Arguments) -> Result<()> {
 
     match desktop.first() {
         Some(entry) => edit_file(&format!("{app_dir}/{}", entry.name), ".desktop", &EditKind::Edit, None),
-        None => err!(ErrorKind::Message("Desktop file not found.")),
+        None => Err(anyhow!(ErrorKind::Message("Desktop file not found.")))?,
     }
 }
 
@@ -169,7 +168,7 @@ fn create(args: &mut Arguments) -> Result<()> {
     let entries = desktop_entries(&meta, name)?;
 
     if entries.is_empty() {
-        err!(ErrorKind::Message("Desktop file(s) not found."))?;
+        Err(ErrorKind::Message("Desktop file(s) not found."))?;
     }
 
     for entry in entries {
@@ -187,14 +186,14 @@ fn remove(args: &mut Arguments) -> Result<()> {
     let entries = desktop_entries(&DesktopMeta::new(None), name)?;
 
     if entries.is_empty() {
-        err!(ErrorKind::Message("Desktop file(s) not found."))?
+        Err(ErrorKind::Message("Desktop file(s) not found."))?
     }
 
     for entry in entries {
         let file_name = entry.name;
         let desktop_file = &format!("{}{LOCAL_APP_DIR}/{}", *HOME, file_name);
 
-        remove_file(desktop_file).prepend_io(|| desktop_file)?;
+        remove_file(desktop_file)?;
         eprintln!("{} Removed '{file_name}'.", *ARROW_GREEN);
     }
 
@@ -214,10 +213,7 @@ fn read_desktop_entry<'a>(meta: &DesktopMeta<'a>, file: &str) -> Result<DesktopE
     };
     let path = path.to_string_lossy();
 
-    File::open(&*path)
-        .prepend_io(|| &path)?
-        .read_to_string(&mut contents)
-        .prepend_io(|| &path)?;
+    File::open(&*path)?.read_to_string(&mut contents)?;
 
     for line in contents.lines().filter(|f| !f.starts_with("#")) {
         if let (true, Some(start), Some(end)) = (line.starts_with("["), line.find("["), line.find("]")) {
@@ -298,27 +294,31 @@ fn create_desktop_entry(handle: &ContainerHandle, file_name: &str, target: &str)
     let mut contents = String::new();
 
     File::open(desktop_file)
-        .prepend_io(|| desktop_file.to_string_lossy())?
+        .context_path(desktop_file)?
         .read_to_string(&mut contents)
-        .prepend_io(|| desktop_file.to_string_lossy())?;
-    contents = Regex::new("Exec=*")?
+        .context_path(desktop_file)?;
+    contents = Regex::new("Exec=*")
+        .expect("Invalid internal regex literal")
         .replace_all(&contents, format!("Exec=pacwrap run {} ", target))
         .to_string();
-    contents = Regex::new("TryExec=(.*)")?.replace_all(&contents, "TryExec=pacwrap").to_string();
+    contents = Regex::new("TryExec=(.*)")
+        .expect("Invalid internal regex literal")
+        .replace_all(&contents, "TryExec=pacwrap")
+        .to_string();
     contents.push_str(&format!("\n[pacwrap]\ncontainer={target}"));
 
     let file_name = &file_name[.. file_name.len() - 8];
     let desktop_file = &format!("{}{LOCAL_APP_DIR}/pacwrap.{file_name}.desktop", *HOME);
-    let mut output = File::create(desktop_file).prepend_io(|| desktop_file)?;
+    let mut output = File::create(desktop_file).context_path(desktop_file)?;
 
-    write!(output, "{}", contents).prepend_io(|| desktop_file)?;
+    write!(output, "{}", contents).context_path(desktop_file)?;
     eprintln!("{} Created 'pacwrap.{file_name}.desktop'.", *ARROW_GREEN);
     Ok(())
 }
 
 fn desktop_entries<'a>(meta: &DesktopMeta<'a>, predicate: &str) -> Result<Vec<DesktopEntry<'a>>> {
     Ok(read_dir(&meta.app_dir)
-        .prepend_io(|| &meta.app_dir)?
+        .context_path(&meta.app_dir)?
         .filter_map(StdResult::ok)
         .filter_map(|entry| {
             let file = entry.file_name();

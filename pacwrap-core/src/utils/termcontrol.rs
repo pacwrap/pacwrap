@@ -19,7 +19,7 @@
 
 use nix::sys::termios::{SetArg::TCSANOW, Termios, tcgetattr, tcsetattr};
 
-use crate::{Error, ErrorKind, Result, err};
+use crate::{ErrorKind, Result};
 
 /*******
  *
@@ -54,14 +54,12 @@ impl TermControl {
     /*
      * Check if Termios initiated and then execute tcsetattr to reset terminal.
      */
-
     pub fn reset_terminal(&self) -> Result<()> {
-        match self.tm.as_ref() {
-            Some(tm) => match tcsetattr(self.fd, TCSANOW, tm) {
-                Ok(_) => Ok(()),
-                Err(errno) => err!(ErrorKind::Termios(errno)),
-            },
-            None => Ok(()),
-        }
+        let Some(termios) = self.tm.as_ref() else {
+            return Ok(());
+        };
+
+        tcsetattr(self.fd, TCSANOW, termios).map_err(ErrorKind::Termios)?;
+        Ok(())
     }
 }

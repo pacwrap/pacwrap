@@ -212,7 +212,7 @@ pub fn global() -> Result<&'static Global> {
         None => {
             let cfg = match load_config() {
                 Ok(cfg) => cfg,
-                Err(err) => err.fatal(),
+                Err(err) => err.error(),
             };
 
             CONFIG.get_or_init(|| cfg)

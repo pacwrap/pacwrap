@@ -23,9 +23,10 @@ use indexmap::IndexMap;
 
 use crate::{
     ErrorKind,
+    PathContext,
     config::{ConfigError, ContainerHandle, ContainerType, provide_handle, provide_new_handle},
     constants::{CONFIG_DIR, CONTAINER_DIR},
-    err,
+    eprintln_warn,
     error::*,
 };
 
@@ -50,12 +51,12 @@ impl<'a> ContainerCache<'a> {
 
     pub fn add(&mut self, ins: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<()> {
         if self.instances.get(ins).is_some() {
-            err!(ConfigError::AlreadyExists(ins.into()))?
+            Err(ConfigError::AlreadyExists(ins.into()))?
         }
 
         for dep in deps.iter() {
             if self.instances.get(dep).is_none() {
-                err!(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
+                Err(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
             }
         }
 
@@ -70,7 +71,7 @@ impl<'a> ContainerCache<'a> {
 
     pub fn add_handle(&mut self, ins: &'a str, handle: ContainerHandle<'a>) -> Result<()> {
         if self.instances.get(ins).is_some() {
-            err!(ConfigError::AlreadyExists(ins.into()))?
+            Err(ConfigError::AlreadyExists(ins.into()))?
         }
 
         self.register(ins, handle.default_vars());
@@ -79,7 +80,7 @@ impl<'a> ContainerCache<'a> {
 
     fn map(&mut self, ins: &'a str) -> Result<()> {
         if self.instances.get(ins).is_some() {
-            err!(ConfigError::AlreadyExists(ins.to_owned()))?
+            Err(ConfigError::AlreadyExists(ins.to_owned()))?
         }
 
         self.register(
@@ -87,7 +88,7 @@ impl<'a> ContainerCache<'a> {
             match provide_handle(ins) {
                 Ok(ins) => ins,
                 Err(error) => {
-                    error.warn();
+                    eprintln_warn!("{error}");
                     return Ok(());
                 }
             },
@@ -153,7 +154,7 @@ impl<'a> ContainerCache<'a> {
     pub fn get_instance(&'_ self, ins: &'_ str) -> Result<&'_ ContainerHandle<'_>> {
         match self.instances.get(ins) {
             Some(ins) => Ok(ins),
-            None => err!(ErrorKind::InstanceNotFound(ins.into())),
+            None => Err(ErrorKind::InstanceNotFound(ins.into()))?,
         }
     }
 
@@ -185,7 +186,7 @@ pub fn populate_config_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>
 pub fn populate<'a>() -> Result<ContainerCache<'a>> {
     populate_from(
         &read_dir(*CONTAINER_DIR)
-            .prepend_io(|| CONTAINER_DIR.to_string())?
+            .context_path(*CONTAINER_DIR)?
             .filter_map(StdResult::ok)
             .filter(|e| e.metadata().is_ok_and(|f| f.is_dir() || f.is_symlink()))
             .filter_map(|e| e.file_name().to_str().map(|f| f.to_string().leak() as &'a str))
@@ -194,9 +195,11 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
 }
 
 pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
+    let path = format!("{}/container", *CONFIG_DIR);
+
     populate_config_from(
-        &read_dir(format!("{}/container", *CONFIG_DIR))
-            .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
+        &read_dir(&path)
+            .context_path(path)?
             .filter_map(StdResult::ok)
             .filter(|e| e.metadata().is_ok_and(|f| f.is_file() && !f.is_symlink()))
             .filter_map(|e| {

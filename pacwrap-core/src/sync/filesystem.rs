@@ -42,15 +42,14 @@ use walkdir::WalkDir;
 use zstd::{Decoder, Encoder};
 
 use crate::{
-    Error,
     ErrorExt,
-    ErrorGeneric,
     ErrorKind,
     ErrorTrait,
+    PathContext,
     Result,
     config::{ContainerCache, ContainerHandle, ContainerType::*},
     constants::{BAR_GREEN, BOLD, DATA_DIR, RESET, SIGNAL_LIST},
-    err,
+    eprintln_warn,
     impl_error,
     lock::{Lock, LockError},
     sync::{
@@ -258,7 +257,7 @@ impl<'a> FilesystemSync<'a> {
 
                     self.pool().unwrap().spawn(move || {
                         if let Err(err) = serialize(&format!("{}/state/{}.dat.new", *DATA_DIR, container), fs_state) {
-                            err.warn();
+                            eprintln_warn!("{err}");
                             drop(tx);
                         }
                     });
@@ -280,30 +279,30 @@ impl<'a> FilesystemSync<'a> {
                 if let IOErrorKind::NotFound = err.kind() {
                     return Ok(None);
                 } else {
-                    return Err(err).prepend_io(|| path);
+                    return Err(err).context_path(path)?;
                 },
         };
 
-        file.read_exact(header.as_slice_mut()).prepend_io(|| path)?;
+        file.read_exact(header.as_slice_mut()).context_path(path)?;
 
         let magic = header.read_le_32();
         let version = header.read_le_32();
 
         if magic != MAGIC_NUMBER {
-            err!(FilesystemSyncError::MagicMismatch(path.into(), magic))?
+            Err(FilesystemSyncError::MagicMismatch(path.into(), magic))?
         }
 
-        let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path)?;
+        let (state_buffer, checksum_valid) = decode_state(file)?;
 
         if !checksum_valid {
-            err!(FilesystemSyncError::ChecksumMismatch(path.into()))?
+            Err(FilesystemSyncError::ChecksumMismatch(path.into()))?
         }
 
         let buf_reader = BufReader::new(state_buffer.as_slice());
         let state = match version {
             1 | 2 => bincode_deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?,
             3 => deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?,
-            _ => err!(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
+            _ => Err(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
         };
 
         self.state_map_prev.insert(instance.clone(), Some(state.clone()));
@@ -372,22 +371,22 @@ impl<'a> FilesystemSync<'a> {
     }
 
     fn pool(&self) -> Result<&ThreadPool> {
-        self.pool.as_ref().map_or_else(|| err!(ErrorKind::ThreadPoolUninitialized), Ok)
+        self.pool.as_ref().map_or_else(|| Err(ErrorKind::ThreadPoolUninitialized)?, Ok)
     }
 
     fn lock(&self) -> Result<&Lock> {
-        self.lock.map_or_else(|| err!(LockError::NotAcquired), Ok)
+        self.lock.map_or_else(|| Err(LockError::NotAcquired)?, Ok)
     }
 
     fn signal(&mut self) -> Result<()> {
         if let Err(err) = self.lock.unwrap().assert() {
             self.discard_state()?;
-            err!(SyncError::from(&err))?;
+            Err(err)?;
         }
 
         if self.signals.pending().next().is_some() {
             self.discard_state()?;
-            err!(SyncError::SignalInterrupt)?;
+            Err(SyncError::SignalInterrupt)?;
         }
 
         Ok(())
@@ -407,7 +406,7 @@ impl<'a> FilesystemSync<'a> {
             let path_old = format!("{}/state/{state}.dat", *DATA_DIR);
             let path_new = format!("{}/state/{state}.dat.new", *DATA_DIR);
 
-            rename(&path_new, &path_old).prepend_io(|| path_new)?;
+            rename(&path_new, &path_old)?;
         }
 
         Ok(())
@@ -519,7 +518,7 @@ fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, mut reader
 
     match postcard::from_bytes(&bytes) {
         Ok(state) => Ok(state),
-        Err(err) => err!(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string())),
+        Err(err) => Err(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string()))?,
     }
 }
 
@@ -531,7 +530,7 @@ fn bincode_deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, re
         .deserialize_from::<R, T>(reader)
     {
         Ok(state) => Ok(state),
-        Err(err) => err!(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string())),
+        Err(err) => Err(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string()))?,
     }
 }
 
@@ -539,11 +538,11 @@ fn serialize(path: &str, ds: FileSystemState) -> Result<()> {
     let mut hasher = Sha256::new();
     let state_data = match postcard::to_allocvec(&ds) {
         Ok(vec) => vec,
-        Err(err) => err!(FilesystemSyncError::SerializationFailure(path.into(), err.to_string()))?,
+        Err(err) => Err(FilesystemSyncError::SerializationFailure(path.into(), err.to_string()))?,
     };
 
-    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| path)?;
-    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| path)?;
+    copy(&mut state_data.as_slice(), &mut hasher).context_path(path)?;
+    encode_state(path, state_data, hasher.finalize().to_vec()).context_path(path)?;
     Ok(())
 }
 
@@ -556,11 +555,11 @@ fn decode_state<R: Read>(mut stream: R) -> Result<(Vec<u8>, bool)> {
     let state_length = header_buffer.read_le_64();
 
     if state_length == 0 {
-        err!(FilesystemSyncError::DataLengthZero)?;
+        Err(FilesystemSyncError::DataLengthZero)?;
     } else if hash_length != 32 {
-        err!(FilesystemSyncError::InvalidHashLength)?;
+        Err(FilesystemSyncError::InvalidHashLength)?;
     } else if state_length >= BYTE_LIMIT {
-        err!(FilesystemSyncError::DataLengthMaximum(state_length, BYTE_LIMIT))?;
+        Err(FilesystemSyncError::DataLengthMaximum(state_length, BYTE_LIMIT))?;
     }
 
     let mut hash_buffer = vec![0; hash_length as usize];
@@ -593,7 +592,7 @@ fn encode_state(path: &str, state_data: Vec<u8>, hash: Vec<u8>) -> IOResult<u64>
 fn check(instance: &str) -> Result<bool> {
     let path = &format!("{}/state/{}.dat", *DATA_DIR, instance);
     let mut header_buffer = ByteBuffer::with_capacity(8).read();
-    let mut file = File::open(path).prepend_io(|| path)?;
+    let mut file = File::open(path).context_path(path)?;
 
     file.read_exact(header_buffer.as_slice_mut())?;
 
@@ -655,12 +654,12 @@ fn link_filesystem(state: &FileSystemState, root: &str) {
         let path = &format!("{}{}", root, file.0);
 
         if let FileType::SymLink = file.1.0 {
-            if let Err(error) = create_soft_link(&file.1.1, path).prepend(|| format!("Failed to symlink '{path}'")) {
-                error.warn();
+            if let Err(error) = create_soft_link(&file.1.1, path).context_path(path) {
+                eprintln_warn!("Failed to symlink {path:?}: {error}");
             }
         } else if let FileType::HardLink = file.1.0 {
-            if let Err(error) = create_hard_link(&file.1.1, path).prepend(|| format!("Failed to hardlink '{path}'")) {
-                error.warn();
+            if let Err(error) = create_hard_link(&file.1.1, path).context_path(path) {
+                eprintln_warn!("Failed to hardlink {path:?}: {error}");
             }
         }
     });
@@ -678,12 +677,12 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
             let path = Path::new(path_str);
 
             if let FileType::SymLink = file.1.0 {
-                if let Err(error) = remove_symlink(path).prepend(|| format!("Failed to remove symlink '{path_str}'")) {
-                    error.warn();
+                if let Err(error) = remove_symlink(path).context_path(path) {
+                    eprintln_warn!("Failed to remove symlink: {error}");
                 }
             } else if let (true, FileType::HardLink) = (path.exists(), &file.1.0) {
-                if let Err(error) = remove_file(path).prepend(|| format!("Failed to remove file '{path_str}'")) {
-                    error.warn();
+                if let Err(error) = remove_file(path).context_path(path) {
+                    eprintln_warn!("Failed to remove file: {error}'");
                 }
             }
         }

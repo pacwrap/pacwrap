@@ -24,35 +24,33 @@ use std::{
     path::Path,
 };
 
+use anyhow::anyhow;
 use pacwrap_core::{
-    Error,
-    ErrorGeneric,
     ErrorKind,
-    ErrorTrait,
-    ErrorType,
+    PathContext,
     Result,
     config::{ContainerCache, cache},
     constants::{ARROW_GREEN, BOLD, DATA_DIR, RESET},
-    err,
-    impl_error,
+    eprintln_error,
     lock::Lock,
     log::{Level::Info, Logger},
     process,
     utils::{Arguments, arguments::Operand, prompt::prompt_targets},
 };
+use thiserror::Error;
 use walkdir::WalkDir;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum DeleteError {
     ContainerRunning(String),
+    DeletionFailure(std::io::Error),
 }
-
-impl_error!(DeleteError);
 
 impl Display for DeleteError {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             Self::ContainerRunning(err) => write!(fmter, "Container '{}{}{}' has running processes.", *BOLD, err, *RESET),
+            Self::DeletionFailure(err) => write!(fmter, "Failed to delete container: {err}"),
         }?;
 
         write!(fmter, "\nTry 'pacwrap -h' for more information on valid operational parameters.")
@@ -87,7 +85,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
     if instances.len() != targets.len() {
         for target in &targets {
             if !instances.contains(target) {
-                err!(ErrorKind::InstanceNotFound(target.to_string()))?;
+                Err(ErrorKind::InstanceNotFound(target.to_string()))?;
             }
         }
     }
@@ -96,7 +94,7 @@ pub fn remove_containers(args: &mut Arguments) -> Result<()> {
 
     if let (true, _) | (_, true) = (no_confirm, prompt_targets(&instances, "Delete containers?", false)?) {
         if let Err(err) = delete_roots(&cache, &lock, &mut logger, &instances, force) {
-            eprintln!("{}", ErrorType::Error(&err));
+            eprintln_error!("{err}");
         }
     }
 
@@ -110,7 +108,7 @@ pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger
 
     if !processes.is_empty() && !force {
         if let Some(process) = processes.first() {
-            err!(DeleteError::ContainerRunning(process.instance().to_string()))?;
+            Err(anyhow!(DeleteError::ContainerRunning(process.instance().to_string())))?;
         }
     }
 
@@ -131,10 +129,14 @@ pub fn delete_roots(cache: &ContainerCache<'_>, lock: &Lock, logger: &mut Logger
             set_permissions(path, permissions).ok();
         }
 
-        remove_dir_all(root).prepend(|| format!("Failed to delete container root '{root}'"))?;
+        remove_dir_all(root)
+            .context_path(root)
+            .map_err(|e| anyhow!(DeleteError::DeletionFailure(e)))?;
 
         if Path::new(&state).exists() {
-            remove_file(&state).prepend_io(|| state)?;
+            remove_file(&state)
+                .context_path(state)
+                .map_err(|e| anyhow!(DeleteError::DeletionFailure(e)))?;
         }
 
         eprintln!("{} Deleted container '{}{}{}' successfully.", *ARROW_GREEN, *BOLD, instance, *RESET);

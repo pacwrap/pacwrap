@@ -17,15 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use anyhow::anyhow;
 use indexmap::IndexSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use thiserror::Error;
 
 use pacwrap_core::{
-    Error,
-    ErrorTrait,
     Result,
-    err,
-    impl_error,
     utils::{Arguments, ansi::is_color_terminal, arguments::Operand},
 };
 
@@ -70,12 +68,10 @@ static HELP_ALL: [HelpTopic; 14] = [
     HelpTopic::License,
 ];
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum ErrorKind {
     InvalidTopic(String),
 }
-
-impl_error!(ErrorKind);
 
 impl Display for ErrorKind {
     fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
@@ -185,7 +181,7 @@ impl HelpTopic {
             "license" => &HelpTopic::License,
             "synopsis" => &HelpTopic::Default,
             "pacwrap.yml" => &HelpTopic::PacwrapYml,
-            _ => err!(ErrorKind::InvalidTopic(str.into()))?,
+            _ => Err(anyhow!(ErrorKind::InvalidTopic(str.into())))?,
         })
     }
 

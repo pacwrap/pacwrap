@@ -19,10 +19,8 @@
 use alpm::TransFlag;
 
 use crate::{
-    Error,
     Result,
     config::{ContainerHandle, ContainerType::Base},
-    err,
     sync::{
         SyncError,
         transaction::{
@@ -75,7 +73,7 @@ impl Transaction for Stage {
         inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         if let Err(error) = handle.alpm().trans_init(self.flags) {
-            err!(SyncError::InitializationFailure(error.to_string()))?
+            Err(SyncError::InitializationFailure(error.to_string()))?
         }
 
         ag.action().action_message(self.mode);

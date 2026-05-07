@@ -20,14 +20,12 @@
 use std::{os::unix::process::ExitStatusExt, process::Child};
 
 use crate::{
-    Error,
     Result,
     config::{
         ContainerHandle,
         global::{Global, global},
     },
     constants::{BOLD, RESET},
-    err,
     exec::transaction_agent,
     log::Level::Info,
     sync::{
@@ -190,21 +188,21 @@ fn wait_on_agent(mut agent: Child) -> Result<()> {
     match agent.wait() {
         Ok(status) => match status.code().unwrap_or(-1) {
             0 => Ok(()),
-            1 => err!(SyncError::TransactionAgentError),
-            2 | 101 => err!(SyncError::TransactionAgentFailure),
-            3 => err!(SyncError::ParameterAcquisitionFailure),
-            4 => err!(SyncError::DeserializationFailure),
-            5 => err!(SyncError::InvalidMagicNumber),
-            6 => err!(SyncError::AgentVersionMismatch),
+            1 => Err(SyncError::TransactionAgentError)?,
+            2 | 101 => Err(SyncError::TransactionAgentFailure)?,
+            3 => Err(SyncError::ParameterAcquisitionFailure)?,
+            4 => Err(SyncError::DeserializationFailure)?,
+            5 => Err(SyncError::InvalidMagicNumber)?,
+            6 => Err(SyncError::AgentVersionMismatch)?,
             _ =>
                 if let Some(code) = status.code() {
-                    err!(SyncError::TransactionFailure(format!("General agent fault: Exit code {}", code)))
+                    Err(SyncError::TransactionFailure(format!("General agent fault: Exit code {}", code)))?
                 } else if status.signal().is_some() {
-                    err!(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))
+                    Err(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))?
                 } else {
-                    err!(SyncError::TransactionFailure("General agent fault".to_string()))
+                    Err(SyncError::TransactionFailure("General agent fault".to_string()))?
                 },
         },
-        Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
+        Err(error) => Err(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
     }
 }
