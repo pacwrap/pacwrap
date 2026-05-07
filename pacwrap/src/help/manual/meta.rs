@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -97,7 +97,7 @@ impl HelpObject for Authors {
         writeln!(
             buf,
             "{head}AUTHOR{reset}
-{tab}Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
+{tab}Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
 {tab}Copyright (C) 2024-2025 Pacwrap Contributors
 
 {tab}To find a current list of contributors, visit the following link:

@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2025 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@ use pacwrap_core::{
 
 use crate::help::version_string;
 
-const YEAR: i16 = 2025;
+const YEAR: i16 = 2026;
 
 fn minimal(args: &mut Arguments) -> bool {
     args.into_iter()
@@ -62,7 +62,7 @@ pub fn print_version(args: &mut Arguments) -> Result<()> {
         println!(
             "{version}
 Copyright (C) 2023-{YEAR} Xavier Moffett
-Copyright (C) 2024-{YEAR} Pacwrap Contributors
+Copyright (C) 2024-{YEAR} pacwrap Contributors
 
 Website: https://pacwrap.sapphirus.org/
 Github: https://github.com/pacwrap/pacwrap
