@@ -101,7 +101,7 @@ impl Process {
     }
 
     pub fn exec(&self) -> &str {
-        match self.cmd[0].char_indices().filter(|c| c.1 == '/').next_back() {
+        match self.cmd[0].char_indices().rfind(|c| c.1 == '/') {
             Some((index, ..)) => self.cmd[0].split_at(index + 1).1,
             None => &self.cmd[0],
         }

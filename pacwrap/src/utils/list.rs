@@ -210,10 +210,9 @@ pub fn list_containers(args: &mut Arguments) -> Result<()> {
     Ok(())
 }
 
-fn enumerate_containers<'a>(
-    handles: &'a Vec<&'a ContainerHandle<'a>>,
-    measure_disk: bool,
-) -> Result<(HashMap<&'a str, (i64, i64)>, i64, i64)> {
+pub type ContainerSizes<'a> = (HashMap<&'a str, (i64, i64)>, i64, i64);
+
+fn enumerate_containers<'a>(handles: &'a Vec<&'a ContainerHandle<'a>>, measure_disk: bool) -> Result<ContainerSizes<'a>> {
     let mut actual_size = 0;
     let mut total_size = 0;
     let mut container_sizes: HashMap<&str, (i64, i64)> = HashMap::new();

@@ -27,7 +27,7 @@ use thiserror::Error;
 
 use crate::{error::*, impl_error};
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Default, PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Operand<'a> {
     Short(char),
     ShortPos(char, &'a str),
@@ -35,6 +35,7 @@ pub enum Operand<'a> {
     LongPos(&'a str, &'a str),
     Value(&'a str),
     ShortEmpty,
+    #[default]
     Nothing,
 }
 
@@ -200,11 +201,5 @@ impl Display for Operand<'_> {
 impl Default for &Operand<'_> {
     fn default() -> Self {
         &Operand::Nothing
-    }
-}
-
-impl Default for Operand<'_> {
-    fn default() -> Self {
-        Self::Nothing
     }
 }

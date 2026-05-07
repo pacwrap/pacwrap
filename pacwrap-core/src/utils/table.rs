@@ -39,17 +39,13 @@ pub enum TableError {
 
 impl_error!(TableError);
 
+#[derive(Default)]
 pub enum ColumnAttribute {
     AlignRight,
+    #[default]
     AlignLeft,
     AlignLeftMax(usize),
     AlignRightMax(usize),
-}
-
-impl Default for ColumnAttribute {
-    fn default() -> Self {
-        Self::AlignLeft
-    }
 }
 
 pub struct Entry<'a> {

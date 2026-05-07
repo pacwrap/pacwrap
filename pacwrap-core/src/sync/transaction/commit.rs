@@ -126,7 +126,7 @@ fn confirm(
         TransactionMode::Local => false,
     };
     let confirm = foreign || database && !create;
-    let sum = Summary::new()
+    let sum = Summary::default()
         .kind(global.config().summary(), confirm)
         .mode(handle.get_mode())
         .generate(handle.alpm());

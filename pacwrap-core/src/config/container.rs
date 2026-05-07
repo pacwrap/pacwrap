@@ -228,9 +228,10 @@ impl Debug for ContainerRuntime {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[derive(Default, Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum ContainerType {
     Symbolic,
+    #[default]
     Base,
     Slice,
     Aggregate,
@@ -250,12 +251,6 @@ impl ContainerType {
 impl Display for ContainerType {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         fmt.write_str(self.as_str())
-    }
-}
-
-impl Default for ContainerType {
-    fn default() -> Self {
-        Self::Base
     }
 }
 

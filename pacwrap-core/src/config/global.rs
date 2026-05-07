@@ -31,32 +31,22 @@ use crate::{
 
 static CONFIG: OnceLock<Global> = OnceLock::new();
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub enum Verbosity {
     None,
     Basic,
+    #[default]
     Verbose,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub enum ProgressKind {
     Simple,
     Condensed,
+    #[default]
     CondensedForeign,
     CondensedLocal,
     Verbose,
-}
-
-impl Default for Verbosity {
-    fn default() -> Self {
-        Self::Verbose
-    }
-}
-
-impl Default for ProgressKind {
-    fn default() -> Self {
-        Self::CondensedForeign
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
