@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -19,14 +19,13 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{Display, Formatter, Result as FmtResult},
-    fs::{self, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename, File, Metadata},
-    io::{copy, BufReader, Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult, Write},
+    fs::{self, File, Metadata, create_dir_all, hard_link, metadata, remove_dir_all, remove_file, rename},
+    io::{BufReader, ErrorKind as IOErrorKind, Read, Result as IOResult, Write, copy},
     os::unix::{fs::symlink, prelude::MetadataExt},
     path::Path,
     sync::{
-        mpsc::{self, Receiver, Sender},
         Arc,
+        mpsc::{self, Receiver, Sender},
     },
 };
 
@@ -34,32 +33,33 @@ use bincode::Options;
 use dialoguer::console::Term;
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use rayon::{prelude::*, ThreadPool, ThreadPoolBuilder};
+use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use signal_hook::iterator::Signals;
+use thiserror::Error as ThisError;
 use walkdir::WalkDir;
 use zstd::{Decoder, Encoder};
 
 use crate::{
+    ErrorExt,
+    ErrorKind,
+    ErrorTrait,
+    PathContext,
+    Result,
     config::{ContainerCache, ContainerHandle, ContainerType::*},
     constants::{BAR_GREEN, BOLD, DATA_DIR, RESET, SIGNAL_LIST},
-    err,
+    eprintln_warn,
     impl_error,
     lock::{Lock, LockError},
     sync::{
-        transaction::aggregator::{BAR_CYAN_STYLE, BAR_GREEN_STYLE},
         SyncError,
+        transaction::aggregator::{BAR_CYAN_STYLE, BAR_GREEN_STYLE},
     },
     utils::bytebuffer::ByteBuffer,
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    ErrorTrait,
-    Result,
 };
 
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const MAGIC_NUMBER: u32 = 408948530;
 const BYTE_LIMIT: u64 = 134217728;
 
@@ -74,30 +74,27 @@ impl FileSystemState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(ThisError, Debug, Clone)]
 pub enum FilesystemSyncError {
+    #[error("'{0}': Magic number mismatch ({MAGIC_NUMBER} != {1})")]
     MagicMismatch(String, u32),
+    #[error("'{0}': Checksum mismatch")]
     ChecksumMismatch(String),
+    #[error("'{0}': Unsupported filesystem version: {bold}{1}{reset}", bold=*BOLD, reset=*RESET)]
     UnsupportedVersion(String, u32),
+    #[error("Deserialization failure occurred with '{bold}{1}{reset}.dat': {1}", bold=*BOLD, reset=*RESET)]
     DeserializationFailure(String, String),
+    #[error("Serialization failure occurred with '{0}': {1}")]
     SerializationFailure(String, String),
+    #[error("Data length exceeded maximum {0} >= {1}")]
+    DataLengthMaximum(u64, u64),
+    #[error("Data length provided is zero")]
+    DataLengthZero,
+    #[error("Hash length provided is invalid.")]
+    InvalidHashLength,
 }
 
 impl_error!(FilesystemSyncError);
-
-impl Display for FilesystemSyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::SerializationFailure(file, err) => write!(fmter, "Serialization failure occurred with '{file}': {err}"),
-            Self::UnsupportedVersion(file, ver) =>
-                write!(fmter, "'{file}': Unsupported filesystem version: {}{ver}{}", *BOLD, *RESET),
-            Self::DeserializationFailure(file, err) =>
-                write!(fmter, "Deserialization failure occurred with '{}{file}{}.dat': {err}", *BOLD, *RESET),
-            Self::ChecksumMismatch(file) => write!(fmter, "'{file}': Checksum mismatch"),
-            Self::MagicMismatch(file, magic) => write!(fmter, "'{file}': Magic number mismatch ({MAGIC_NUMBER} != {magic})"),
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 enum FileType {
@@ -260,7 +257,7 @@ impl<'a> FilesystemSync<'a> {
 
                     self.pool().unwrap().spawn(move || {
                         if let Err(err) = serialize(&format!("{}/state/{}.dat.new", *DATA_DIR, container), fs_state) {
-                            err.warn();
+                            eprintln_warn!("{err}");
                             drop(tx);
                         }
                     });
@@ -282,38 +279,34 @@ impl<'a> FilesystemSync<'a> {
                 if let IOErrorKind::NotFound = err.kind() {
                     return Ok(None);
                 } else {
-                    return Err(err).prepend_io(|| path.into());
+                    return Err(err).context_path(path)?;
                 },
         };
 
-        file.read_exact(header.as_slice_mut()).prepend_io(|| path.into())?;
+        file.read_exact(header.as_slice_mut()).context_path(path)?;
 
         let magic = header.read_le_32();
         let version = header.read_le_32();
 
         if magic != MAGIC_NUMBER {
-            err!(FilesystemSyncError::MagicMismatch(path.into(), magic))?
-        } else if version != VERSION {
-            let state = match version {
-                1 => deserialize::<File, FileSystemState>(instance, file)?,
-                _ => err!(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
-            };
-
-            self.state_map_prev.insert(instance.clone(), Some(state.clone()));
-            Ok(Some(state))
-        } else {
-            let (state_buffer, checksum_valid) = decode_state(file).prepend_io(|| path.into())?;
-
-            if !checksum_valid {
-                err!(FilesystemSyncError::ChecksumMismatch(path.into()))?
-            }
-
-            let buf_reader = BufReader::new(state_buffer.as_slice());
-            let state = deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?;
-
-            self.state_map_prev.insert(instance.clone(), Some(state.clone()));
-            Ok(Some(state))
+            Err(FilesystemSyncError::MagicMismatch(path.into(), magic))?
         }
+
+        let (state_buffer, checksum_valid) = decode_state(file)?;
+
+        if !checksum_valid {
+            Err(FilesystemSyncError::ChecksumMismatch(path.into()))?
+        }
+
+        let buf_reader = BufReader::new(state_buffer.as_slice());
+        let state = match version {
+            1 | 2 => bincode_deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?,
+            3 => deserialize::<BufReader<&[u8]>, FileSystemState>(instance, buf_reader)?,
+            _ => Err(FilesystemSyncError::UnsupportedVersion(path.into(), version))?,
+        };
+
+        self.state_map_prev.insert(instance.clone(), Some(state.clone()));
+        Ok(Some(state))
     }
 
     fn blank_state(&mut self, instance: &Arc<str>) -> Option<FileSystemState> {
@@ -378,22 +371,22 @@ impl<'a> FilesystemSync<'a> {
     }
 
     fn pool(&self) -> Result<&ThreadPool> {
-        self.pool.as_ref().map_or_else(|| err!(ErrorKind::ThreadPoolUninitialized), Ok)
+        self.pool.as_ref().map_or_else(|| Err(ErrorKind::ThreadPoolUninitialized)?, Ok)
     }
 
     fn lock(&self) -> Result<&Lock> {
-        self.lock.map_or_else(|| err!(LockError::NotAcquired), Ok)
+        self.lock.map_or_else(|| Err(LockError::NotAcquired)?, Ok)
     }
 
     fn signal(&mut self) -> Result<()> {
         if let Err(err) = self.lock.unwrap().assert() {
             self.discard_state()?;
-            err!(SyncError::from(&err))?;
+            Err(err)?;
         }
 
-        for _ in self.signals.pending() {
+        if self.signals.pending().next().is_some() {
             self.discard_state()?;
-            err!(SyncError::SignalInterrupt)?;
+            Err(SyncError::SignalInterrupt)?;
         }
 
         Ok(())
@@ -413,7 +406,7 @@ impl<'a> FilesystemSync<'a> {
             let path_old = format!("{}/state/{state}.dat", *DATA_DIR);
             let path_new = format!("{}/state/{state}.dat.new", *DATA_DIR);
 
-            rename(&path_new, &path_old).prepend_io(|| path_new)?;
+            rename(&path_new, &path_old)?;
         }
 
         Ok(())
@@ -518,7 +511,18 @@ pub fn create_blank_state(container: &str) -> Result<()> {
     serialize(&format!("{}/state/{}.dat", *DATA_DIR, container), FileSystemState::new())
 }
 
-fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T> {
+fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, mut reader: R) -> Result<T> {
+    let mut bytes = Vec::new();
+
+    reader.read_to_end(&mut bytes)?;
+
+    match postcard::from_bytes(&bytes) {
+        Ok(state) => Ok(state),
+        Err(err) => Err(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string()))?,
+    }
+}
+
+fn bincode_deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R) -> Result<T> {
     match bincode::options()
         .with_fixint_encoding()
         .allow_trailing_bytes()
@@ -526,29 +530,23 @@ fn deserialize<R: Read, T: for<'de> Deserialize<'de>>(instance: &str, reader: R)
         .deserialize_from::<R, T>(reader)
     {
         Ok(state) => Ok(state),
-        Err(err) => err!(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string())),
+        Err(err) => Err(FilesystemSyncError::DeserializationFailure(instance.into(), err.to_string()))?,
     }
 }
 
 fn serialize(path: &str, ds: FileSystemState) -> Result<()> {
     let mut hasher = Sha256::new();
-    let mut state_data = Vec::new();
+    let state_data = match postcard::to_allocvec(&ds) {
+        Ok(vec) => vec,
+        Err(err) => Err(FilesystemSyncError::SerializationFailure(path.into(), err.to_string()))?,
+    };
 
-    if let Err(err) = bincode::options()
-        .with_fixint_encoding()
-        .allow_trailing_bytes()
-        .with_limit(BYTE_LIMIT)
-        .serialize_into(&mut state_data, &ds)
-    {
-        err!(FilesystemSyncError::SerializationFailure(path.into(), err.as_ref().to_string()))?
-    }
-
-    copy(&mut state_data.as_slice(), &mut hasher).prepend_io(|| path.into())?;
-    encode_state(path, state_data, hasher.finalize().to_vec()).prepend_io(|| path.into())?;
+    copy(&mut state_data.as_slice(), &mut hasher).context_path(path)?;
+    encode_state(path, state_data, hasher.finalize().to_vec()).context_path(path)?;
     Ok(())
 }
 
-fn decode_state<R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
+fn decode_state<R: Read>(mut stream: R) -> Result<(Vec<u8>, bool)> {
     let mut header_buffer = ByteBuffer::with_capacity(10).read();
 
     stream.read_exact(header_buffer.as_slice_mut())?;
@@ -557,11 +555,11 @@ fn decode_state<R: Read>(mut stream: R) -> IOResult<(Vec<u8>, bool)> {
     let state_length = header_buffer.read_le_64();
 
     if state_length == 0 {
-        Err(IOError::new(IOErrorKind::InvalidInput, "Data length provided is zero".to_string()))?;
+        Err(FilesystemSyncError::DataLengthZero)?;
     } else if hash_length != 32 {
-        Err(IOError::new(IOErrorKind::InvalidInput, "Hash length provided is invalid.".to_string()))?;
+        Err(FilesystemSyncError::InvalidHashLength)?;
     } else if state_length >= BYTE_LIMIT {
-        Err(IOError::new(IOErrorKind::InvalidInput, format!("Data length exceeded maximum {state_length} >= {BYTE_LIMIT}")))?;
+        Err(FilesystemSyncError::DataLengthMaximum(state_length, BYTE_LIMIT))?;
     }
 
     let mut hash_buffer = vec![0; hash_length as usize];
@@ -594,9 +592,9 @@ fn encode_state(path: &str, state_data: Vec<u8>, hash: Vec<u8>) -> IOResult<u64>
 fn check(instance: &str) -> Result<bool> {
     let path = &format!("{}/state/{}.dat", *DATA_DIR, instance);
     let mut header_buffer = ByteBuffer::with_capacity(8).read();
-    let mut file = File::open(path).prepend_io(|| path.into())?;
+    let mut file = File::open(path).context_path(path)?;
 
-    file.read_exact(header_buffer.as_slice_mut()).prepend_io(|| path.into())?;
+    file.read_exact(header_buffer.as_slice_mut())?;
 
     let magic = header_buffer.read_le_32();
     let version = header_buffer.read_le_32();
@@ -652,16 +650,16 @@ fn obtain_state(root: Arc<str>, state: &mut FileSystemState) {
 }
 
 fn link_filesystem(state: &FileSystemState, root: &str) {
-    state.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
+    state.files.par_iter().filter(|a| a.1.0 != FileType::Directory).for_each(|file| {
         let path = &format!("{}{}", root, file.0);
 
-        if let FileType::SymLink = file.1 .0 {
-            if let Err(error) = create_soft_link(&file.1 .1, path).prepend(|| format!("Failed to symlink '{path}'")) {
-                error.warn();
+        if let FileType::SymLink = file.1.0 {
+            if let Err(error) = create_soft_link(&file.1.1, path).context_path(path) {
+                eprintln_warn!("Failed to symlink {path:?}: {error}");
             }
-        } else if let FileType::HardLink = file.1 .0 {
-            if let Err(error) = create_hard_link(&file.1 .1, path).prepend(|| format!("Failed to hardlink '{path}'")) {
-                error.warn();
+        } else if let FileType::HardLink = file.1.0 {
+            if let Err(error) = create_hard_link(&file.1.1, path).context_path(path) {
+                eprintln_warn!("Failed to hardlink {path:?}: {error}");
             }
         }
     });
@@ -671,20 +669,20 @@ fn delete_files(state: &FileSystemState, state_res: &FileSystemState, root: &str
     let (tx, rx) = mpsc::sync_channel(0);
     let tx_clone: mpsc::SyncSender<()> = tx.clone();
 
-    state_res.files.par_iter().filter(|a| a.1 .0 != FileType::Directory).for_each(|file| {
+    state_res.files.par_iter().filter(|a| a.1.0 != FileType::Directory).for_each(|file| {
         let _ = tx_clone;
 
         if state.files.get(file.0).is_none() {
             let path_str = &format!("{}{}", root, file.0);
             let path = Path::new(path_str);
 
-            if let FileType::SymLink = file.1 .0 {
-                if let Err(error) = remove_symlink(path).prepend(|| format!("Failed to remove symlink '{path_str}'")) {
-                    error.warn();
+            if let FileType::SymLink = file.1.0 {
+                if let Err(error) = remove_symlink(path).context_path(path) {
+                    eprintln_warn!("Failed to remove symlink: {error}");
                 }
-            } else if let (true, FileType::HardLink) = (path.exists(), &file.1 .0) {
-                if let Err(error) = remove_file(path).prepend(|| format!("Failed to remove file '{path_str}'")) {
-                    error.warn();
+            } else if let (true, FileType::HardLink) = (path.exists(), &file.1.0) {
+                if let Err(error) = remove_file(path).context_path(path) {
+                    eprintln_warn!("Failed to remove file: {error}'");
                 }
             }
         }
@@ -709,7 +707,7 @@ fn delete_directories(state: &FileSystemState, state_res: &FileSystemState, root
                 return;
             }
 
-            if let FileType::Directory = file.1 .0 {
+            if let FileType::Directory = file.1.0 {
                 remove_dir_all(path).ok();
             }
         }

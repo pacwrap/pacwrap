@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -30,9 +30,10 @@ use crate::{
     utils::table::{ColumnAttribute, Table},
 };
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, Serialize, Deserialize)]
 pub enum SummaryKind {
     Sum,
+    #[default]
     Basic,
     Table,
     SumForeign,
@@ -65,12 +66,6 @@ enum TableColumns {
 
 impl Default for Summary {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Summary {
-    pub fn new() -> Self {
         Self {
             mode: TransactionMode::Local,
             pkgs: 0,
@@ -85,7 +80,9 @@ impl Summary {
             kind: SummaryKind::default(),
         }
     }
+}
 
+impl Summary {
     pub fn mode(mut self, mode: &TransactionMode) -> Self {
         self.mode = *mode;
         self
@@ -276,12 +273,6 @@ impl Display for Summary {
             (SummaryKind::Sum, TransactionMode::Local) | (SummaryKind::SumForeign, _) => self.footer(fmt),
             (_, TransactionMode::Foreign) => Ok(()),
         }
-    }
-}
-
-impl Default for SummaryKind {
-    fn default() -> Self {
-        Self::Basic
     }
 }
 

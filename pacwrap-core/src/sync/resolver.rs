@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,83 +22,49 @@ use std::collections::HashSet;
 use alpm::{Alpm, Package};
 
 use crate::{
-    err,
-    sync::{utils::AlpmUtils, SyncError},
-    Error,
+    Result,
+    sync::{SyncError, transaction::TransactionType},
 };
 
-pub struct DependencyResolver<'a> {
-    resolved: HashSet<&'a str>,
-    packages: Vec<&'a Package>,
-    keys: Vec<&'a str>,
-    ignored: &'a HashSet<String>,
-    handle: &'a Alpm,
-    depth: isize,
+const RECURSION_DEPTH_LIMIT: isize = 50;
+
+pub mod local;
+pub mod remote;
+
+pub trait Resolver<'a>: Sized {
+    fn new(alpm: &'a Alpm) -> Self;
+    fn set_ignored(self, ignorelist: &'a HashSet<String>) -> Self;
+    fn enumerate(self, packages: &[&'a str]) -> Result<Self>;
+    fn packages(&self) -> &Vec<&'a Package>;
 }
 
-impl<'a> DependencyResolver<'a> {
-    pub fn new(alpm: &'a Alpm, ignorelist: &'a HashSet<String>) -> Self {
-        Self {
-            resolved: HashSet::new(),
-            packages: Vec::new(),
-            keys: Vec::new(),
-            ignored: ignorelist,
-            depth: 0,
-            handle: alpm,
-        }
-    }
+pub trait ResolverKeys {
+    fn keys(&self) -> Option<Vec<String>>;
+}
 
-    fn check_depth(&mut self) -> Result<(), Error> {
-        if self.depth == 50 {
-            err!(SyncError::RecursionDepthExceeded(self.depth))?
+pub trait ResolverFlags {
+    fn set_flags(self, trans_type: &TransactionType) -> Self;
+}
+
+trait ResolverDepth {
+    fn check_depth(&mut self) -> Result<()>;
+}
+
+trait ResolverDepthExt {
+    fn depth(&self) -> isize;
+    fn set_depth(&mut self, depth: isize);
+}
+
+impl<'a, T> ResolverDepth for T
+where
+    T: Resolver<'a> + ResolverDepthExt,
+{
+    fn check_depth(&mut self) -> Result<()> {
+        if self.depth() == RECURSION_DEPTH_LIMIT {
+            Err(SyncError::RecursionDepthExceeded(self.depth()))?
         }
 
-        self.depth += 1;
+        self.set_depth(self.depth() + 1);
         Ok(())
-    }
-
-    pub fn enumerate(mut self, packages: &Vec<&'a str>) -> Result<(Option<Vec<String>>, Vec<&'a Package>), Error> {
-        let mut synchronize: Vec<&'a str> = Vec::new();
-
-        for pkg in packages {
-            if self.resolved.contains(*pkg) {
-                continue;
-            }
-
-            if self.ignored.contains(*pkg) {
-                continue;
-            }
-
-            if let Some(pkg) = self.handle.get_package(pkg) {
-                self.packages.push(pkg);
-                self.resolved.insert(pkg.name());
-                synchronize.extend(
-                    pkg.depends()
-                        .iter()
-                        .filter_map(|p| match self.handle.get_local_package(p.name()) {
-                            None => self.handle.get_package(p.name()).map(|dep| dep.name()),
-                            Some(_) => None,
-                        })
-                        .collect::<Vec<&str>>(),
-                );
-
-                if self.depth > 0 {
-                    self.keys.push(pkg.name());
-                }
-            }
-        }
-
-        if !synchronize.is_empty() {
-            self.check_depth()?;
-            self.enumerate(&synchronize)
-        } else {
-            let keys = if !self.keys.is_empty() {
-                Some(self.keys.iter().map(|a| (*a).into()).collect())
-            } else {
-                None
-            };
-
-            Ok((keys, self.packages))
-        }
     }
 }

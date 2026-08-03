@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -20,11 +20,8 @@
 use std::{fs::File, io::Write, path::Path};
 
 use crate::{
-    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
-    err,
-    Error,
-    ErrorKind,
     Result,
+    constants::{CACHE_DIR, CONFIG_DIR, DATA_DIR},
 };
 
 static REPO_CONF_DEFAULT: &str = include_str!(env!("PACWRAP_DIST_REPO_CONF"));
@@ -44,9 +41,7 @@ impl DirectoryLayout {
                 continue;
             }
 
-            if let Err(error) = std::fs::create_dir_all(path) {
-                err!(ErrorKind::IOError(path.into(), error.kind()))?
-            }
+            std::fs::create_dir_all(path)?;
         }
 
         Ok(())
@@ -79,15 +74,7 @@ fn initialize_file(location: &str, contents: &str) -> Result<()> {
         return Ok(());
     }
 
-    let mut f = match File::create(location) {
-        Ok(f) => f,
-        Err(error) => err!(ErrorKind::IOError(location.into(), error.kind()))?,
-    };
-
-    if let Err(error) = write!(f, "{contents}") {
-        err!(ErrorKind::IOError(location.into(), error.kind()))?
-    }
-
+    write!(File::create(location)?, "{contents}")?;
     Ok(())
 }
 

@@ -19,9 +19,9 @@ filesystems:
 ## Description
 
 Mount filesystem volumes from the runtime user's `$HOME` into the container, in the container's `$HOME`
-directory, unless the destination is otherwise specified with `dest` variable. Pacwrap will terminate 
-with an error condition if the file or directory is not found; or the user is otherwise not sufficiently 
+directory, unless the destination is otherwise specified with `dest` key. Pacwrap will terminate with 
+an error condition if the file or directory is not found; or the user is otherwise not sufficiently 
 privileged.
 
-Specify read/write permissions with a string using the `permission` variable. Valid combinations are 
+Specify read/write permissions with a string using the `permission` key. Valid combinations are 
 abbreviated as following: `ro` for read-only, and `rw` for read-write permissions.

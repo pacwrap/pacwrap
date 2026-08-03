@@ -21,8 +21,8 @@ filesystems:
 ## Description
 
 Mount filesystem volumes from the host into the container, at the destination mirroring the host, unless 
-the destination is otherwise specified with `dest` variable. Pacwrap will terminate with an error condition 
-if the file or directory is not found; or the user is otherwise not sufficiently privileged.
+the destination is otherwise specified with `dest` key. Pacwrap will terminate with an error condition 
+if the file or directory is not found, or the user is otherwise insufficiently privileged.
 
-Specify read/write permissions with a string using the `permission` variable. Valid value combinations are 
+Specify read/write permissions with a string using the `permission` key. Valid value combinations are 
 abbreviated as following: `ro` for read-only, and `rw` for read-write permissions.

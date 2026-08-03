@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -19,27 +19,10 @@
 
 use std::thread::Builder;
 
-use alpm::{
-    Alpm,
-    CommitData,
-    CommitError,
-    Error::{ConflictingDeps, FileConflicts, PkgInvalid, PkgInvalidArch, PkgInvalidChecksum, PkgInvalidSig, UnsatisfiedDeps},
-    FileConflictType,
-    Package,
-    PrepareData,
-    PrepareError,
-};
+use alpm::{Alpm, CommitData, CommitError, Package, PrepareData, PrepareError};
 use signal_hook::iterator::Signals;
 
-use crate::{
-    constants::{BOLD, BOLD_WHITE, RESET, SIGNAL_LIST},
-    err,
-    error,
-    sync::SyncError,
-    utils::{print_error, print_warning},
-    Error,
-    Result,
-};
+use crate::{ErrorExt, Result, constants::SIGNAL_LIST, eprintln_error, eprintln_warn, sync::SyncError, utils::ansi::*};
 
 pub trait AlpmUtils {
     fn get_local_package(&self, pkg: &str) -> Option<&Package>;
@@ -78,105 +61,11 @@ impl AlpmUtils for Alpm {
 }
 
 pub fn erroneous_transaction(error: CommitError) -> Result<()> {
-    /*
-     * Qualify error type to ensure no segfault for error conditions of which are
-     * unhandled by the upstream data function provided by the CommitError impl.
-     *
-     * TODO: Possibly submit PR upstream to provide Option encapsulate with None
-     * instead of hint::unreachable_unchecked?
-     *
-     * Then the following block of code could be structured like:
-     *
-     * ```
-     * if let Some(data) = error.data() {
-     *  match data {
-     *      _ => ()
-     *  }
-     * }
-     * ```
-     */
-    if let PkgInvalid | PkgInvalidSig | PkgInvalidChecksum | FileConflicts = error.error() {
-        match error.data() {
+    if let Some(data) = error.data() {
+        match data {
             CommitData::FileConflict(file) => {
                 for conflict in file {
-                    match conflict.conflict_type() {
-                        FileConflictType::Filesystem => {
-                            let file = conflict.file();
-                            let target = conflict.target();
-                            print_warning(&format!("{}: '{}' already exists.", target, file));
-                        }
-                        FileConflictType::Target => {
-                            let file = conflict.file();
-                            let target = format!("{}{}{}", *BOLD_WHITE, conflict.target(), *RESET);
-                            if let Some(conflicting) = conflict.conflicting_target() {
-                                let conflicting = format!("{}{conflicting}{}", *BOLD_WHITE, *RESET);
-                                print_warning(&format!("{conflicting}: '{target}' is owned by {file}"));
-                            } else {
-                                print_warning(&format!("{target}: '{file}' is owned by foreign target"));
-                            }
-                        }
-                    }
-                }
-
-                err!(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
-            }
-            CommitData::PkgInvalid(p) =>
-                for pkg in p.iter() {
-                    print_error(&format!("Invalid package: {}{}{}", *BOLD_WHITE, pkg, *RESET));
-                },
-        }
-    }
-
-    err!(SyncError::TransactionFailure(error.to_string()))
-}
-
-pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
-    /*
-     * Qualify error type to ensure no segfault for error conditions of which are
-     * unhandled by the upstream data function provided by the PrepareError impl.
-     *
-     * TODO: Possibly submit PR upstream to provide Option encapsulate with None
-     * instead of hint::unreachable_unchecked?
-     *
-     * Then the following block of code could be structured like:
-     *
-     * ```
-     * if let Some(data) = error.data() {
-     *  match data {
-     *      _ => ()
-     *  }
-     * }
-     * ```
-     */
-    if let PkgInvalidArch | UnsatisfiedDeps | ConflictingDeps = error.error() {
-        match error.data() {
-            PrepareData::PkgInvalidArch(list) =>
-                for package in list.iter() {
-                    print_error(&format!(
-                        "Invalid architecture {}{}{} for {}{}{}",
-                        *BOLD,
-                        package.arch().unwrap_or("UNKNOWN"),
-                        *RESET,
-                        *BOLD,
-                        package.name(),
-                        *RESET
-                    ));
-                },
-            PrepareData::UnsatisfiedDeps(list) =>
-                for missing in list.iter() {
-                    print_error(&format!(
-                        "Unsatisifed dependency {}{}{} for target {}{}{}",
-                        *BOLD,
-                        missing.depend(),
-                        *RESET,
-                        *BOLD,
-                        missing.target(),
-                        *RESET
-                    ));
-                },
-            PrepareData::ConflictingDeps(list) =>
-                for conflict in list.iter() {
-                    print_error(&format!(
+                    eprintln_warn!(
                         "Conflict between {}{}{} and {}{}{}: {}",
                         *BOLD,
                         conflict.package1().name(),
@@ -185,12 +74,65 @@ pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
                         conflict.package2().name(),
                         *RESET,
                         conflict.reason()
-                    ));
+                    );
+                }
+
+                Err(SyncError::TransactionFailure("Conflict within container filesystem".into()))?
+            }
+            CommitData::PkgInvalid(p) =>
+                for pkg in p.iter() {
+                    eprintln_error!("Invalid package: {}{}{}", *BOLD_WHITE, pkg, *RESET);
                 },
         }
     }
 
-    err!(SyncError::PreparationFailure(error.to_string()))
+    Err(SyncError::TransactionFailure(error.to_string()))?
+}
+
+pub fn erroneous_preparation(error: PrepareError) -> Result<()> {
+    if let Some(data) = error.data() {
+        match data {
+            PrepareData::PkgInvalidArch(list) =>
+                for package in list.iter() {
+                    eprintln_error!(
+                        "Invalid architecture {}{}{} for {}{}{}",
+                        *BOLD,
+                        package.arch().unwrap_or("UNKNOWN"),
+                        *RESET,
+                        *BOLD,
+                        package.name(),
+                        *RESET
+                    );
+                },
+            PrepareData::UnsatisfiedDeps(list) =>
+                for missing in list.iter() {
+                    eprintln_error!(
+                        "Unsatisifed dependency {}{}{} for target {}{}{}",
+                        *BOLD,
+                        missing.depend(),
+                        *RESET,
+                        *BOLD,
+                        missing.target(),
+                        *RESET
+                    );
+                },
+            PrepareData::ConflictingDeps(list) =>
+                for conflict in list.iter() {
+                    eprintln_error!(
+                        "Conflict between {}{}{} and {}{}{}: {}",
+                        *BOLD,
+                        conflict.package1().name(),
+                        *RESET,
+                        *BOLD,
+                        conflict.package2().name(),
+                        *RESET,
+                        conflict.reason()
+                    );
+                },
+        }
+    }
+
+    Err(SyncError::PreparationFailure(error.to_string()))?
 }
 
 pub fn signal_trap() {
@@ -205,7 +147,7 @@ pub fn signal_trap() {
                 println!();
 
                 if count == 3 {
-                    error!(SyncError::SignalInterrupt).error()
+                    SyncError::SignalInterrupt.error();
                 }
             }
         })

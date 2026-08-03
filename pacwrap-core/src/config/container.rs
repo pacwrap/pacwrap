@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -27,15 +27,15 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{
         dbus::Dbus,
-        filesystem::{home::Home, root::Root, Filesystem},
-        permission::{none::None, Permission},
+        filesystem::{Filesystem, home::Home, root::Root},
+        permission::{Permission, none::None},
         save,
         vars::ContainerVariables,
     },
     constants::UNIX_TIMESTAMP,
-    Result,
 };
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -121,7 +121,7 @@ impl<'a> ContainerHandle<'a> {
         &mut self.inner.metadata
     }
 
-    pub fn metadata(&self) -> &ContainerMetadata {
+    pub fn metadata(&'a self) -> &'a ContainerMetadata<'a> {
         &self.inner.metadata
     }
 
@@ -176,17 +176,17 @@ impl Default for ContainerRuntime {
 
 impl ContainerRuntime {
     pub fn new() -> Self {
-        let default_fs: [Box<dyn Filesystem>; 2] = [Box::new(Root {}), Box::new(Home {})];
-        let default_per: [Box<dyn Permission>; 1] = [Box::new(None {})];
+        let default_fs: [Box<dyn Filesystem>; 2] = [Box::new(Root::default()), Box::new(Home)];
+        let default_per: [Box<dyn Permission>; 1] = [Box::new(None)];
 
         Self {
             seccomp: true,
             allow_forking: false,
             retain_session: false,
             enable_userns: false,
+            filesystems: Vec::from(default_fs),
             permissions: Vec::from(default_per),
             dbus: Vec::new(),
-            filesystems: Vec::from(default_fs),
         }
     }
 
@@ -228,9 +228,10 @@ impl Debug for ContainerRuntime {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[derive(Default, Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum ContainerType {
     Symbolic,
+    #[default]
     Base,
     Slice,
     Aggregate,
@@ -250,12 +251,6 @@ impl ContainerType {
 impl Display for ContainerType {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         fmt.write_str(self.as_str())
-    }
-}
-
-impl Default for ContainerType {
-    fn default() -> Self {
-        Self::Base
     }
 }
 

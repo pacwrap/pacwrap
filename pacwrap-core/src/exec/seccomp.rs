@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -44,7 +44,7 @@ pub enum FilterType {
 static EPERM: Action = Action::Errno(libc::EPERM);
 static ENOSYS: Action = Action::Errno(libc::ENOSYS);
 
-/*
+/**
  * Personality values obtained from personality.h in the Linux kernel
  *
  * https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/include/uapi/linux/personality.h
@@ -55,7 +55,7 @@ static PERSONALITY: u64 = if cfg!(target_pointer_width = "64") {
     0x0800000
 };
 
-/*
+/**
  * Syscall blocklists derived from flatpak-run.c in the flatpak project.
  *
  * https://github.com/flatpak/flatpak/blob/main/common/flatpak-run.c#L1835
@@ -103,7 +103,7 @@ static RULES_COND: [(FilterType, &str, Action, Compare); 4] = [
     (Standard, "personality", EPERM, Compare::new(0, Op::NotEqual, PERSONALITY)),
 ];
 
-// Provide configuration parameters for berkley filtering program generation
+/// Provide configuration parameters for berkley filtering program generation
 pub fn configure_bpf_program(instance: &ContainerRuntime) -> Vec<FilterType> {
     let mut filters = vec![Standard];
 
@@ -118,13 +118,13 @@ pub fn configure_bpf_program(instance: &ContainerRuntime) -> Vec<FilterType> {
     filters
 }
 
-// Generate berkley packet filtering program to pass into the namespaces container
+/// Generate berkley packet filtering program to pass into the namespaces container
 pub fn provide_bpf_program(
     types: Vec<FilterType>,
     reader: &PipeReader,
     mut writer: PipeWriter,
 ) -> Result<i32, Box<dyn std::error::Error>> {
-    let mut filter = ScmpFilterContext::new_filter(Action::Allow)?;
+    let mut filter = ScmpFilterContext::new(Action::Allow)?;
     let rules = RULES
         .iter()
         .filter(|a| types.contains(&a.0))

@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@ use std::path::Path;
 
 use alpm::{AnyQuestion, Question::*};
 
-use crate::{utils::prompt::prompt, ErrorGeneric};
+use crate::{ErrorExt, utils::prompt::prompt};
 
 pub fn callback(question: AnyQuestion, _: &mut ()) {
     match question.question() {
@@ -30,7 +30,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let pkg_b = x.conflict().package2().name();
             let prompt_string = format!("Conflict between {pkg_a} and {pkg_b}; Remove {pkg_b}?");
 
-            match prompt("->", prompt_string, false).generic() {
+            match prompt("->", prompt_string, false) {
                 Ok(bool) => x.set_remove(bool),
                 Err(err) => err.error(),
             }
@@ -40,7 +40,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let new = x.newpkg().name();
             let prompt_string = format!("Replace package {old} with {new}?");
 
-            match prompt("->", prompt_string, false).generic() {
+            match prompt("->", prompt_string, false) {
                 Ok(bool) => x.set_replace(bool),
                 Err(err) => err.error(),
             }
@@ -51,7 +51,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let reason = x.reason();
             let prompt_string = format!("'{filename}': {reason}. Remove package?");
 
-            match prompt("->", prompt_string, false).generic() {
+            match prompt("->", prompt_string, false) {
                 Ok(bool) => x.set_remove(bool),
                 Err(err) => err.error(),
             }
@@ -61,7 +61,7 @@ pub fn callback(question: AnyQuestion, _: &mut ()) {
             let name = x.uid();
             let prompt_string = format!("Import key {fingerprint}, \"{name}\" to keyring?");
 
-            match prompt("->", prompt_string, false).generic() {
+            match prompt("->", prompt_string, false) {
                 Ok(bool) => x.set_import(bool),
                 Err(err) => err.error(),
             }

@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,16 +18,14 @@
  */
 
 use pacwrap_core::{
-    config::{cache, ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables},
+    Result,
+    config::{ConfigError, Container, ContainerHandle, ContainerType, ContainerVariables, cache},
     constants::{ARROW_CYAN, ARROW_GREEN, BOLD, RESET},
-    err,
     sync::instantiate_container,
     utils::{
-        arguments::{InvalidArgument, Operand},
         Arguments,
+        arguments::{InvalidArgument, Operand},
     },
-    Error,
-    Result,
 };
 
 pub fn link(args: &mut Arguments) -> Result<()> {
@@ -50,16 +48,16 @@ pub fn link(args: &mut Arguments) -> Result<()> {
 
     let dest = match dest {
         Some(dest) => dest,
-        None => return err!(InvalidArgument::TargetUnspecified),
+        None => return Err(InvalidArgument::TargetUnspecified)?,
     };
     let src = match src {
         Some(src) => src,
-        None => return err!(InvalidArgument::TargetUnspecified),
+        None => return Err(InvalidArgument::TargetUnspecified)?,
     };
     let cache = cache::populate()?;
     let dest_handle = cache.get_instance(dest)?;
     let src_handle = match cache.get_instance_option(src) {
-        Some(src) => err!(ConfigError::AlreadyExists(src.vars().instance().into()))?,
+        Some(src) => Err(ConfigError::AlreadyExists(src.vars().instance().into()))?,
         None =>
             if new {
                 let container = Container::new(ContainerType::Symbolic, vec![], vec![]);

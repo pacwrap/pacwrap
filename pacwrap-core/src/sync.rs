@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     fs::{create_dir, create_dir_all},
     os::unix::fs::symlink,
     path::Path,
@@ -27,28 +26,29 @@ use std::{
 use alpm::{Alpm, LogLevel, SigLevel, Usage};
 use pacmanconf::{self, Config, Repository};
 use serde::{Deserialize, Serialize};
+use thiserror::Error as ThisError;
 
 use crate::{
+    ErrorTrait,
+    PathContext,
+    Result,
     config::{
-        global::{global, ProgressKind},
         ContainerHandle,
         ContainerType::*,
         ContainerVariables,
         Global,
+        global::{ProgressKind, global},
     },
-    constants::{ARROW_RED, BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET, UNIX_TIMESTAMP, VERBOSE},
-    err,
+    constants::{BAR_GREEN, BOLD, CACHE_DIR, CONFIG_DIR, DATA_DIR, RESET, UNIX_TIMESTAMP, VERBOSE},
+    eprintln_warn,
     exec::pacwrap_key,
+    impl_error,
     sync::{
         event::download::{self, DownloadEvent},
         filesystem::{create_blank_state, create_hard_link},
         transaction::{TransactionAggregator, TransactionFlags},
     },
-    utils::{prompt::PromptError, unix_epoch_time},
-    Error,
-    ErrorGeneric,
-    ErrorTrait,
-    Result,
+    utils::unix_epoch_time,
 };
 
 pub mod event;
@@ -58,86 +58,55 @@ pub mod transaction;
 pub mod utils;
 
 mod resolver;
-mod resolver_local;
 
 static PACMAN_CONFIG: OnceLock<pacmanconf::Config> = OnceLock::new();
 static ALPM_CONFIG_DATA: OnceLock<AlpmConfigData> = OnceLock::new();
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(ThisError, Serialize, Deserialize, Clone, Debug)]
 pub enum SyncError {
+    #[error("Agent process terminated due to upstream error.")]
     TransactionAgentError,
+    #[error("Agent process terminated due to upstream error.")]
     TransactionAgentFailure,
+    #[error("Failure to acquire agent runtime parameters.")]
     ParameterAcquisitionFailure,
+    #[error("Deserialization of input parameters failed.")]
     DeserializationFailure,
+    #[error("Deserialization of input parameters failed: Invalid magic number.")]
     InvalidMagicNumber,
+    #[error("Signal interrupt was triggered.")]
     SignalInterrupt,
+    #[error("Agent binary mismatch.")]
     AgentVersionMismatch,
+    #[error("Nothing to do.")]
     NothingToDo,
+    #[error("Dependent container '{bold}{0}{reset}' is misconfigured or otherwise is missing.", bold=*BOLD, reset=*RESET)]
     DependentContainerMissing(String),
+    #[error("Recursion depth exceeded maximum of {bold}{0}{reset}.", bold=*BOLD, reset=*RESET)]
     RecursionDepthExceeded(isize),
+    #[error("Target package {bold}{0}{reset}: Installed in upstream container.", bold=*BOLD, reset=*RESET)]
     TargetUpstream(String),
+    #[error("Target package {bold}{0}{reset}: Not installed.", bold=*BOLD, reset=*RESET)]
     TargetNotInstalled(String),
+    #[error("Target package {bold}{0}{reset}: Not available in sync databases.", bold=*BOLD, reset=*RESET)]
     TargetNotAvailable(String),
+    #[error("Failure to prepare transaction: {0}")]
     PreparationFailure(String),
+    #[error("Failure to commit transaction: {0}")]
     TransactionFailure(String),
+    #[error("Failure to initialize transaction: {0}")]
     InitializationFailure(String),
+    #[error("Internal failure: {0}")]
     InternalError(String),
+    #[error("No compatible containers available to synchronize remote database.")]
     NoCompatibleContainers,
+    #[error("Unable to locate pacman keyrings.")]
     UnableToLocateKeyrings,
+    #[error("'{0}': {1}")]
     RepoConfError(String, String),
 }
 
-impl Display for SyncError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::DependentContainerMissing(u) =>
-                write!(fmter, "Dependent container '{}{u}{}' is misconfigured or otherwise is missing.", *BOLD, *RESET),
-            Self::TargetNotAvailable(pkg) =>
-                write!(fmter, "Target package {}{pkg}{}: Not available in sync databases.", *BOLD, *RESET),
-            Self::TargetUpstream(pkg) =>
-                write!(fmter, "Target package {}{pkg}{}: Installed in upstream container.", *BOLD, *RESET),
-            Self::TransactionAgentError | Self::TransactionAgentFailure =>
-                write!(fmter, "Agent process terminated due to upstream error."),
-            Self::RecursionDepthExceeded(u) => write!(fmter, "Recursion depth exceeded maximum of {}{u}{}.", *BOLD, *RESET),
-            Self::NoCompatibleContainers => write!(fmter, "No compatible containers available to synchronize remote database."),
-            Self::InvalidMagicNumber => write!(fmter, "Deserialization of input parameters failed: Invalid magic number."),
-            Self::TargetNotInstalled(pkg) => write!(fmter, "Target package {}{pkg}{}: Not installed.", *BOLD, *RESET),
-            Self::InitializationFailure(msg) => write!(fmter, "Failure to initialize transaction: {msg}"),
-            Self::PreparationFailure(msg) => write!(fmter, "Failure to prepare transaction: {msg}"),
-            Self::TransactionFailure(msg) => write!(fmter, "Failure to commit transaction: {msg}"),
-            Self::DeserializationFailure => write!(fmter, "Deserialization of input parameters failed."),
-            Self::ParameterAcquisitionFailure => write!(fmter, "Failure to acquire agent runtime parameters."),
-            Self::AgentVersionMismatch => write!(fmter, "Agent binary mismatch."),
-            Self::InternalError(msg) => write!(fmter, "Internal failure: {msg}"),
-            Self::SignalInterrupt => write!(fmter, "Signal interrupt was triggered."),
-            Self::UnableToLocateKeyrings => write!(fmter, "Unable to locate pacman keyrings."),
-            Self::RepoConfError(path, err) => write!(fmter, "'{}': {}", path, err),
-            Self::NothingToDo => write!(fmter, "Nothing to do."),
-        }
-    }
-}
-
-impl ErrorTrait for SyncError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::TransactionFailure(_) => (),
-            Self::SignalInterrupt => eprintln!("{} Transaction aborted.", *ARROW_RED),
-            _ => eprintln!("{} Transaction failed.", *ARROW_RED),
-        }
-
-        1
-    }
-}
-
-impl From<&Error> for SyncError {
-    fn from(error: &Error) -> SyncError {
-        if let Ok(PromptError::PromptInterrupted) = error.downcast::<PromptError>() {
-            return Self::SignalInterrupt;
-        }
-
-        Self::InternalError(error.kind().to_string())
-    }
-}
+impl_error!(SyncError);
 
 #[derive(Serialize, Deserialize)]
 pub struct AlpmRepository {
@@ -216,7 +185,7 @@ pub fn instantiate_alpm_agent(config: &Global, remotes: &AlpmConfigData, transfl
     }
 
     if disable_sandbox {
-        handle.set_disable_sandbox(true);
+        handle.set_disable_sandbox_syscalls(true);
         handle.set_sandbox_user(None::<&str>).expect("set sandbox user");
     }
 
@@ -251,7 +220,7 @@ fn alpm_handle(
     }
 
     if disable_sandbox {
-        handle.set_disable_sandbox(true);
+        handle.set_disable_sandbox_syscalls(true);
         handle.set_sandbox_user(None::<&str>).expect("set sandbox user");
     }
 
@@ -285,14 +254,14 @@ pub fn instantiate_container<'a>(handle: &'a ContainerHandle<'a>) -> Result<()> 
         let dep = handle.metadata().dependencies();
         let dep = dep.last().expect("Dependency element");
 
-        symlink(dep, root).prepend_io(|| root.into())?;
+        symlink(dep, root)?;
     } else {
-        create_dir(root).prepend_io(|| root.into())?;
+        create_dir(root)?;
     }
 
     if let Aggregate | Base = container_type {
         if !Path::new(home).exists() {
-            create_dir(home).prepend_io(|| home.into())?;
+            create_dir(home)?;
         }
     }
 
@@ -317,10 +286,10 @@ pub fn instantiate_trust() -> Result<()> {
     println!("{} {}Initializing package trust database...{}", *BAR_GREEN, *BOLD, *RESET);
 
     if !Path::new("/usr/share/pacman/keyrings").exists() {
-        err!(SyncError::UnableToLocateKeyrings)?
+        Err(SyncError::UnableToLocateKeyrings)?
     }
 
-    create_dir_all(path).prepend_io(|| path.into())?;
+    create_dir_all(path)?;
     pacwrap_key(vec!["--init"])?;
     pacwrap_key(vec!["--populate"])
 }
@@ -342,7 +311,7 @@ fn register_remote(mut handle: Alpm, config: &AlpmConfigData) -> Alpm {
 fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<()> {
     let handle = match ag.cache().obtain_base_handle() {
         Some(handle) => handle,
-        None => err!(SyncError::NoCompatibleContainers)?,
+        None => Err(SyncError::NoCompatibleContainers)?,
     };
     let flags = ag.flags();
     let db_path = format!("{}/pacman/", *DATA_DIR);
@@ -353,10 +322,10 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
     handle.set_dl_cb(DownloadEvent::new().style(&ProgressKind::Verbose), download::event);
 
     if let Err(err) = handle.syncdbs_mut().update(force) {
-        err!(SyncError::InitializationFailure(err.to_string()))?
+        Err(SyncError::InitializationFailure(err.to_string()))?
     }
 
-    handle.release().generic()?;
+    handle.release()?;
     ag.lock()?.assert()?;
 
     for handle in ag.cache().filter_handle(vec![Base, Slice, Aggregate]).iter() {
@@ -364,8 +333,8 @@ fn synchronize_database(ag: &mut TransactionAggregator, force: bool) -> Result<(
             let src = &format!("{}/pacman/sync/{}.db", *DATA_DIR, repo.name);
             let dest = &format!("{}/var/lib/pacman/sync/{}.db", handle.vars().root(), repo.name);
 
-            if let Err(error) = create_hard_link(src, dest).prepend(|| format!("Failed to hardlink db '{}'", dest)) {
-                error.warn();
+            if let Err(error) = create_hard_link(src, dest).context_path(dest) {
+                eprintln_warn!("Failed to hardlink db {error}");
             }
         }
     }
@@ -412,7 +381,7 @@ fn load_pacman_conf() -> Result<Config> {
             let error = error.to_string();
             let error = error.split("error: ").collect::<Vec<_>>()[1].split("\n").collect::<Vec<&str>>()[0];
 
-            err!(SyncError::RepoConfError(path, error.to_string()))?
+            Err(SyncError::RepoConfError(path, error.to_string()))?
         }
     })
 }

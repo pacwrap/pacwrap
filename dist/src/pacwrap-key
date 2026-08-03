@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 #
 #   pacwrap-key - manages pacwrap's keyring
 #                 Based on pacman-key, 
@@ -45,42 +45,40 @@ HEADER_RESET=
 TAB=$'    '
 SUB_HEADER=$TAB
 SUB_TEXT=$TAB$TAB
-CHILD_HEADER=$SUB_TEXT
-CHILD_SUBTEXT=$TAB$TAB$TAB
 
 [[ $FAKECHROOT ]] && PACWRAP_KEYRING_DIR="/etc/pacman.d/gnupg";
 
 main() {
-    parse_params $@
+    parse_params "$@"
     colorize
     check
 
     case $SWITCH in
-        init)   initialize ${TARGETS[@]};;
-        a*)     add_keys ${TARGETS[@]};;
-        d*)     delete_keys ${TARGETS[@]};;
-        e*)     edit_keys ${TARGETS[@]};;
-        E*)     export_keys ${TARGETS[@]};;
-        f*)     finger_keys ${TARGETS[@]};;
-        it*)    import_trustdb ${TARGETS[@]};;
-        i*)     import ${TARGETS[@]};; 
-        ls*)    list_sigs ${TARGETS[@]};;
-        lk*)    list_keys ${TARGETS[@]};;
-        p*)     populate_keyring ${TARGETS[@]};;
-        rk*)    receive_keys ${TARGETS[@]};;
-        uk*)    refresh_keys ${TARGETS[@]};;
-        v*)     verify_sig ${TARGETS[@]};;
+        init)   initialize "${TARGETS[@]}";;
+        a*)     add_keys "${TARGETS[@]}";;
+        d*)     delete_keys "${TARGETS[@]}";;
+        e*)     edit_keys "${TARGETS[@]}";;
+        E*)     export_keys "${TARGETS[@]}";;
+        f*)     finger_keys "${TARGETS[@]}";;
+        it*)    import_trustdb "${TARGETS[@]}";;
+        i*)     import "${TARGETS[@]}";;
+        ls*)    list_sigs "${TARGETS[@]}";;
+        lk*)    list_keys "${TARGETS[@]}";;
+        p*)     populate_keyring "${TARGETS[@]}";;
+        rk*)    receive_keys "${TARGETS[@]}";;
+        uk*)    refresh_keys "${TARGETS[@]}";;
+        v*)     verify_sig "${TARGETS[@]}";;
         h)      man_key;;
         V)      version;;
         DB)     ;;
-        *)   invalid_option $SWITCH;;
+        *)      invalid_option "$SWITCH";;
     esac
 
     [[ $SWITCH == *DB* ]] && updatedb
 }
 
 parse_params() {
-    if [[ -z $@ ]]; then
+    if [[ -z $* ]]; then
         invalid_option
     fi
 
@@ -109,28 +107,28 @@ parse_params() {
         -v|--verify)        SWITCH="v";;
         -h|--help*)         SWITCH="h";;
         -V|--version)       SWITCH="V";;
-        -*)                 invalid_option $1;;
-        *)                  TARGETS+=($1); shift; continue;
+        -*)                 invalid_option "$1";;
+        *)                  TARGETS+=("$1"); shift; continue;
     esac
 
-    if [[ $count > 0 ]]; then
-        invalid_option $1
+    if [[ $count -gt 0 ]]; then
+        invalid_option "$1"
     fi
 
-    pos+=1; count+=1
+    (( pos+=1 )); (( count+=1 ))
     shift; done
 }
 
 invalid_option() {
     colorize
 
-    if [[ -z $@ ]]; then
-        error "$(gettext "Operation not specified")"    
+    if [[ -z $* ]]; then
+        error "$(gettext "Operation not specified")"
     else
         error "$(gettext "Invalid option '%s'")" "$@"
     fi
 
-    echo "$(gettext "Try 'pacwrap-key -h' for more information on valid operational parameters.")"
+    echo gettext "Try 'pacwrap-key -h' for more information on valid operational parameters."
     exit 1
 }
 
@@ -231,7 +229,7 @@ check() {
         if [[ ! -w "$PACWRAP_KEYRING_DIR" ]]; then
             error_fatal "$(gettext "Insufficient permissions to operate on designated keystore.")"
         else
-            error_fatal "$(gettext "'%s': pacwrap data directory not found.")" $PACWRAP_DATA_DIR 
+            error_fatal "$(gettext "'%s': pacwrap data directory not found.")" "$PACWRAP_DATA_DIR"
         fi 
     fi
 
@@ -252,7 +250,7 @@ check() {
 colorize() {
     [[ $COLOR_SET == 1 ]] && return
 
-    if [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]] && [[ $USE_COLOR != 'n' ]] && [[ -t 1 ]]; then 
+    if [[ -n $COLORTERM ]] && [[ $TERM != "dummy" ]] && [[ $USE_COLOR != 'n' ]] && [[ -t 1 ]]; then 
         RESET="[0m"
         BOLD="[1m"
         BLUE="${BOLD}[1;36m"
@@ -263,15 +261,11 @@ colorize() {
 
     HEADER=$BOLD
     HEADER_RESET=$RESET
-    SUB_HEADER=$TAB$BOLD
     SUB_TEXT=$TAB$TAB
-    CHILD_HEADER=$SUB_TEXT$BOLD
-    CHILD_SUBTEXT=$TAB$TAB$TAB
 
     readonly RESET BOLD BLUE GREEN RED YELLOW \
         HEADER HEADER_RESET \
-        SUB_HEADER SUBTEXT \
-        CHILD_HEADER CHILD_SUBTEXT; COLOR_SET=1
+        SUB_HEADER; COLOR_SET=1
 }
 
 msg() {
@@ -426,17 +420,17 @@ key_is_revoked() {
 }
 
 initialize() {
-    local conffile keyserv
+    local conffile gpg_ver
     # Check for simple existence rather than for a directory as someone
     # may want to use a symlink here
-    [[ -e ${PACWRAP_KEYRING_DIR} ]] || mkdir -p -m 755 "${PACMAN_KEYRING_DIR}"
+    [[ -e ${PACWRAP_KEYRING_DIR} ]] || mkdir -p "${PACMAN_KEYRING_DIR}" && chmod -R 755 "${PACWRAP_KEYRING_DIR}"
 
     # keyring files
-    [[ -f ${PACWRAP_KEYRING_DIR}/pubring.gpg ]] || touch ${PACWRAP_KEYRING_DIR}/pubring.gpg
-    [[ -f ${PACWRAP_KEYRING_DIR}/secring.gpg ]] || touch ${PACWRAP_KEYRING_DIR}/secring.gpg
+    [[ -f ${PACWRAP_KEYRING_DIR}/pubring.gpg ]] || touch "${PACWRAP_KEYRING_DIR}/pubring.gpg"
+    [[ -f ${PACWRAP_KEYRING_DIR}/secring.gpg ]] || touch "${PACWRAP_KEYRING_DIR}/secring.gpg"
     [[ -f ${PACWRAP_KEYRING_DIR}/trustdb.gpg ]] || "${GPG_PACWRAP[@]}" --update-trustdb
-    chmod 644 ${PACWRAP_KEYRING_DIR}/{pubring,trustdb}.gpg
-    chmod 600 ${PACWRAP_KEYRING_DIR}/secring.gpg
+    chmod 644 "${PACWRAP_KEYRING_DIR}/pubring.gpg" "${PACWRAP_KEYRING_DIR}/trustdb.gpg"
+    chmod 600 "${PACWRAP_KEYRING_DIR}/secring.gpg"
 
     # gpg.conf
     conffile="${PACWRAP_KEYRING_DIR}/gpg.conf"
@@ -448,7 +442,8 @@ initialize() {
     add_gpg_conf_option "$conffile" 'keyserver-options' 'timeout=10'
     add_gpg_conf_option "$conffile" 'keyserver-options' 'import-clean'
 
-    local gpg_ver=$(gpg --version | awk '{print $3; exit}')
+    gpg_ver=$(gpg --version | awk '{print $3; exit}')
+ 
     if (( $(vercmp "$gpg_ver" 2.2.17) >= 0 )); then
         add_gpg_conf_option "$conffile" 'keyserver-options' 'no-self-sigs-only'
     fi
@@ -462,7 +457,6 @@ initialize() {
     # set up a private signing key (if none available)
     if [[ $(secret_keys_available) -lt 1 ]]; then
         generate_master_key
-        UPDATEDB=1
     fi
 }
 
@@ -497,7 +491,7 @@ populate_keyring() {
     fi
 
     # Variable used for iterating on keyrings
-    local keys key_id
+    local key_id
 
     # Add keys from requested keyrings
     for keyring in "${KEYRINGIDS[@]}"; do
@@ -513,7 +507,7 @@ populate_keyring() {
     local -A trusted_ids
     for keyring in "${KEYRINGIDS[@]}"; do
         if [[ -s "${KEYRING_IMPORT_DIR}/${keyring}-trusted" ]]; then
-            while IFS=: read key_id _; do
+            while IFS=: read -r key_id _; do
                 # skip blank lines, comments; these are valid in this file
                 [[ -z $key_id || ${key_id:0:1} = \# ]] && continue
 
@@ -750,7 +744,7 @@ refresh_keys() {
         done
 
         # if no key was found, fall back to using the keyservers (with the key fingerprint instead)
-        if (( $? )) &&  ! "${GPG_PACWRAP[@]}" --refresh-keys "$id"; then
+        if $? && ! "${GPG_PACWRAP[@]}" --refresh-keys "$id"; then
             error "$(gettext "Could not update key: %s")" "$id"
             ret=1
         fi
@@ -806,6 +800,6 @@ if ! type gettext &>/dev/null; then
     }
 fi
 
-main $@
+main "$@"
 
 # vim:set ts=4 sw=4 et:1

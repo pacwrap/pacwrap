@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -18,16 +18,16 @@
  */
 
 use crate::{
+    Result,
     config::ContainerHandle,
     constants::ARROW_GREEN,
     sync::transaction::{
-        aggregator::BAR_GREEN_STYLE,
         Transaction,
         TransactionAggregator,
         TransactionHandle,
         TransactionState::{self, Skip},
+        aggregator::BAR_GREEN_STYLE,
     },
-    Result,
 };
 
 #[derive(Debug)]

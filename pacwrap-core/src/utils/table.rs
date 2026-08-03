@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -17,47 +17,35 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Display, Error as FmtError, Formatter};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use dialoguer::console::Term;
+use thiserror::Error;
 
 use crate::{
-    constants::{BOLD, BOLD_YELLOW, RESET, YELLOW},
-    err,
-    impl_error,
-    utils::whitespace,
-    Error,
     ErrorTrait,
+    Result,
+    constants::{BOLD, BOLD_YELLOW, RESET, YELLOW},
+    impl_error,
 };
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum TableError {
+    #[error("Table is empty")]
     Empty,
+    #[error("Table contains no columns")]
     NoColumns,
 }
 
 impl_error!(TableError);
 
-impl Display for TableError {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
-        match self {
-            TableError::Empty => write!(fmt, "Table is empty"),
-            TableError::NoColumns => write!(fmt, "Table contains no columns"),
-        }
-    }
-}
-
+#[derive(Default)]
 pub enum ColumnAttribute {
     AlignRight,
+    #[default]
     AlignLeft,
     AlignLeftMax(usize),
     AlignRightMax(usize),
-}
-
-impl Default for ColumnAttribute {
-    fn default() -> Self {
-        Self::AlignLeft
-    }
 }
 
 pub struct Entry<'a> {
@@ -100,7 +88,7 @@ impl<'a> Table<'a> {
             marker: Vec::new(),
             column_attr: Vec::new(),
             width_max: width,
-            whitespace: whitespace(width),
+            whitespace: " ".repeat(width),
             spacing: 2,
             dimensions: (0, 0),
             built: false,
@@ -143,6 +131,12 @@ impl<'a> Table<'a> {
         self.insert(vec)
     }
 
+    pub fn extend(&mut self, vec: Vec<Vec<String>>) -> usize {
+        self.rows.extend(vec);
+        self.dimensions = (self.rows.len(), self.dimensions.1);
+        self.rows.len() - 1
+    }
+
     pub fn insert(&mut self, vec: Vec<String>) -> usize {
         self.rows.push(vec);
         self.dimensions = (self.rows.len(), self.dimensions.1);
@@ -157,11 +151,11 @@ impl<'a> Table<'a> {
         !self.marker.is_empty()
     }
 
-    pub fn build(&'a mut self) -> Result<&'a Self, Error> {
+    pub fn build(&'a mut self) -> Result<&'a Self> {
         if let (0, 0) = self.dimensions {
-            err!(TableError::Empty)?
+            Err(TableError::Empty)?
         } else if let (_, 0) = self.dimensions {
-            err!(TableError::NoColumns)?
+            Err(TableError::NoColumns)?
         }
 
         for row in 0 .. self.dimensions.0 {
@@ -252,7 +246,7 @@ impl<'a> Entry<'a> {
 }
 
 impl Display for Table<'_> {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
         if !self.built {
             return writeln!(fmt, "Table object not built");
         }
@@ -316,7 +310,7 @@ mod test {
             marker: Vec::new(),
             column_attr: Vec::new(),
             width_max: 80,
-            whitespace: whitespace(80),
+            whitespace: " ".repeat(80),
             spacing: 2,
             dimensions: (0, 0),
             built: false,

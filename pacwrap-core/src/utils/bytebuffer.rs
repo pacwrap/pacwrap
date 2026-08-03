@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -17,9 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
-use crate::{err, impl_error, Error, ErrorTrait, Result};
+use thiserror::Error;
+
+use crate::{ErrorTrait, Result, impl_error};
 
 pub enum BufferMode {
     Write,
@@ -32,31 +34,19 @@ pub struct ByteBuffer {
     buffer: Vec<u8>,
 }
 
-enum BufferError {
+#[derive(Error, Debug)]
+pub enum BufferError {
+    #[error("\"Write on reade error\"")]
     WriteOnRead,
+    #[error("\"Read on write error\"")]
     ReadOnWrite,
+    #[error("\"Buffer moode is unset\"")]
     ModeUnset,
+    #[error("\"Buffer overflow: {0} > {0}\"")]
     BufferOverrun(usize, usize),
 }
 
 impl_error!(BufferError);
-
-impl Display for BufferError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{self:?}")
-    }
-}
-
-impl Debug for BufferError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::WriteOnRead => write!(fmt, "\"Write on read error\""),
-            Self::ReadOnWrite => write!(fmt, "\"Read on write error\""),
-            Self::ModeUnset => write!(fmt, "\"Buffer mode is unset\""),
-            Self::BufferOverrun(req, aval) => write!(fmt, "\"Buffer overflow: {req} > {aval}\""),
-        }
-    }
-}
 
 impl From<Vec<u8>> for ByteBuffer {
     fn from(value: Vec<u8>) -> Self {
@@ -169,25 +159,25 @@ impl ByteBuffer {
 
     fn check_read(&self) -> Result<()> {
         if self.position > self.buffer.len() {
-            err!(BufferError::BufferOverrun(self.position, self.buffer.len()))?
+            Err(BufferError::BufferOverrun(self.position, self.buffer.len()))?
         }
 
         match &self.mode {
             Some(mode) => match mode {
-                BufferMode::Write => err!(BufferError::WriteOnRead),
+                BufferMode::Write => Err(BufferError::WriteOnRead)?,
                 BufferMode::Read => Ok(()),
             },
-            None => err!(BufferError::ModeUnset),
+            None => Err(BufferError::ModeUnset)?,
         }
     }
 
     fn check_write(&self) -> Result<()> {
         match &self.mode {
             Some(mode) => match mode {
-                BufferMode::Read => err!(BufferError::ReadOnWrite),
+                BufferMode::Read => Err(BufferError::ReadOnWrite)?,
                 BufferMode::Write => Ok(()),
             },
-            None => err!(BufferError::ModeUnset),
+            None => Err(BufferError::ModeUnset)?,
         }
     }
 }

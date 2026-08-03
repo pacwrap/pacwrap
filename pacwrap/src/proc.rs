@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,39 +22,36 @@ use std::{
     str::FromStr,
 };
 
+use anyhow::{Context, anyhow};
 use indexmap::IndexMap;
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use pacwrap_core::{
+    Result,
     config::cache,
     constants::{ARROW_GREEN, BOLD, DIM, RESET},
-    err,
-    impl_error,
+    eprintln_warn,
     process::{self, Process},
     utils::{
+        Arguments,
         arguments::{InvalidArgument, Operand},
-        print_warning,
         prompt::prompt_targets,
         table::{ColumnAttribute, Table},
-        Arguments,
     },
-    Error,
-    ErrorGeneric,
-    ErrorTrait,
-    Result,
 };
+use thiserror::Error;
 
-#[derive(Debug)]
+use crate::help::{HelpTopic, help};
+
+#[derive(Error, Debug)]
 pub enum ProcError {
     NotEnumerable,
     SpecifiedNotEnumerable,
     InvalidSignalSpecified,
     InvalidDepthInput,
 }
-
-impl_error!(ProcError);
 
 impl Display for ProcError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FmtResult {
@@ -74,11 +71,12 @@ pub fn process(args: &mut Arguments) -> Result<()> {
         Operand::Long("summary") | Operand::Short('s') => summary(args),
         Operand::Long("id-list") | Operand::Short('i') => process_id(args),
         Operand::Long("kill") | Operand::Short('k') => process_kill(args),
+        Operand::Short('h') | Operand::Long("help") => help(args, &HelpTopic::Process),
         Operand::Nothing =>
             if let Operand::Value("ps") = args[0] {
                 summary(args)
             } else {
-                err!(InvalidArgument::OperationUnspecified)
+                Err(InvalidArgument::OperationUnspecified)?
             },
         _ =>
             if let Operand::Value("ps") = args[0] {
@@ -108,7 +106,7 @@ fn summary(args: &mut Arguments) -> Result<()> {
             Operand::ShortPos('t', val) | Operand::LongPos("target", val) => instances.push(val),
             Operand::ShortPos('d', val) | Operand::LongPos("depth", val) => match val.parse() {
                 Ok(val) => max_depth = val,
-                Err(_) => err!(ProcError::InvalidDepthInput)?,
+                Err(_) => Err(anyhow!(ProcError::InvalidDepthInput))?,
             },
             _ => args.invalid_operand()?,
         }
@@ -130,7 +128,7 @@ fn summary(args: &mut Arguments) -> Result<()> {
     };
 
     if list.is_empty() {
-        err!(ProcError::NotEnumerable)?
+        Err(anyhow!(ProcError::NotEnumerable))?
     }
 
     let table_header = &match col {
@@ -178,18 +176,15 @@ fn process_id(args: &mut Arguments) -> Result<()> {
 
     while let Some(arg) = args.next() {
         match arg {
-            Operand::Short('d') => continue,
+            Operand::Short('t') | Operand::Long("target") => continue,
             Operand::Short('a') | Operand::Long("all") => all = true,
-            Operand::Value(val)
-            | Operand::ShortPos('i', val)
-            | Operand::ShortPos('d', val)
-            | Operand::LongPos("id-list", val) => instance.push(val),
+            Operand::ShortPos('t', val) | Operand::LongPos("target", val) => instance.push(val),
             _ => args.invalid_operand()?,
         }
     }
 
     if instance.is_empty() && !all {
-        err!(InvalidArgument::TargetUnspecified)?
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     let cache = cache::populate()?;
@@ -200,7 +195,7 @@ fn process_id(args: &mut Arguments) -> Result<()> {
     };
 
     if list.is_empty() {
-        err!(ProcError::NotEnumerable)?
+        Err(anyhow!(ProcError::NotEnumerable))?
     }
 
     for idx in 0 .. list.len() {
@@ -234,7 +229,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
             Operand::ShortPos('s', val) | Operand::LongPos("signal", val) =>
                 sigint = match Signal::from_str(&val.to_uppercase()) {
                     Ok(sig) => sig,
-                    Err(_) => err!(ProcError::InvalidSignalSpecified)?,
+                    Err(_) => Err(anyhow!(ProcError::InvalidSignalSpecified))?,
                 },
             Operand::ShortPos(_, val) | Operand::LongPos(_, val) | Operand::Value(val) => process.push(val),
             _ => args.invalid_operand()?,
@@ -242,7 +237,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     }
 
     if process.is_empty() && !all {
-        err!(InvalidArgument::TargetUnspecified)?
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     let mut instances = IndexMap::new();
@@ -261,7 +256,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
     };
 
     if list.is_empty() {
-        err!(ProcError::SpecifiedNotEnumerable)?
+        Err(anyhow!(ProcError::SpecifiedNotEnumerable))?
     }
 
     for process in list.iter() {
@@ -285,7 +280,7 @@ fn process_kill(args: &mut Arguments) -> Result<()> {
 }
 
 fn fork_warn(process: &Process) {
-    print_warning(&format!(
+    eprintln_warn!(
         "Process fork detected with PID {}{}{} from an instance of {}{}{}.",
         *BOLD,
         process.pid(),
@@ -293,13 +288,13 @@ fn fork_warn(process: &Process) {
         *BOLD,
         process.instance(),
         *RESET
-    ));
+    );
 }
 
 fn kill_processes(process_list: &Vec<&Process>, sigint: Signal) -> Result<()> {
     for list in process_list {
-        if let Err(err) = kill(Pid::from_raw(list.pid()), sigint).prepend(|| format!("Error killing '{}'", list.pid())) {
-            err.warn();
+        if let Err(err) = kill(Pid::from_raw(list.pid()), sigint).with_context(|| format!("Error killing '{}'", list.pid())) {
+            eprintln_warn!("{err}");
             continue;
         }
 

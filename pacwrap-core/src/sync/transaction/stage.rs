@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -19,9 +19,10 @@
 use alpm::TransFlag;
 
 use crate::{
+    Result,
     config::{ContainerHandle, ContainerType::Base},
-    err,
     sync::{
+        SyncError,
         transaction::{
             Transaction,
             TransactionAggregator,
@@ -31,10 +32,7 @@ use crate::{
             TransactionState::{self, *},
             TransactionType::*,
         },
-        SyncError,
     },
-    Error,
-    Result,
 };
 
 #[derive(Debug)]
@@ -75,7 +73,7 @@ impl Transaction for Stage {
         inshandle: &ContainerHandle,
     ) -> Result<TransactionState> {
         if let Err(error) = handle.alpm().trans_init(self.flags) {
-            err!(SyncError::InitializationFailure(error.to_string()))?
+            Err(SyncError::InitializationFailure(error.to_string()))?
         }
 
         ag.action().action_message(self.mode);

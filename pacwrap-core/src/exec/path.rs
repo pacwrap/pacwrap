@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -17,76 +17,97 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::path::{Path, PathBuf};
+use std::{
+    io::ErrorKind::NotFound,
+    path::{Path, PathBuf},
+};
+
+use thiserror::Error as ThisError;
 
 use crate::{
-    config::{ContainerHandle, ContainerType::Slice},
-    err,
-    exec::{ExecutionError, DIST_IMG},
-    Error,
-    ErrorKind,
+    ErrorTrait,
     Result,
+    config::{ContainerHandle, ContainerType::Slice},
+    constants::{BOLD, RESET},
+    exec::{DIST_IMG, ExecutionError},
+    impl_error,
 };
+
+#[derive(ThisError, Debug, Clone)]
+pub enum PathError {
+    #[error("'{0}': {bold}PATH{reset} variable must be absolute", bold=*BOLD, reset=*RESET)]
+    UnabsolutePath(String),
+    #[error("'{0}': Executable path must be absolute.")]
+    UnabsoluteExec(String),
+    #[error("'{0}': No such file or directory in container.")]
+    PathUnresolvable(String),
+}
+
+impl_error!(PathError);
 
 pub fn check_path(ins: &ContainerHandle, args: &[&str], path: Vec<&str>) -> Result<()> {
     if let (Slice, true) = (ins.metadata().container_type(), !args.is_empty()) {
-        if dest_exists(*DIST_IMG, "/bin", args[0])? {
+        if resolve_path(*DIST_IMG, "/bin", args[0]).is_ok() {
             return Ok(());
         }
 
-        err!(ExecutionError::ExecutableUnavailable(args[0].into()))?
+        Err(ExecutionError::ExecutableUnavailable(args[0].into()))?
     }
 
     if args.is_empty() {
-        err!(ExecutionError::RuntimeArguments)?
+        Err(ExecutionError::RuntimeArguments)?
     }
 
     for dir in path {
         match Path::new(&format!("{}/{}", ins.vars().root(), dir)).try_exists() {
             Ok(_) =>
-                if dest_exists(ins.vars().root(), dir, args[0])? {
+                if resolve_path(ins.vars().root(), dir, args[0]).is_ok() {
                     return Ok(());
                 },
-            Err(error) => err!(ExecutionError::InvalidPathVar(dir.into(), error.kind()))?,
+            Err(error) => Err(ExecutionError::InvalidPathVar(dir.into(), error.kind()))?,
         }
     }
 
-    err!(ExecutionError::ExecutableUnavailable(args[0].into()))?
+    Err(ExecutionError::ExecutableUnavailable(args[0].into()))?
 }
 
-fn dest_exists(root: &str, dir: &str, exec: &str) -> Result<bool> {
-    if exec.contains("..") {
-        err!(ExecutionError::UnabsoluteExec(exec.into()))?
+pub fn resolve_path(root: &str, dir: &str, file: &str) -> Result<PathBuf> {
+    if file.contains("..") {
+        Err(PathError::UnabsoluteExec(file.into()))?
     } else if dir.contains("..") {
-        err!(ExecutionError::UnabsolutePath(exec.into()))?
+        Err(PathError::UnabsolutePath(file.into()))?
     }
 
-    let path = format!("{}{}/{}", root, dir, exec);
-    let path = obtain_path(Path::new(&path), exec)?;
-    let path_direct = format!("{}/{}", root, exec);
-    let path_direct = obtain_path(Path::new(&path_direct), exec)?;
+    let path = format!("{}{}/{}", root, dir, file);
+    let path = obtain_path(Path::new(&path))?;
+    let path_direct = format!("{}/{}", root, file);
+    let path_direct = obtain_path(Path::new(&path_direct))?;
 
-    if path.is_dir() | path_direct.is_dir() {
-        err!(ExecutionError::DirectoryNotExecutable(exec.into()))?
-    } else if let Ok(path) = path.read_link() {
+    if let Ok(path) = path.read_link() {
         if let Some(path) = path.as_os_str().to_str() {
-            return dest_exists(root, dir, path);
+            return resolve_path(root, dir, path);
         }
     } else if let Ok(path) = path_direct.read_link() {
         if let Some(path) = path.as_os_str().to_str() {
-            return dest_exists(root, dir, path);
+            return resolve_path(root, dir, path);
         }
     }
 
-    Ok(path.exists() | path_direct.exists())
+    if path_direct.exists() {
+        Ok(path_direct)
+    } else if path.exists() {
+        Ok(path)
+    } else {
+        Err(PathError::PathUnresolvable(format!("{dir}/{file}")))?
+    }
 }
 
-fn obtain_path(path: &Path, exec: &str) -> Result<PathBuf> {
+fn obtain_path(path: &Path) -> Result<PathBuf> {
     match Path::canonicalize(path) {
         Ok(path) => Ok(path),
         Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),
-            _ => err!(ErrorKind::IOError(exec.into(), err.kind())),
+            NotFound => Ok(path.to_path_buf()),
+            _ => Err(err)?,
         },
     }
 }

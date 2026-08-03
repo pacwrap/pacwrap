@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #  pacwrap - runtime.sh
 #
@@ -20,11 +20,10 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed via the workspace root directory."; exit 2; fi
-if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
+set -eEo pipefail
 
 source ./dist/tools/common.sh
-ACTION_NOUN="Runtime generation"
+export ACTION_NOUN="Runtime generation"
 
 # 
 # Environment variables
@@ -46,22 +45,80 @@ PROFILE_PS1="PS1='$(echo '$USER \\W>\\$') '";
 #
 # Array of bin utilities to include within the runtime environment
 #
-BIN_UTILS="bash busybox faked fakeroot find gpg grep getopt sed"
+BIN_UTILS=(
+    "bash"
+    "busybox"
+    "faked"
+    "fakeroot"
+    "find"
+    "gpg"
+    "grep"
+    "getopt"
+    "sed"
+)
+
 #
 # Array of coreutils to include within the runtime environment
 #
-COREUTILS="cat chgrp chmod chown chroot cp cut dd df dir du head id install link ln ls mkdir mktemp mv pathchk pwd readlink realpath rm rmdir shred sort split stat sum tail tee touch tr truncate tsort unlink wc"
+COREUTILS=(
+    "cat"
+    "chgrp"
+    "chmod"
+    "chown"
+    "chroot"
+    "cp"
+    "cut"
+    "dd"
+    "df"
+    "dir"
+    "du"
+    "head"
+    "id"
+    "install"
+    "link"
+    "ln"
+    "ls"
+    "mkdir"
+    "mktemp"
+    "mv"
+    "pathchk"
+    "pwd"
+    "readlink"
+    "realpath"
+    "rm"
+    "rmdir"
+    "shred"
+    "sort"
+    "split"
+    "stat"
+    "sum"
+    "tail"
+    "tee"
+    "touch"
+    "tr"
+    "truncate"
+    "tsort"
+    "unlink"
+    "wc"
+)
+
 #
 # Array of binaries to derive library paths
 #
-LIB_BINS="bash ls gpg grep"
+LIB_BINS=(
+    "bash"
+    "ls"
+    "gpg"
+    "grep"
+    "sed"
+)
 
 #
 # Main function
 #
 main() {	
-    validate_args $1
-    prepare_and_validate $1 
+    validate_args "$1"
+    prepare_and_validate "$1"
     populate_lib
     populate_bin
     populate_etc
@@ -73,6 +130,7 @@ main() {
 # Validate and prepare staging environment
 #
 prepare_and_validate() {
+    local path=
     local agent="./target/$1/pacwrap-agent" 
 
     if [[ ! -f "$agent" ]]; then
@@ -82,14 +140,10 @@ prepare_and_validate() {
     BIN_PATHS=("$agent")
 
     clean
-    mkdir -p $DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT $DEST_DIR$BIN_DIR $DEST_DIR$ETC_DIR
+    mkdir -p "$DEST_DIR$LIB_DIR$FAKEROOT$FAKECHROOT" "$DEST_DIR$BIN_DIR" "$DEST_DIR$ETC_DIR"
 
-    if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
-        error_fatal "'$DEST_DIR': directory not found."
-    fi
-
-    for bin in $LIB_BINS; do
-        local path=$(type -P $bin)
+    for bin in "${LIB_BINS[@]}"; do
+        path=$(type -P "$bin" || echo)
 
         [[ -z $path ]] && error_fatal "'$bin' dependency not fulfilled"
 
@@ -112,15 +166,15 @@ clean() {
 # Populate libraries for container runtime
 #
 populate_lib() {
-    copy_libs ${BIN_PATHS[@]}
-    cp -L $FAKEROOT_SRC $FAKEROOT_DEST
-    cp -L $FAKECHROOT_SRC $FAKECHROOT_DEST
-    ln -s .$FAKEROOT/libfakeroot.so $DEST_DIR$LIB_DIR/libfakeroot.so
-    ln -s .$FAKEROOT$FAKECHROOT/libfakechroot.so $DEST_DIR$LIB_DIR/libfakechroot.so
+    copy_libs "${BIN_PATHS[@]}"
+    cp -L "$FAKEROOT_SRC" "$FAKEROOT_DEST"
+    cp -L "$FAKECHROOT_SRC" "$FAKECHROOT_DEST"
+    ln -s ".$FAKEROOT/libfakeroot.so" "$DEST_DIR$LIB_DIR/libfakeroot.so"
+    ln -s ".$FAKEROOT$FAKECHROOT/libfakechroot.so" "$DEST_DIR$LIB_DIR/libfakechroot.so"
 
     # Remove debuglink section, to ensure the Arch Build System doesn't complain
-    for lib in $(find $DEST_DIR$LIB_DIR -maxdepth 3 -type f -printf "%p "); do
-        objcopy --remove-section=.gnu_debuglink $lib
+    for lib in $(find "$DEST_DIR$LIB_DIR" -maxdepth 3 -type f -printf "%p "); do
+        objcopy --remove-section=.gnu_debuglink "$lib"
     done
 }
 
@@ -128,21 +182,21 @@ populate_lib() {
 # Populate binaries for container runtime 
 #
 populate_bin() {
-    cp ${BIN_PATHS[0]} $DEST_DIR$BIN_DIR/agent
-    copy_bins $BIN_UTILS $COREUTILS 
-    ln -s bash $DEST_DIR$BIN_DIR/sh
-    ln -s ld-linux-x86-64.so.2 $DEST_DIR$BIN_DIR/ld-linux.so.2
-    ln -s ../lib64/ld-linux-x86-64.so.2 $DEST_DIR$BIN_DIR/ld.so
+    cp "${BIN_PATHS[0]}" "$DEST_DIR$BIN_DIR/agent"
+    copy_bins "${BIN_UTILS[@]}" "${COREUTILS[@]}"
+    ln -s bash "$DEST_DIR$BIN_DIR/sh"
+    ln -s ld-linux-x86-64.so.2 "$DEST_DIR$BIN_DIR/ld-linux.so.2"
+    ln -s ../lib64/ld-linux-x86-64.so.2 "$DEST_DIR$BIN_DIR/ld.so"
 }
 
 #
 # Populate /etc directory for container runtime
 #
 populate_etc() {
-    echo -e "#\n# /etc/bash.bashrc\n#\n# pacwrap runtime\n#\n\n${PROFILE_PS1}\nbind -x $'\"\\C-l\":clear;'\ncd \$HOME\n" > $DEST_DIR$ETC_DIR/bash.bashrc
-    sed -n 12,20p $DIST_SRC/bash.bashrc >> $DEST_DIR$ETC_DIR/bash.bashrc
-    echo -e "#\n# /etc/profile - busybox env\n#\n# pacwrap runtime\n#\n\n$PROFILE_PS1\n" > $DEST_DIR$ETC_DIR/profile
-    echo -e 'printf "\033]0;%s@%s\007" "${USER}" "${HOSTNAME%%.*}"\ncd $HOME' >> $DEST_DIR$ETC_DIR/profile
+    echo -e "#\n# /etc/bash.bashrc\n#\n# pacwrap runtime\n#\n\n${PROFILE_PS1}\nbind -x $'\"\\C-l\":clear;'\ncd \$HOME\n" > "$DEST_DIR$ETC_DIR/bash.bashrc"
+    sed -n 12,20p "$DIST_SRC"/bash.bashrc >>"$DEST_DIR$ETC_DIR/bash.bashrc"
+    echo -e "#\n# /etc/profile - busybox env\n#\n# pacwrap runtime\n#\n\n$PROFILE_PS1\n" >"$DEST_DIR$ETC_DIR/profile"
+    echo -e 'printf "\033]0;%s@%s\007" "${USER}" "${HOSTNAME%%.*}"\ncd $HOME' >>"$DEST_DIR$ETC_DIR/profile"
 }
 
 #
@@ -150,13 +204,13 @@ populate_etc() {
 #
 busybox_links() {
     for applet in $(busybox --list); do
-        if [[ "${COREUTILS[@]}" == *$applet* ]] ||
-            [[ "${BIN_UTILS[@]}" == *$applet* ]] ||
+        if [[ "${COREUTILS[*]}" == *$applet* ]] ||
+            [[ "${BIN_UTILS[*]}" == *$applet* ]] ||
             [[ $applet == "busybox" ]]; then
                     continue
         fi
 
-        ln -s busybox ./dist/runtime/bin/$applet
+        ln -s busybox "./dist/runtime/bin/$applet"
     done
 }
 
@@ -166,8 +220,8 @@ busybox_links() {
 # $@: takes an array of system library paths
 #
 copy_libs() {
-    for path in ${@}; do 
-        ldd $path | sed -e "s/.*=> //g;s/ (.*)//g;s/\t.*//g" | xargs cp -Lt $DEST_DIR$LIB_DIR
+    for path in "${@}"; do 
+        ldd "$path" | sed -e "s/.*=> //g;s/ (.*)//g;s/\t.*//g" | xargs cp -Lt "$DEST_DIR$LIB_DIR"
     done
 }
 
@@ -177,18 +231,22 @@ copy_libs() {
 # $@: takes an array of system binaries located in /usr/bin
 #
 copy_bins() {
-    for bin in ${@}; do 
-        cp $(type -P $bin) $DEST_DIR$BIN_DIR/$bin
+    for bin in "${@}"; do
+        path="$(type -P "$bin" || echo)"
+
+        [[ -z $path ]] && error_fatal "'$bin' dependency not fulfilled"
+
+        cp "$path" "$DEST_DIR$BIN_DIR"
 
         if [[ $bin == "fakeroot" ]]; then 
             continue
         fi
 
         # Remove debuglink section, to ensure the Arch Build System doesn't complain 
-        objcopy --remove-section=.gnu_debuglink $DEST_DIR$BIN_DIR/$bin
+        objcopy --remove-section=.gnu_debuglink "$DEST_DIR$BIN_DIR/$bin"
     done	
 }
 
-main $@
+main "$@"
 
 # vim:set ts=4 sw=4 et:1

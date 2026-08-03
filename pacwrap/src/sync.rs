@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,9 +21,9 @@ use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
 use pacwrap_core::{
-    config::{cache, init::init, ConfigError::AlreadyExists, ContainerCache, ContainerType},
-    constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
-    err,
+    ErrorKind,
+    config::{ConfigError::AlreadyExists, ContainerCache, ContainerType, cache, init::init},
+    eprintln_warn,
     error::*,
     lock::Lock,
     log::{Level::Info, Logger},
@@ -33,12 +33,13 @@ use pacwrap_core::{
         transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
+        ansi::*,
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
-        print_warning,
     },
-    ErrorKind,
 };
+
+use crate::help::{HelpTopic, help};
 
 pub fn synchronize(args: &mut Arguments) -> Result<()> {
     check_root()?;
@@ -51,7 +52,7 @@ pub fn synchronize(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(&mut cache, &mut logger, args, &lock, action, create);
 
     if let Err(error) = lock.unlock() {
-        eprintln!("{}", ErrorType::Error(&error));
+        eprintln_warn!("{error}");
     }
 
     result
@@ -83,24 +84,24 @@ fn instantiate<'a>(
     targets: IndexMap<&'a str, (ContainerType, Vec<&'a str>)>,
 ) -> Result<()> {
     if targets.is_empty() {
-        err!(OperationUnspecified)?;
+        Err(OperationUnspecified)?;
     }
 
     if let TransactionType::Upgrade(upgrade, refresh, _) = action_type {
         if !refresh {
-            err!(UnsuppliedOperand("--refresh", "Required for container creation."))?
+            Err(UnsuppliedOperand("--refresh", "Required for container creation."))?
         } else if !upgrade {
-            err!(UnsuppliedOperand("--upgrade", "Required for container creation."))?
+            Err(UnsuppliedOperand("--upgrade", "Required for container creation."))?
         }
     }
 
     for (container, (container_type, deps)) in targets.iter() {
         if let (ContainerType::Base, true) = (container_type, !deps.is_empty()) {
-            err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
+            Err(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?
         } else if let (ContainerType::Aggregate | ContainerType::Slice, true) = (container_type, deps.is_empty()) {
-            err!(ErrorKind::Message("Dependencies not specified."))?
+            Err(ErrorKind::Message("Dependencies not specified."))?
         } else if cache.get_instance_option(container).is_some() {
-            err!(AlreadyExists(container.to_string()))?;
+            Err(AlreadyExists(container.to_string()))?;
         }
     }
 
@@ -132,7 +133,7 @@ fn acquire_targets<'a>(
         match flags.contains(TransactionFlags::FILESYSTEM_SYNC) {
             false => {
                 if targets.is_empty() {
-                    err!(TargetUnspecified)?;
+                    Err(TargetUnspecified)?;
                 }
 
                 Some(targets.into_iter().collect())
@@ -161,7 +162,7 @@ fn engage_aggregator<'a>(
     let mut create = init;
 
     if let Op::Nothing = args.next().unwrap_or_default() {
-        err!(OperationUnspecified)?
+        Err(OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -183,13 +184,14 @@ fn engage_aggregator<'a>(
                 container_type = None;
                 create = true;
             }
+            Op::Short('h') | Op::Long("help") => return help(args, &HelpTopic::Sync),
             Op::Short('d') | Op::Long("dep") => match args.next() {
                 Some(arg) => match arg {
                     Op::ShortPos('d', dep) | Op::LongPos("dep", dep) => match container_type {
                         Some(_) => {
                             let current_target = match current_target {
                                 Some(target) => target,
-                                None => err!(TargetUnspecified)?,
+                                None => Err(TargetUnspecified)?,
                             };
                             let (_, deps) = create_targets.get_mut(current_target).unwrap();
 
@@ -201,11 +203,11 @@ fn engage_aggregator<'a>(
                                 deps.push(dep);
                             }
                         }
-                        None => err!(ErrorKind::Message("Container type not specified."))?,
+                        None => Err(ErrorKind::Message("Container type not specified."))?,
                     },
                     _ => args.invalid_operand()?,
                 },
-                None => err!(ErrorKind::Message("Dependencies not specified."))?,
+                None => Err(ErrorKind::Message("Dependencies not specified."))?,
             },
             Op::Short('t') | Op::Long("target") => match args.next() {
                 Some(arg) => match arg {
@@ -221,14 +223,14 @@ fn engage_aggregator<'a>(
                             create_targets.insert(target, (container_type, vec![]));
                             create = init;
                         } else if let (true, None) = (create, container_type) {
-                            err!(ErrorKind::Message("Container type not specified."))?;
+                            Err(ErrorKind::Message("Container type not specified."))?;
                         } else if let ContainerType::Symbolic = cache.get_instance(target)?.metadata().container_type() {
-                            err!(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
+                            Err(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
                         }
                     }
                     _ => args.invalid_operand()?,
                 },
-                None => err!(TargetUnspecified)?,
+                None => Err(TargetUnspecified)?,
             },
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(current_target) = current_target {
@@ -243,14 +245,14 @@ fn engage_aggregator<'a>(
     }
 
     if flags.contains(TransactionFlags::LAZY_LOAD_DB) {
-        print_warning("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
-        print_warning("In future, manual intervention may be required for missing dependencies.");
-        print_warning("See `--help sync` or the pacwrap(1) man page for further information.");
+        eprintln_warn!("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
+        eprintln_warn!("In future, manual intervention may be required for missing dependencies.");
+        eprintln_warn!("See `--help sync` or the pacwrap(1) man page for further information.");
     }
 
     if !create_targets.is_empty() || init {
         if flags.intersects(TransactionFlags::PREVIEW) {
-            err!(ErrorKind::Message("Container creation cannot be previewed."))?;
+            Err(ErrorKind::Message("Container creation cannot be previewed."))?;
         }
 
         flags = flags | TransactionFlags::CREATE | TransactionFlags::FORCE_DATABASE;

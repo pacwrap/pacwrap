@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -20,9 +20,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{
-        filesystem::{BindError, Filesystem},
         ContainerVariables,
+        filesystem::{BindError, Filesystem},
     },
     exec::args::ExecutionArgs,
 };
@@ -35,7 +36,7 @@ pub struct Dir {
 
 #[typetag::serde(name = "dir")]
 impl Filesystem for Dir {
-    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.path.is_empty() {
             Err(BindError::Fail("Path not specified.".into()))?
         }

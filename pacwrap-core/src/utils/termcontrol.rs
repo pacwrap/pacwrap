@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -17,9 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use nix::sys::termios::{tcgetattr, tcsetattr, SetArg::TCSANOW, Termios};
+use nix::sys::termios::{SetArg::TCSANOW, Termios, tcgetattr, tcsetattr};
 
-use crate::{err, Error, ErrorKind, Result};
+use crate::{ErrorKind, Result};
 
 /*******
  *
@@ -54,14 +54,12 @@ impl TermControl {
     /*
      * Check if Termios initiated and then execute tcsetattr to reset terminal.
      */
-
     pub fn reset_terminal(&self) -> Result<()> {
-        match self.tm.as_ref() {
-            Some(tm) => match tcsetattr(self.fd, TCSANOW, tm) {
-                Ok(_) => Ok(()),
-                Err(errno) => err!(ErrorKind::Termios(errno)),
-            },
-            None => Ok(()),
-        }
+        let Some(termios) = self.tm.as_ref() else {
+            return Ok(());
+        };
+
+        tcsetattr(self.fd, TCSANOW, termios).map_err(ErrorKind::Termios)?;
+        Ok(())
     }
 }

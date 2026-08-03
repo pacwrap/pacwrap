@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -18,33 +18,21 @@
  */
 
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     os::unix::fs::MetadataExt,
     path::Path,
 };
 
-use crate::{constants::LOCK_FILE, err, impl_error, Error, ErrorGeneric, ErrorTrait, Result};
+use thiserror::Error as ThisError;
 
-#[derive(Debug)]
+use crate::{ErrorTrait, PathContext, Result, constants::LOCK_FILE, impl_error};
+
+#[derive(ThisError, Debug)]
 pub enum LockError {
+    #[error("Lock file is present: '{0}'")]
     Locked(&'static str),
+    #[error("Lock not acquired.")]
     NotAcquired,
-}
-
-impl Display for LockError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::Locked(lock) => write!(fmter, "Lock file is present: '{}'", lock),
-            Self::NotAcquired => write!(fmter, "Lock not acquired."),
-        }?;
-
-        if let Self::Locked(_) = self {
-            write!(fmter, "\nTry 'pacwrap -h' for more information on valid operational parameters.")?
-        }
-
-        Ok(())
-    }
 }
 
 impl_error!(LockError);
@@ -70,33 +58,24 @@ impl Lock {
 
     pub fn lock(mut self) -> Result<Self> {
         if self.exists() {
-            err!(LockError::Locked(self.lock))?
+            Err(LockError::Locked(self.lock))?
         }
 
-        File::create(self.lock).prepend(|| format!("Failed to create lock file '{}'", self.lock))?;
-        self.time = Path::new(self.lock)
-            .metadata()
-            .prepend(|| format!("Failed to acquire metadata on lock file '{}'", self.lock))?
-            .ctime();
+        File::create(self.lock).context_path(self.lock)?;
+        self.time = Path::new(self.lock).metadata().context_path(self.lock)?.ctime();
         Ok(self)
     }
 
     pub fn assert(&self) -> Result<()> {
-        if !self.exists()
-            || Path::new(self.lock)
-                .metadata()
-                .prepend(|| format!("Failed to acquire metadata on lock file '{}'", self.lock))?
-                .ctime()
-                != self.time
-        {
-            err!(LockError::NotAcquired)?
+        if !self.exists() || Path::new(self.lock).metadata().context_path(self.lock)?.ctime() != self.time {
+            Err(LockError::NotAcquired)?
         }
 
         Ok(())
     }
 
     pub fn unlock(&self) -> Result<()> {
-        remove_file(self.lock).prepend(|| format!("Failed to remove lock file '{}'", self.lock))
+        Ok(remove_file(self.lock).context_path(self.lock)?)
     }
 
     pub fn exists(&self) -> bool {

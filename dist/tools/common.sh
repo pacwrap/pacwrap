@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #  pacwrap - common.sh
 #
@@ -17,17 +17,20 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-[[ ! -z $COMMON_SCRIPT ]] && return
+[[ -n $COMMON_SCRIPT ]] && return
 
-set -e
-trap 'LAST_CMD=$BASH_COMMAND' DEBUG
+if [[ ! -d "$PWD/dist/tools/" ]]; then 
+    echo "This script may only be executed via the workspace root directory."
+    exit 2
+fi
+
 trap 'handle_failure "$ACTION_NOUN" $?' ERR TERM INT
 
 ACTION_NOUN="Common script"
 DIST_BIN="$PWD/dist/bin"
 DIST_SRC="$PWD/dist/src"
 
-if [[ -t 2 ]] && [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]] || [[ $PACWRAP_CI == 1 ]]; then
+if [[ -t 2 ]] && [[ -n $COLORTERM ]] && [[ $TERM != "dummy" ]] || [[ $PACWRAP_CI == 1 ]]; then
     BOLD="[1m"
     RED="[1;31m"
     GREEN="[1;32m"
@@ -35,24 +38,24 @@ if [[ -t 2 ]] && [[ ! -z $COLORTERM ]] && [[ $TERM != "dummy" ]] || [[ $PACWRAP_
 fi
 
 handle_failure() {
-    error_fatal "$1 failure: $LAST_CMD exited with exit code $?."
+    error_fatal "$1 failure: $BASH_COMMAND exited with exit code $?."
 }
 
 error_fatal() {
-    echo $BOLD$RED"error:$RESET $@";
+    echo "$BOLD${RED}error:$RESET $*"
     exit 1	
 }
 
 error() {
-    echo $BOLD$RED"error:$RESET $@";	
+    echo "$BOLD${RED}error:$RESET $*"
 }
 
 packaged() {
-    echo "$GREEN$BOLD    Packaged$RESET $@"
+    echo "$GREEN$BOLD    Packaged$RESET $*"
 }
 
 cleaned() {
-    echo "$BOLD$GREEN     Cleaned$RESET $@"
+    echo "$BOLD$GREEN     Cleaned$RESET $*"
 }
 
 validate_args() {
@@ -68,7 +71,7 @@ validate_args() {
 layout_dir() { 
     [[ ! -d "$DIST_SRC" ]] && error_fatal "'$DIST_SRC': src directory not found."
 
-    mkdir -p $DIST_BIN
+    mkdir -p "$DIST_BIN"
 }
 
 #
@@ -83,26 +86,27 @@ package() {
     [[ ! -f "$1" ]] && error_fatal "'$1': file not found"
     [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]] && error_fatal "Invalid arguments."
 
-    local version=$(version $3 $4) 
-    local version_string=$(echo $version | sed -e 's/[]\/$*.^[]/\\&/g')
+    local version version_string
     local placeholder="version_string_placeholder"
 
+    version=$(version "$3" "$4")
+    version_string=$(echo "$version" | sed -e 's/[]\/$*.^[]/\\&/g')
     [[ -z "$version" ]] || [[ -z "$version_string" ]] && error_fatal "Version string undeclared"
 
-    sed -e "s/$placeholder/$version_string/g" < $1 > $2
+    sed -e "s/$placeholder/$version_string/g" < "$1" > "$2"
     packaged "${2##*/} v${version% (*}"
 }
 
 version() {
-    eval $(grep -m 1 version Cargo.toml | sed -e "s/version = /local version=/g")
+    eval "$(grep -m 1 version Cargo.toml | sed -e "s/version = /local version=/g")"
 
     [[ -z "$version" ]] && return
 
-    if [[ ! -z "$(type -P git)" ]] && [[ -d ".git" ]]; then
-        local git=$(git rev-parse --short HEAD)
-        local tag=$(git tag --points-at)
-        local release=
-        local date=
+    if [[ -n "$(type -P git)" ]] && [[ -d ".git" ]]; then
+        local git tag release date
+
+        git=$(git rev-parse --short HEAD)
+        tag=$(git tag --points-at)
 
         case $1 in
             release)    
@@ -119,11 +123,16 @@ version() {
             echo -n "$version"; [[ $2 ]] && echo -n " ($date)"
         fi
     else
-        local unix_epoch=$(stat $DIST_SRC --print=%Y)
-        local date=$(date +%d/%m/%Y --utc --date=@$unix_epoch)
+        local unix_epoch date
+
+        unix_epoch=$(stat "$DIST_SRC" --print=%Y)
+        date=$(date +%d/%m/%Y --utc --date=@"$unix_epoch")
 
         echo -n "$version"; [[ $2 ]] && echo -n " ($date)" 
     fi
+
+    # Ensure this function returns zero
+    echo
 }
 
 COMMON_SCRIPT=1; readonly COMMON_SCRIPT BOLD RED GREEN RESET

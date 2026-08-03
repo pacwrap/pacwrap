@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -21,8 +21,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        permission::{Condition::Success, *},
         Permission,
+        filesystem::Permission::ReadOnly,
+        permission::{Condition::Success, *},
     },
     exec::args::{Argument::HostNetworking, ExecutionArgs},
 };
@@ -32,13 +33,13 @@ pub struct Network;
 
 #[typetag::serde(name = "net")]
 impl Permission for Network {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
 
     fn register(&self, args: &mut ExecutionArgs) {
         args.push_env(HostNetworking);
-        args.bind("/etc/resolv.conf", "/etc/resolv.conf");
+        args.bind(&ReadOnly, "/etc/resolv.conf", "/etc/resolv.conf");
     }
 
     fn module(&self) -> &'static str {

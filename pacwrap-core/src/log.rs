@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -24,26 +24,25 @@ use std::{
     path::Path,
 };
 
-use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
+use anyhow::Context;
+use thiserror::Error;
+use time::{OffsetDateTime, UtcOffset, format_description::FormatItem, macros::format_description as fdesc};
 
 use crate::{
-    constants::{LOG_LOCATION, UNIX_TIMESTAMP},
-    err,
-    impl_error,
-    utils::unix_epoch_time,
-    Error,
-    ErrorGeneric,
     ErrorTrait,
     Result,
+    constants::{LOG_LOCATION, UNIX_TIMESTAMP},
+    impl_error,
+    utils::unix_epoch_time,
 };
 
-const DATE_FORMAT: &[FormatItem<'static>] =
-    format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
-const UTC_OFFSET: &[FormatItem<'static>] = format_description!("[offset_hour]");
+const DATE_FORMAT_UTC: &[FormatItem<'static>] = fdesc!("[year]-[month]-[day]T[hour]:[minute]:[second]");
+const DATE_FORMAT: &[FormatItem<'static>] = fdesc!("[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour][offset_minute]");
+const UTC_OFFSET: &[FormatItem<'static>] = fdesc!("[offset_hour]");
 
 impl_error!(LoggerError);
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum LoggerError {
     Uninitialized,
 }
@@ -148,7 +147,7 @@ impl Logger {
         let path = Path::new(location);
         let file = OpenOptions::new().create(true).append(true).truncate(false).open(path);
 
-        self.file = Some(file.prepend_io(|| location.into())?);
+        self.file = Some(file?);
         Ok(self)
     }
 
@@ -175,9 +174,8 @@ impl Logger {
          * time offset if a change were to occur whilst this application is running.
          */
         if let Ok(local) = OffsetDateTime::now_local() {
-            let local_time = local.format(UTC_OFFSET).expect("Format localtime");
-
-            self.offset = UtcOffset::parse(&local_time, UTC_OFFSET).expect("Offset localtime");
+            self.offset = UtcOffset::parse(&local.format(UTC_OFFSET).context("Date format error")?, UTC_OFFSET)
+                .context("Date offset failure")?;
         }
 
         if let Level::Debug = level {
@@ -190,12 +188,17 @@ impl Logger {
 
         match self.file.as_mut() {
             Some(file) => {
-                let time = OffsetDateTime::now_utc().to_offset(self.offset).format(DATE_FORMAT).expect("Format time");
-                let log = format!("[{}] [{}] [{}] {}\n", time, self.module, level, msg);
+                let offset = OffsetDateTime::now_utc();
+                let time = if self.offset.is_utc() {
+                    offset.format(DATE_FORMAT_UTC)
+                } else {
+                    offset.to_offset(self.offset).format(DATE_FORMAT)
+                }
+                .context("Date offset failure")?;
 
-                file.write(log.as_bytes()).generic()
+                Ok(file.write(format!("[{}] [{}] [{}] {}\n", time, self.module, level, msg).as_bytes())?)
             }
-            None => err!(LoggerError::Uninitialized)?,
+            None => Err(LoggerError::Uninitialized)?,
         }
     }
 }

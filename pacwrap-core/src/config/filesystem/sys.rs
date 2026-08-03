@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -21,9 +21,10 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{
-        filesystem::{BindError, Filesystem},
         ContainerVariables,
+        filesystem::{BindError, Filesystem, Permission::ReadOnly},
     },
     exec::args::ExecutionArgs,
 };
@@ -36,7 +37,7 @@ struct System {
 
 #[typetag::serde(name = "sysfs")]
 impl Filesystem for System {
-    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         for dir in self.path.iter() {
             if !Path::new(&format!("/sys/{}", dir)).exists() {
                 Err(BindError::Fail(format!("/sys/{} is inaccessible.", dir)))?
@@ -48,7 +49,7 @@ impl Filesystem for System {
 
     fn register(&self, args: &mut ExecutionArgs, _: &ContainerVariables) {
         for dir in self.path.iter() {
-            args.robind(&format!("/sys/{}", dir), &format!("/sys/{}", dir));
+            args.bind(&ReadOnly, &format!("/sys/{}", dir), &format!("/sys/{}", dir));
         }
     }
 

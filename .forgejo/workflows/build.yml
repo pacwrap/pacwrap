@@ -7,36 +7,27 @@ on:
       - master
 
 env: 
-  CARGO_TERM_COLOR: always
   PACWRAP_SCHEMA_BUILT: 1
   PACWRAP_CI: 1
 
 jobs:
-  checkfmt:
-    name: Check format
-    runs-on: docker
-    container:
-      image: archlinux
+  format:
+    name: Format
+    runs-on: vm-runner-xs
     strategy:
       matrix:
         toolchain:
           - nightly
     steps:
-      - name: Update container
-        run: pacman -Sy archlinux-keyring --noconfirm --needed && pacman -Su --noconfirm
-      - name: Install packages
-        run: pacman -S git nodejs rustup --noconfirm
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install toolchain
-        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }} 
+        run: rustup update ${{ matrix.toolchain }}
       - name: Check format
         run: cargo fmt --check
   lint:
-    name: Lint pacwrap
-    runs-on: docker
-    container:
-      image: archlinux
+    name: Lint
+    runs-on: vm-runner
     strategy:
       matrix:
         toolchain:
@@ -44,37 +35,41 @@ jobs:
     env: 
       PACWRAP_SCHEMA_BUILT: 0
     steps:
-      - name: Update container
-        run: pacman -Sy archlinux-keyring --noconfirm --needed && pacman -Su --noconfirm
-      - name: Install packages
-        run: pacman -S base-devel git nodejs rustup --noconfirm
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install toolchain
-        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - name: Set up environment
-        run: git config --global --add safe.directory '*'
-      - name: Lint pacwrap
+        run: rustup update ${{ matrix.toolchain }}
+      - name: Initialize cache
+        uses: actions/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Lint
         run: cargo clippy --release -- -Dwarnings
   build:
-    name: Build pacwrap
-    runs-on: docker
-    container:
-      image: archlinux
+    name: Build
+    runs-on: vm-runner
     strategy:
       matrix:
         toolchain:
           - stable
     steps:
-      - name: Update container
-        run: pacman -Sy archlinux-keyring --noconfirm --needed && pacman -Su --noconfirm
-      - name: Install packages
-        run: pacman -S base-devel bubblewrap busybox fakechroot fakeroot git nodejs rustup --noconfirm
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Install packages
+        run: |
+          sudo pacman -Syu --needed --noconfirm \
+            bubblewrap \
+            fakeroot \
+            fakechroot \
+            busybox
       - name: Install toolchain
-        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - name: Set up environment
-        run: git config --global --add safe.directory '*'
+        run: rustup update ${{ matrix.toolchain }}
+      - name: Initialize cache
+        uses: actions/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Build pacwrap
-        run: ./dist/tools/prepare.sh release && cargo build --release && ./dist/tools/package.sh release
+        run: |
+          ./dist/tools/prepare.sh release \
+            && cargo build --release \
+            && ./dist/tools/package.sh release

@@ -1,7 +1,7 @@
 /*
  * pacwrap-agent
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,12 +18,11 @@
  */
 
 use pacwrap_core::{
-    err,
-    utils::{arguments::Operand, Arguments},
-    Error,
+    ErrorExt,
+    utils::{Arguments, arguments::Operand},
 };
 
-use crate::error::AgentError;
+use crate::error::Error;
 
 mod agent;
 mod error;
@@ -33,7 +32,7 @@ fn main() {
     let param = arguments.next().unwrap_or_default();
     let result = match param {
         Operand::Value("transact") => agent::transact(),
-        _ => err!(AgentError::DirectExecution),
+        _ => Err(Error::DirectExecution),
     };
 
     if let Err(error) = result {

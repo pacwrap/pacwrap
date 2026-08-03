@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,14 +22,15 @@ use std::{fs::read_dir, path::Path, result::Result as StdResult};
 use indexmap::IndexMap;
 
 use crate::{
-    config::{provide_handle, provide_new_handle, ConfigError, ContainerHandle, ContainerType},
-    constants::{CONFIG_DIR, CONTAINER_DIR},
-    err,
-    error::*,
     ErrorKind,
+    PathContext,
+    config::{ConfigError, ContainerHandle, ContainerType, provide_handle, provide_new_handle},
+    constants::{CONFIG_DIR, CONTAINER_DIR},
+    eprintln_warn,
+    error::*,
 };
 
-use super::{handle, ContainerVariables};
+use super::{ContainerVariables, handle};
 
 pub struct ContainerCache<'a> {
     instances: IndexMap<&'a str, ContainerHandle<'a>>,
@@ -50,12 +51,12 @@ impl<'a> ContainerCache<'a> {
 
     pub fn add(&mut self, ins: &'a str, instype: ContainerType, deps: Vec<&'a str>) -> Result<()> {
         if self.instances.get(ins).is_some() {
-            err!(ConfigError::AlreadyExists(ins.into()))?
+            Err(ConfigError::AlreadyExists(ins.into()))?
         }
 
         for dep in deps.iter() {
             if self.instances.get(dep).is_none() {
-                err!(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
+                Err(ErrorKind::DependencyNotFound((*dep).into(), ins.into()))?
             }
         }
 
@@ -70,7 +71,7 @@ impl<'a> ContainerCache<'a> {
 
     pub fn add_handle(&mut self, ins: &'a str, handle: ContainerHandle<'a>) -> Result<()> {
         if self.instances.get(ins).is_some() {
-            err!(ConfigError::AlreadyExists(ins.into()))?
+            Err(ConfigError::AlreadyExists(ins.into()))?
         }
 
         self.register(ins, handle.default_vars());
@@ -79,7 +80,7 @@ impl<'a> ContainerCache<'a> {
 
     fn map(&mut self, ins: &'a str) -> Result<()> {
         if self.instances.get(ins).is_some() {
-            err!(ConfigError::AlreadyExists(ins.to_owned()))?
+            Err(ConfigError::AlreadyExists(ins.to_owned()))?
         }
 
         self.register(
@@ -87,7 +88,7 @@ impl<'a> ContainerCache<'a> {
             match provide_handle(ins) {
                 Ok(ins) => ins,
                 Err(error) => {
-                    error.warn();
+                    eprintln_warn!("{error}");
                     return Ok(());
                 }
             },
@@ -107,7 +108,7 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().map(|a| a.1).collect()
     }
 
-    pub fn filter_target(&'a self, target: &[&'a str], filter: Vec<ContainerType>) -> Vec<&'a str> {
+    pub fn filter_target(&'_ self, target: &[&'_ str], filter: Vec<ContainerType>) -> Vec<&'_ str> {
         self.instances
             .iter()
             .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
@@ -115,7 +116,7 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn filter_target_handle(&'a self, target: &[&'a str], filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+    pub fn filter_target_handle(&'_ self, target: &[&'_ str], filter: Vec<ContainerType>) -> Vec<&'_ ContainerHandle<'_>> {
         self.instances
             .iter()
             .filter(|a| target.contains(a.0) && (filter.contains(a.1.metadata().container_type()) || filter.is_empty()))
@@ -127,7 +128,7 @@ impl<'a> ContainerCache<'a> {
         self.instances.iter().filter(|a| filter.contains(a.1.metadata().container_type())).count()
     }
 
-    pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'a str> {
+    pub fn filter(&self, filter: Vec<ContainerType>) -> Vec<&'_ str> {
         self.instances
             .iter()
             .filter(|a| filter.contains(a.1.metadata().container_type()))
@@ -135,7 +136,7 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn filter_handle(&'a self, filter: Vec<ContainerType>) -> Vec<&'a ContainerHandle<'a>> {
+    pub fn filter_handle(&'_ self, filter: Vec<ContainerType>) -> Vec<&'_ ContainerHandle<'_>> {
         self.instances
             .iter()
             .filter(|a| filter.contains(a.1.metadata().container_type()))
@@ -143,21 +144,21 @@ impl<'a> ContainerCache<'a> {
             .collect()
     }
 
-    pub fn obtain_base_handle(&self) -> Option<&ContainerHandle> {
+    pub fn obtain_base_handle(&'_ self) -> Option<&'_ ContainerHandle<'_>> {
         self.filter_handle(vec![ContainerType::Base])
             .iter()
             .find(|a| Path::new(a.vars().root()).exists())
             .copied()
     }
 
-    pub fn get_instance(&self, ins: &str) -> Result<&ContainerHandle> {
+    pub fn get_instance(&'_ self, ins: &'_ str) -> Result<&'_ ContainerHandle<'_>> {
         match self.instances.get(ins) {
             Some(ins) => Ok(ins),
-            None => err!(ErrorKind::InstanceNotFound(ins.into())),
+            None => Err(ErrorKind::InstanceNotFound(ins.into()))?,
         }
     }
 
-    pub fn get_instance_option(&self, ins: &str) -> Option<&ContainerHandle> {
+    pub fn get_instance_option(&'_ self, ins: &'_ str) -> Option<&'a ContainerHandle<'_>> {
         self.instances.get(ins)
     }
 }
@@ -185,7 +186,7 @@ pub fn populate_config_from<'a>(vec: &Vec<&'a str>) -> Result<ContainerCache<'a>
 pub fn populate<'a>() -> Result<ContainerCache<'a>> {
     populate_from(
         &read_dir(*CONTAINER_DIR)
-            .prepend_io(|| CONTAINER_DIR.to_string())?
+            .context_path(*CONTAINER_DIR)?
             .filter_map(StdResult::ok)
             .filter(|e| e.metadata().is_ok_and(|f| f.is_dir() || f.is_symlink()))
             .filter_map(|e| e.file_name().to_str().map(|f| f.to_string().leak() as &'a str))
@@ -194,9 +195,11 @@ pub fn populate<'a>() -> Result<ContainerCache<'a>> {
 }
 
 pub fn populate_config<'a>() -> Result<ContainerCache<'a>> {
+    let path = format!("{}/container", *CONFIG_DIR);
+
     populate_config_from(
-        &read_dir(format!("{}/container", *CONFIG_DIR))
-            .prepend_io(|| format!("{}/container", *CONFIG_DIR))?
+        &read_dir(&path)
+            .context_path(path)?
             .filter_map(StdResult::ok)
             .filter(|e| e.metadata().is_ok_and(|f| f.is_file() && !f.is_symlink()))
             .filter_map(|e| {

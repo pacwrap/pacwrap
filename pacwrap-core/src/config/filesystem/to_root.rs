@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -21,9 +21,10 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{
-        filesystem::{default_permission, is_default_permission, BindError, Filesystem},
         ContainerVariables,
+        filesystem::{BindError, Filesystem, Mount, Permission},
     },
     exec::args::ExecutionArgs,
 };
@@ -34,19 +35,9 @@ pub struct ToRoot {
     mounts: Vec<Mount>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Mount {
-    #[serde(skip_serializing_if = "is_default_permission", default = "default_permission")]
-    permission: String,
-    #[serde(skip_serializing_if = "String::is_empty", default)]
-    path: String,
-    #[serde(skip_serializing_if = "String::is_empty", default)]
-    dest: String,
-}
-
 #[typetag::serde(name = "to_root")]
 impl Filesystem for ToRoot {
-    fn check(&self, _vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, _vars: &ContainerVariables) -> Result<()> {
         if self.mounts.is_empty() {
             Err(BindError::Warn("Mount volumes undeclared.".into()))?
         }
@@ -56,7 +47,7 @@ impl Filesystem for ToRoot {
                 Err(BindError::Warn("Mount volumes undeclared.".into()))?
             }
 
-            check_mount(&m.permission, &m.path)?
+            check_mount(&m.path)?
         }
 
         Ok(())
@@ -73,25 +64,16 @@ impl Filesystem for ToRoot {
     }
 }
 
-fn bind_filesystem(args: &mut ExecutionArgs, permission: &str, src: &str, dest: &str) {
+fn bind_filesystem(args: &mut ExecutionArgs, permission: &Permission, src: &str, dest: &str) {
     let dest = match dest.is_empty() {
         true => src,
         false => dest,
     };
 
-    match permission == "rw" {
-        false => args.robind(src, dest),
-        true => args.bind(src, dest),
-    }
+    args.bind(permission, src, dest);
 }
 
-fn check_mount(permission: &String, path: &String) -> Result<(), BindError> {
-    let per = permission.to_lowercase();
-
-    if per != "ro" && per != "rw" {
-        Err(BindError::Fail(format!("{} is an invalid permission.", permission)))?
-    }
-
+fn check_mount(path: &String) -> Result<()> {
     if !Path::new(path).exists() {
         Err(BindError::Fail("Source path not found.".into()))?
     }

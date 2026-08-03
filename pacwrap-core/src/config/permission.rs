@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::exec::args::ExecutionArgs;
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 
 mod dev;
 mod display;
@@ -46,7 +46,7 @@ pub enum PermError {
 
 #[typetag::serde(tag = "module")]
 pub trait Permission: DynClone {
-    fn check(&self) -> Result<Option<Condition>, PermError>;
+    fn qualify(&self) -> Result<Option<Condition>, PermError>;
     fn register(&self, args: &mut ExecutionArgs);
     fn module(&self) -> &'static str;
 }

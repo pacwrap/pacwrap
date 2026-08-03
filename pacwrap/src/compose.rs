@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,9 +20,11 @@
 use std::{collections::HashMap, path::Path};
 
 use pacwrap_core::{
-    config::{cache, compose_handle, init::init, ContainerCache, ContainerHandle, ContainerType::*},
-    constants::{ARROW_GREEN, BAR_GREEN, BOLD, RESET},
-    err,
+    ErrorKind,
+    PathContext,
+    Result,
+    config::{ContainerCache, ContainerHandle, ContainerType::*, cache, compose_handle, init::init},
+    eprintln_warn,
     lock::Lock,
     log::{Level::Info, Logger},
     sync::{
@@ -31,19 +33,17 @@ use pacwrap_core::{
         transaction::{TransactionAggregator, TransactionFlags, TransactionType},
     },
     utils::{
+        ansi::*,
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
-        print_warning,
         prompt::prompt_targets,
     },
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    ErrorType,
-    Result,
 };
 
-use crate::utils::delete::delete_roots;
+use crate::{
+    help::{HelpTopic, help},
+    utils::delete::delete_roots,
+};
 
 pub fn compose(args: &mut Arguments) -> Result<()> {
     check_root()?;
@@ -53,7 +53,7 @@ pub fn compose(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(args, &lock);
 
     if let Err(error) = lock.unlock() {
-        eprintln!("{}", ErrorType::Error(&error));
+        eprintln_warn!("{error}");
     }
 
     result
@@ -92,11 +92,11 @@ fn compose_handles<'a>(
 
         if let Symbolic = container_type {
             if depends.is_empty() {
-                err!(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
+                Err(ErrorKind::Message("Symbolic containers require at least one dependency."))?;
             }
         } else if let Base = container_type {
             if !depends.is_empty() {
-                err!(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
+                Err(ErrorKind::Message("Dependencies cannot be assigned to base containers."))?;
             }
         }
 
@@ -175,7 +175,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     let mut current_target = None;
 
     if args.len() <= 1 {
-        err!(OperationUnspecified)?
+        Err(OperationUnspecified)?
     }
 
     args.set_index(1);
@@ -196,6 +196,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                         compose.insert(instance, None);
                     }
                 },
+            Op::Short('h') | Op::Long("help") => return help(args, &HelpTopic::Compose),
             Op::Short('l') | Op::Long("lazy-load") => flags |= TransactionFlags::LAZY_LOAD_DB,
             Op::Short('f') | Op::Long("force") => force = true,
             Op::Short('r') | Op::Long("reinitialize") => reinitialize = true,
@@ -204,12 +205,12 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                     Op::ShortPos('t', t) | Op::LongPos("target", t) => current_target = Some(t),
                     _ => args.invalid_operand()?,
                 },
-                None => err!(TargetUnspecified)?,
+                None => Err(TargetUnspecified)?,
             },
             Op::LongPos(_, config) | Op::ShortPos(_, config) | Op::Value(config) => {
                 let target = match current_target {
                     Some(target) => target,
-                    None => match config.char_indices().filter(|a| a.1 == '.').last() {
+                    None => match config.char_indices().rfind(|a| a.1 == '.') {
                         Some((index, ..)) => config.split_at(index).0,
                         None => config,
                     },
@@ -221,7 +222,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
                         delete.push(target);
                     }
 
-                    Path::new(target).try_exists().prepend_io(|| target.into())?;
+                    Path::new(target).try_exists().context_path(target)?;
 
                     current_target.map(|_| config)
                 } else {
@@ -237,7 +238,7 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     }
 
     if compose.is_empty() {
-        err!(ErrorKind::Message("Composition targets not specified."))?
+        Err(ErrorKind::Message("Composition targets not specified."))?
     }
 
     if !delete.is_empty() {
@@ -245,9 +246,9 @@ fn engage_aggregator(args: &mut Arguments, lock: &Lock) -> Result<()> {
     }
 
     if flags.contains(TransactionFlags::LAZY_LOAD_DB) {
-        print_warning("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
-        print_warning("In future, manual intervention may be required for missing dependencies.");
-        print_warning("See `--help compose` or the pacwrap(1) man page for further information.");
+        eprintln_warn!("Database lazy-loading triggered by `-l/--lazy-load`; this feature is experimental.");
+        eprintln_warn!("In future, manual intervention may be required for missing dependencies.");
+        eprintln_warn!("See `--help compose` or the pacwrap(1) man page for further information.");
     }
 
     cache = instantiate(compose_handles(&cache, compose)?, cache, lock, &mut logger)?;

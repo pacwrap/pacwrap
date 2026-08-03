@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,17 +22,17 @@ use std::{fs::read_dir, path::Path, sync::OnceLock};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    PathContext,
     config::{
+        Permission,
+        filesystem::Permission::ReadOnly,
         permission::{
             Condition::{self, *},
             PermError::{self, *},
         },
-        Permission,
     },
+    eprintln_error,
     exec::args::ExecutionArgs,
-    Error,
-    ErrorGeneric,
-    ErrorType,
 };
 
 static GPU_DEV: OnceLock<Vec<String>> = OnceLock::new();
@@ -42,12 +42,13 @@ struct Graphics;
 
 #[typetag::serde(name = "gpu")]
 impl Permission for Graphics {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         let gpu_dev = populate_dev().map_err(|error| {
-            eprintln!("{}", ErrorType::Error(&error));
+            eprintln_error!("{error}");
+
             Fail("No graphics devices are available.".into())
         })?;
-        let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
+        let nvidia = gpu_dev.iter().any(|a| a.contains("nvidia"));
 
         if GPU_DEV.get_or_init(|| gpu_dev).is_empty() {
             Err(Fail("No graphics devices are available.".into()))?
@@ -62,10 +63,10 @@ impl Permission for Graphics {
 
     fn register(&self, args: &mut ExecutionArgs) {
         let gpu_dev = GPU_DEV.get().expect("Uninitialized device array");
-        let nvidia = !gpu_dev.iter().filter(|a| a.contains("nvidia")).collect::<Vec<_>>().is_empty();
+        let nvidia = gpu_dev.iter().any(|a| a.contains("nvidia"));
 
         if nvidia && Path::new("/sys/module/nvidia").exists() {
-            args.robind("/sys/module/nvidia", "/sys/module/nvidia")
+            args.bind(&ReadOnly, "/sys/module/nvidia", "/sys/module/nvidia")
         }
 
         for dev in gpu_dev {
@@ -78,15 +79,15 @@ impl Permission for Graphics {
     }
 }
 
-fn populate_dev() -> Result<Vec<String>, Error> {
+fn populate_dev() -> Result<Vec<String>, std::io::Error> {
     Ok(read_dir("/dev/")
-        .prepend_io(|| "/dev".into())?
+        .context_path("/dev")?
         .filter_map(|f| {
             f.map_or_else(
                 |_| None,
                 |f| {
                     let file = f.file_name();
-                    let dev = file.to_str().unwrap();
+                    let dev = file.to_str().expect("UTF-8 path");
 
                     (dev.starts_with("nvidia") || dev == "dri").then_some(format!("/dev/{}", dev))
                 },

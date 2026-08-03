@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -20,16 +20,17 @@
 use std::{os::unix::process::ExitStatusExt, process::Child};
 
 use crate::{
+    Result,
     config::{
-        global::{global, Global},
         ContainerHandle,
+        global::{Global, global},
     },
     constants::{BOLD, RESET},
-    err,
     exec::transaction_agent,
     log::Level::Info,
     sync::{
         self,
+        SyncError,
         event::summary::Summary,
         transaction::{
             SyncState,
@@ -43,12 +44,8 @@ use crate::{
             TransactionType::{self, *},
         },
         utils::erroneous_preparation,
-        SyncError,
     },
     utils::prompt::prompt,
-    Error,
-    ErrorGeneric,
-    Result,
 };
 
 enum State {
@@ -79,7 +76,7 @@ impl Transaction for Commit {
         let state = self.state.as_str();
 
         if let SyncState::NotRequired = handle.trans_ready(ag.action(), ag.flags())? {
-            handle.alpm_mut().trans_release().generic()?;
+            handle.alpm_mut().trans_release()?;
 
             return Ok(match ready_state(ag.action(), &self.state) {
                 Some(state) => state,
@@ -129,7 +126,7 @@ fn confirm(
         TransactionMode::Local => false,
     };
     let confirm = foreign || database && !create;
-    let sum = Summary::new()
+    let sum = Summary::default()
         .kind(global.config().summary(), confirm)
         .mode(handle.get_mode())
         .generate(handle.alpm());
@@ -138,7 +135,7 @@ fn confirm(
         println!("{}", sum);
 
         if ag.flags().contains(TransactionFlags::PREVIEW) {
-            handle.alpm_mut().trans_release().generic()?;
+            handle.alpm_mut().trans_release()?;
             return Ok(State::Next(next_state(ag.action(), state, false)));
         }
 
@@ -147,13 +144,13 @@ fn confirm(
             let query = format!("Proceed with {action}?");
 
             if !prompt("::", format!("{}{query}{}", *BOLD, *RESET), true)? {
-                handle.alpm_mut().trans_release().generic()?;
+                handle.alpm_mut().trans_release()?;
                 return Ok(State::Next(next_state(ag.action(), state, false)));
             }
         }
     }
 
-    handle.alpm_mut().trans_release().generic()?;
+    handle.alpm_mut().trans_release()?;
     Ok(State::Commit(sum.download()))
 }
 
@@ -191,21 +188,21 @@ fn wait_on_agent(mut agent: Child) -> Result<()> {
     match agent.wait() {
         Ok(status) => match status.code().unwrap_or(-1) {
             0 => Ok(()),
-            1 => err!(SyncError::TransactionAgentError),
-            2 | 101 => err!(SyncError::TransactionAgentFailure),
-            3 => err!(SyncError::ParameterAcquisitionFailure),
-            4 => err!(SyncError::DeserializationFailure),
-            5 => err!(SyncError::InvalidMagicNumber),
-            6 => err!(SyncError::AgentVersionMismatch),
+            1 => Err(SyncError::TransactionAgentError)?,
+            2 | 101 => Err(SyncError::TransactionAgentFailure)?,
+            3 => Err(SyncError::ParameterAcquisitionFailure)?,
+            4 => Err(SyncError::DeserializationFailure)?,
+            5 => Err(SyncError::InvalidMagicNumber)?,
+            6 => Err(SyncError::AgentVersionMismatch)?,
             _ =>
                 if let Some(code) = status.code() {
-                    err!(SyncError::TransactionFailure(format!("General agent fault: Exit code {}", code)))
+                    Err(SyncError::TransactionFailure(format!("General agent fault: Exit code {}", code)))?
                 } else if status.signal().is_some() {
-                    err!(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))
+                    Err(SyncError::TransactionFailure(format!("Agent terminated with {}", status)))?
                 } else {
-                    err!(SyncError::TransactionFailure("General agent fault".to_string()))
+                    Err(SyncError::TransactionFailure("General agent fault".to_string()))?
                 },
         },
-        Err(error) => err!(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
+        Err(error) => Err(SyncError::TransactionFailure(format!("Execution of agent failed: {}", error)))?,
     }
 }

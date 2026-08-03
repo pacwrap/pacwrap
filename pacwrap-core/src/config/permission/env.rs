@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -23,11 +23,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        permission::{Condition::Success, *},
         Permission,
+        permission::{Condition::Success, *},
     },
+    eprintln_warn,
     exec::args::ExecutionArgs,
-    utils::print_warning,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +49,7 @@ struct Var {
 
 #[typetag::serde(name = "env")]
 impl Permission for Environment {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         Ok(Some(Success))
     }
 
@@ -78,7 +78,7 @@ fn env_var(var: &String, set: &String) -> String {
     match env::var(var) {
         Ok(env) => env,
         Err(_) => {
-            print_warning(&format!("Environment variable {} is unset.", var));
+            eprintln_warn!("Environment variable {} is unset.", var);
             "".into()
         }
     }

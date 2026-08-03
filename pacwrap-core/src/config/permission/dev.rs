@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
-        permission::{Condition::Success, PermError::Fail, *},
         Permission,
+        permission::{Condition::Success, PermError::Fail, *},
     },
     exec::args::ExecutionArgs,
 };
@@ -36,7 +36,7 @@ struct Dev {
 
 #[typetag::serde(name = "dev")]
 impl Permission for Dev {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         for device in self.devices.iter() {
             if !Path::new(&format!("/dev/{}", device)).exists() {
                 Err(Fail(format!("/dev/{} is inaccessible.", device)))?

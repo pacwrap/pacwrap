@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #  pacwrap - filesystem.sh
 #
@@ -21,11 +21,10 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-if [[ ! -d "$PWD/dist/tools/" ]]; then echo "This script may only be executed via the workspace root directory."; exit 2; fi
-if [[ ! -f ./dist/tools/common.sh ]]; then echo "Common script is missing. Ensure the source tree is intact."; exit 2; fi
+set -eEo pipefail
 
 source ./dist/tools/common.sh
-ACTION_NOUN="Schema generation"
+export ACTION_NOUN="Schema generation"
 
 # 
 # Environment variables
@@ -41,7 +40,7 @@ main() {
     prepare_and_validate
     populate_usr
     populate_etc
-    create_archive $1
+    create_archive "$1"
     packaged "container schema [$1]"
 }
 
@@ -50,7 +49,7 @@ main() {
 #
 prepare_and_validate() {		
     clean
-    mkdir -p $DEST_DIR$USR_DIR $DEST_DIR$ETC_DIR $DIST_BIN
+    mkdir -p "$DEST_DIR$USR_DIR" "$DEST_DIR$ETC_DIR" "$DIST_BIN"
 
     if [[ ! -d "$DEST_DIR$LIB_DIR" ]] || [[ ! -d $DEST_DIR$BIN_DIR ]]; then
         error_fatal "'$DEST_DIR': directory not found."
@@ -76,8 +75,8 @@ clean() {
 # Populate container skeleton archive
 #
 create_archive() {
-    cd $DEST_DIR
-    tar acf ../bin/filesystem.tar.zst *
+    cd "$DEST_DIR" || exit 1
+    tar acf ../bin/filesystem.tar.zst ./*
 }
 
 #
@@ -120,13 +119,13 @@ populate_etc() {
     # Systemd cannot be started securely in an unprivileged namespace, therefore
     # disable unnecessary systemd hooks in order to speed up transaction times.
     mkdir -p "${DEST_DIR}/etc/pacman.d/hooks/" "${DEST_DIR}/usr/local/bin/"
-    for pacman_hook in ${pacman_hooks[@]}; do
+    for pacman_hook in "${pacman_hooks[@]}"; do
         ln -s /dev/null "${DEST_DIR}/etc/pacman.d/hooks/${pacman_hook}.hook"; done
 
     # Provide our own /etc/bash.bashrc	
     cp "$DIST_SRC/bash.bashrc" "$DEST_DIR$ETC_DIR"
 }
 
-main $@
+main "$@"
 
 # vim:set ts=4 sw=4 et:1

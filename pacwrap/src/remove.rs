@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,8 +20,9 @@
 use std::collections::HashMap;
 
 use pacwrap_core::{
-    config::{cache, init::init, ContainerType},
-    err,
+    ErrorKind,
+    config::{ContainerType, cache, init::init},
+    eprintln_warn,
     error::*,
     lock::Lock,
     log::Logger,
@@ -30,10 +31,12 @@ use pacwrap_core::{
         arguments::{Arguments, InvalidArgument::*, Operand as Op},
         check_root,
     },
-    ErrorKind,
 };
 
-use crate::utils::delete::remove_containers;
+use crate::{
+    help::{HelpTopic, help},
+    utils::delete::remove_containers,
+};
 
 pub fn remove(args: &mut Arguments) -> Result<()> {
     check_root()?;
@@ -49,7 +52,7 @@ pub fn remove(args: &mut Arguments) -> Result<()> {
     let result = engage_aggregator(action, args, &mut logger, &lock);
 
     if let Err(error) = lock.unlock() {
-        eprintln!("{}", ErrorType::Error(&error));
+        eprintln_warn!("{error}");
     }
 
     result
@@ -83,7 +86,7 @@ fn engage_aggregator<'a>(
     let mut current_target = None;
 
     if let Op::Nothing = args.next().unwrap_or_default() {
-        err!(OperationUnspecified)?
+        Err(OperationUnspecified)?
     }
 
     while let Some(arg) = args.next() {
@@ -101,11 +104,12 @@ fn engage_aggregator<'a>(
             Op::Long("disable-sandbox") => flags |= TransactionFlags::NO_ALPM_SANDBOX,
             Op::Short('p') | Op::Long("preview") => flags |= TransactionFlags::PREVIEW,
             Op::Short('f') | Op::Long("filesystem") => flags |= TransactionFlags::FILESYSTEM_SYNC,
+            Op::Short('h') | Op::Long("help") => return help(args, &HelpTopic::Remove),
             Op::Short('t') | Op::Long("target") => match args.next() {
                 Some(arg) => match arg {
                     Op::ShortPos('t', target) | Op::LongPos("target", target) => {
                         if let ContainerType::Symbolic = cache.get_instance(target)?.metadata().container_type() {
-                            err!(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
+                            Err(ErrorKind::Message("Symbolic containers cannot be transacted."))?;
                         }
 
                         current_target = Some(target);
@@ -113,7 +117,7 @@ fn engage_aggregator<'a>(
                     }
                     _ => args.invalid_operand()?,
                 },
-                None => err!(TargetUnspecified)?,
+                None => Err(TargetUnspecified)?,
             },
             Op::LongPos(_, package) | Op::ShortPos(_, package) | Op::Value(package) =>
                 if let Some(target) = current_target {
@@ -129,7 +133,7 @@ fn engage_aggregator<'a>(
     }
 
     if current_target.is_none() {
-        err!(TargetUnspecified)?
+        Err(TargetUnspecified)?
     }
 
     TransactionAggregator::new(&cache, log, action_type)

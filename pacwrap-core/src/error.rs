@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -18,29 +18,27 @@
  */
 
 use std::{
-    any::Any,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
+    path::Path,
     process::exit,
-    result::Result as StdResult,
 };
 
-use crate::constants::{BOLD_RED, BOLD_YELLOW, RESET};
+use thiserror::Error as ThisError;
 
-pub type Result<T> = StdResult<T, Error>;
+use crate::{
+    config::{BindError, ConfigError},
+    constants::{ARROW_RED, BOLD, RESET},
+    eprintln_error,
+    eprintln_fatal,
+    eprintln_warn,
+    exec::{ExecutionError, path::PathError},
+    lock::LockError,
+    log::LoggerError,
+    sync::{SyncError, filesystem::FilesystemSyncError},
+    utils::{arguments::InvalidArgument, bytebuffer::BufferError, table::TableError},
+};
 
-#[macro_export]
-macro_rules! err {
-    ( $x:expr ) => {
-        Err(Error::new(Box::new($x)))
-    };
-}
-
-#[macro_export]
-macro_rules! error {
-    ( $x:expr ) => {
-        Error::new(Box::new($x))
-    };
-}
+pub type Result<T> = std::result::Result<T, Error<ErrorType>>;
 
 #[macro_export]
 macro_rules! impl_error {
@@ -50,145 +48,211 @@ macro_rules! impl_error {
                 1
             }
         }
+
+        impl From<$x> for $crate::Error<$crate::ErrorType> {
+            fn from(f: $x) -> Self {
+                Self {
+                    code: f.code(),
+                    error: f.into(),
+                }
+            }
+        }
     };
 }
 
-pub trait ErrorTrait: Debug + Display + Downcast {
+macro_rules! impl_from {
+    ( $( $x:path => $y:literal),* ) => {
+        $(
+        impl From<$x> for $crate::Error<$crate::ErrorType> {
+            fn from(f: $x) -> Self {
+                Self {
+                    code: $y,
+                    error: f.into(),
+                }
+            }
+        }
+        )*
+    };
+}
+
+#[derive(ThisError, Debug)]
+pub struct Error<T> {
+    pub error: T,
+    pub code: i32,
+}
+
+pub trait ErrorExt {
+    fn fatal(&self) -> !;
+    fn error(&self) -> !;
+    fn warn(&self);
+}
+
+pub trait ErrorTrait: Debug + Display {
     fn code(&self) -> i32;
 }
 
-pub trait Downcast {
-    fn as_any(&self) -> &dyn Any;
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+#[allow(clippy::enum_variant_names)]
+pub enum ErrorType {
+    Config(#[from] ConfigError),
+    Kind(#[from] ErrorKind),
+    Bind(#[from] BindError),
+    Path(#[from] PathError),
+    Exec(#[from] ExecutionError),
+    Sync(#[from] SyncError),
+    FsSync(#[from] FilesystemSyncError),
+    Args(#[from] InvalidArgument),
+    Table(#[from] TableError),
+    Buffer(#[from] BufferError),
+    Lock(#[from] LockError),
+    Log(#[from] LoggerError),
+    Alpm(#[from] alpm::Error),
+    TimeFormat(#[from] time::error::Parse),
+    TimeParse(#[from] time::error::Format),
+    AlpmRelease(#[from] alpm::ReleaseError),
+    IoError(#[from] std::io::Error),
+    Application(#[from] anyhow::Error),
 }
 
-pub trait ErrorGeneric<R, E> {
-    fn prepend<F>(self, f: F) -> Result<R>
-    where
-        F: FnOnce() -> String;
-    fn prepend_io<F>(self, f: F) -> Result<R>
-    where
-        F: FnOnce() -> String;
-    fn generic(self) -> Result<R>;
+impl_from! {
+    anyhow::Error => 1,
+    std::io::Error => 2,
+    alpm::ReleaseError => 3,
+    alpm::Error => 3
 }
 
-#[derive(Debug)]
-pub enum ErrorType<'a> {
-    Error(&'a Error),
-    Warn(&'a Error),
-    Fatal(&'a Error),
+#[derive(ThisError, Debug)]
+pub enum ErrorKind {
+    EnvVarUnset(&'static str),
+    Message(&'static str),
+    Termios(nix::errno::Errno),
+    InstanceNotFound(String),
+    DependencyNotFound(String, String),
+    LinkerUninitialized,
+    ThreadPoolUninitialized,
+    ElevatedPrivileges,
 }
 
-#[derive(Debug)]
-struct GenericError {
-    prepend: String,
-    error: String,
-}
-
-#[derive(Debug)]
-pub struct Error {
-    kind: Box<dyn ErrorTrait>,
-}
-
-impl Error {
-    pub fn new(err: Box<dyn ErrorTrait>) -> Self {
-        Self { kind: err }
-    }
-
-    pub fn fatal(&self) -> ! {
-        eprintln!("{}", ErrorType::Fatal(self));
-        exit(self.kind.code())
-    }
-
-    pub fn error(&self) -> ! {
-        eprintln!("{}", ErrorType::Error(self));
-        exit(self.kind.code())
-    }
-
-    pub fn warn(&self) {
-        eprintln!("{}", ErrorType::Warn(self))
-    }
-
-    #[allow(clippy::borrowed_box)]
-    pub fn kind(&self) -> &Box<dyn ErrorTrait> {
-        &self.kind
-    }
-
-    pub fn downcast<T: 'static>(&self) -> StdResult<&T, &Self> {
-        match self.kind.as_any().downcast_ref::<T>() {
-            Some(inner) => Ok(inner),
-            None => Err(self),
-        }
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}", self.kind)
-    }
-}
-
-impl Display for ErrorType<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+impl Display for ErrorKind {
+    fn fmt(&self, fmter: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::Fatal(e) => write!(f, "{}fatal:{} {}", *BOLD_RED, *RESET, e.kind),
-            Self::Error(e) => write!(f, "{}error:{} {}", *BOLD_RED, *RESET, e.kind),
-            Self::Warn(e) => write!(f, "{}warning:{} {}", *BOLD_YELLOW, *RESET, e.kind),
+            Self::DependencyNotFound(dep, ins) =>
+                write!(fmter, "Instance '{}{}{}': Dependency {}{}{} not found.", *BOLD, ins, *RESET, *BOLD, dep, *RESET),
+            Self::Message(err) => write!(fmter, "{}", err),
+            Self::EnvVarUnset(var) => write!(fmter, "${}{var}{} is unset.", *BOLD, *RESET),
+            Self::InstanceNotFound(ins) => write!(fmter, "Container '{}{ins}{}' not found.", *BOLD, *RESET),
+            Self::ThreadPoolUninitialized => write!(fmter, "Threadpool uninitialized"),
+            Self::LinkerUninitialized => write!(fmter, "Filesystem synchronization structure is uninitialized."),
+            Self::Termios(errno) => write!(fmter, "Failed to restore termios parameters: {errno}."),
+            Self::ElevatedPrivileges => write!(fmter, "Execution with elevated privileges is not supported."),
+        }?;
+
+        if let Self::Message(_) = self {
+            write!(fmter, "\nTry 'pacwrap -h' for more information on valid operational parameters.")?;
         }
+
+        Ok(())
     }
 }
 
-impl<R, E> ErrorGeneric<R, E> for StdResult<R, E>
+impl_error!(ErrorKind);
+
+impl<T> Display for Error<T>
 where
-    E: Display,
+    T: Debug + std::error::Error,
 {
-    fn prepend<F>(self, f: F) -> Result<R>
-    where
-        F: FnOnce() -> String, {
-        match self {
-            Ok(f) => Ok(f),
-            Err(err) => err!(GenericError {
-                prepend: f(),
-                error: err.to_string(),
-            }),
-        }
-    }
-
-    fn prepend_io<F>(self, f: F) -> Result<R>
-    where
-        F: FnOnce() -> String, {
-        match self {
-            Ok(f) => Ok(f),
-            Err(err) => err!(GenericError {
-                prepend: format!("'{}'", f()),
-                error: err.to_string(),
-            }),
-        }
-    }
-
-    fn generic(self) -> Result<R> {
-        match self {
-            Ok(f) => Ok(f),
-            Err(err) => err!(GenericError {
-                prepend: "An error has occurred".into(),
-                error: err.to_string(),
-            }),
-        }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error)
     }
 }
 
-impl Display for GenericError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}: {}", self.prepend, self.error)
-    }
-}
-
-impl_error!(GenericError);
-
-impl<T> Downcast for T
+impl<T> From<T> for Error<T>
 where
-    T: ErrorTrait + 'static,
+    T: ErrorTrait,
 {
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn from(f: T) -> Self {
+        Self {
+            code: f.code(),
+            error: f,
+        }
+    }
+}
+
+impl ErrorExt for Error<ErrorType> {
+    fn fatal(&self) -> ! {
+        eprintln_fatal!("{}", self.error);
+        exit(self.code)
+    }
+
+    fn error(&self) -> ! {
+        eprintln_error!("{}", self.error);
+
+        if let ErrorType::Sync(ref err) = self.error {
+            match err {
+                SyncError::TransactionFailure(_) => (),
+                SyncError::SignalInterrupt => eprintln!("{} Transaction aborted.", *ARROW_RED),
+                _ => eprintln!("{} Transaction failed.", *ARROW_RED),
+            }
+        }
+
+        exit(self.code)
+    }
+
+    fn warn(&self) {
+        eprintln_warn!("{}", self.error);
+    }
+}
+
+impl<T> ErrorExt for T
+where
+    T: ErrorTrait + ?Sized,
+{
+    fn fatal(&self) -> ! {
+        eprintln_fatal!("{self}");
+        exit(self.code())
+    }
+
+    fn error(&self) -> ! {
+        eprintln_error!("{self}");
+        exit(self.code())
+    }
+
+    fn warn(&self) {
+        eprintln_warn!("{self}");
+    }
+}
+
+// Include path context with extension trait
+pub trait PathContext {
+    /// Since std library doesn't include path context, we have to add it ourselves.
+    ///
+    /// Usage:
+    /// ```
+    /// let path = "./test";
+    ///
+    /// File::open(&path).context_path(&path)?;
+    /// ```
+    ///
+    /// Reference: https://github.com/rust-lang/rfcs/issues/2885
+    ///            https://github.com/rust-lang/rfcs/issues/2885#issuecomment-2973324466
+    fn context_path<T>(self, path: T) -> Self
+    where
+        T: AsRef<Path>;
+}
+
+impl PathContext for std::io::Error {
+    fn context_path<T>(self, path: T) -> Self
+    where
+        T: AsRef<Path>, {
+        Self::new(self.kind(), format!("\"{}\": {}", path.as_ref().display(), self))
+    }
+}
+
+impl<T> PathContext for std::io::Result<T> {
+    fn context_path<U>(self, path: U) -> Self
+    where
+        U: AsRef<Path>, {
+        self.map_err(|error| error.context_path(path))
     }
 }

@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -26,20 +26,17 @@ use serde::{Deserialize, Serialize};
 
 use self::{SyncState::*, TransactionMode::*, TransactionType::*};
 use crate::{
-    config::{global, ContainerHandle, Global},
-    constants::{ARROW_CYAN, BAR_CYAN, BOLD, BOLD_GREEN, BOLD_YELLOW, RESET},
-    err,
+    config::{ContainerHandle, Global, global},
+    eprintln_warn,
     log::{Level, Logger},
     sync::{
-        resolver::DependencyResolver,
-        resolver_local::LocalDependencyResolver,
+        SyncError,
+        resolver::{Resolver, ResolverFlags, ResolverKeys, local::LocalDependencyResolver, remote::DependencyResolver},
         schema::SchemaState,
         transaction::{commit::Commit, container::Schema, prepare::Prepare, stage::Stage, uptodate::UpToDate},
         utils::AlpmUtils,
-        SyncError,
     },
-    utils::{print_warning, prompt::prompt},
-    Error,
+    utils::{ansi::*, prompt::prompt},
 };
 
 pub use self::aggregator::TransactionAggregator;
@@ -386,10 +383,15 @@ impl<'a> TransactionHandle<'a> {
             let ver = package.version();
             let ver_new = new.version();
 
-            print_warning(&format!(
+            eprintln_warn!(
                 "{}{name}{}: Ignoring package upgrade ({}{ver}{} => {}{ver_new}{})",
-                *BOLD, *RESET, *BOLD_YELLOW, *RESET, *BOLD_GREEN, *RESET
-            ));
+                *BOLD,
+                *RESET,
+                *BOLD_YELLOW,
+                *RESET,
+                *BOLD_GREEN,
+                *RESET
+            );
         }
 
         Ok(())
@@ -412,7 +414,7 @@ impl<'a> TransactionHandle<'a> {
             let forced = flags.contains(TransactionFlags::FORCE_DATABASE);
 
             if let (false, Some(upstream)) = (forced, upstream) {
-                err!(SyncError::TargetUpstream(upstream.into()))?
+                Err(SyncError::TargetUpstream(upstream.into()))?
             }
         }
 
@@ -423,11 +425,14 @@ impl<'a> TransactionHandle<'a> {
                     .copied()
                     .find(|a| !ignored.contains(*a) && alpm.get_local_package(a).is_none())
                 {
-                    err!(SyncError::TargetNotInstalled(not_installed.into()))?
+                    Err(SyncError::TargetNotInstalled(not_installed.into()))?
                 }
 
-                for pkg in LocalDependencyResolver::new(alpm, ignored, trans_type)
+                for pkg in LocalDependencyResolver::new(alpm)
+                    .set_ignored(ignored)
+                    .set_flags(trans_type)
                     .enumerate(&queue)?
+                    .packages()
                     .iter()
                     .filter(|a| !self.meta.held_pkgs.contains(a.name()))
                     .copied()
@@ -447,12 +452,13 @@ impl<'a> TransactionHandle<'a> {
             }
             Upgrade(..) => {
                 if let Some(not_available) = queue.iter().copied().find(|a| alpm.get_package(a).is_none()) {
-                    err!(SyncError::TargetNotAvailable(not_available.into()))?
+                    Err(SyncError::TargetNotAvailable(not_available.into()))?
                 }
 
-                let (deps, packages) = DependencyResolver::new(alpm, ignored).enumerate(&queue)?;
+                let resolver = DependencyResolver::new(alpm).set_ignored(ignored).enumerate(&queue)?;
 
-                for pkg in packages
+                for pkg in resolver
+                    .packages()
                     .iter()
                     .filter(|a| !self.meta.ignored_pkgs.contains(a.name()))
                     .filter_map(|a| {
@@ -475,7 +481,7 @@ impl<'a> TransactionHandle<'a> {
                     alpm.trans_add_pkg(pkg).unwrap();
                 }
 
-                self.deps = deps;
+                self.deps = resolver.keys();
             }
         }
 
@@ -517,7 +523,7 @@ impl<'a> TransactionHandle<'a> {
             Ok(NotRequired)
         } else {
             match self.state {
-                Required => err!(SyncError::NothingToDo),
+                Required => Err(SyncError::NothingToDo)?,
                 NotRequired => Ok(NotRequired),
             }
         }
@@ -555,7 +561,7 @@ impl<'a> TransactionHandle<'a> {
         self.alpm = alpm;
     }
 
-    pub fn metadata(&self) -> &TransactionMetadata {
+    pub fn metadata(&'_ self) -> &'_ TransactionMetadata<'_> {
         self.meta
     }
 }

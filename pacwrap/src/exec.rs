@@ -1,7 +1,7 @@
 /*
  * pacwrap
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,8 +18,7 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     os::unix::io::AsRawFd,
     path::Path,
     process::{Child, Command},
@@ -30,18 +29,23 @@ use std::{
 
 use command_fds::{CommandFdExt, FdMapping};
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use signal_hook::iterator::Signals;
+use thiserror::Error as ThisError;
 
 use pacwrap_core::{
+    ErrorKind,
+    PathContext,
+    Result,
     config::{
         self,
-        register::{register_dbus, register_filesystems, register_permissions},
         ContainerHandle,
         ContainerType::Slice,
         Dbus,
+        filesystem::Permission::ReadOnly,
+        register::{register_dbus, register_filesystems, register_permissions},
     },
     constants::{
         BWRAP_EXECUTABLE,
@@ -52,60 +56,43 @@ use pacwrap_core::{
         SIGNAL_LIST,
         XDG_RUNTIME_DIR,
     },
-    err,
-    error,
+    eprintln_warn,
     exec::{
+        ExecutionError,
+        ExecutionType::Interactive,
         args::{Argument, ExecutionArgs},
         fakeroot_container,
         path::check_path,
         seccomp::{configure_bpf_program, provide_bpf_program},
         utils::{decode_info_json, wait_on_container},
-        ExecutionError,
-        ExecutionType::Interactive,
     },
-    impl_error,
     utils::{
         self,
+        TermControl,
         arguments::{Arguments, InvalidArgument, Operand as Op},
         check_root,
         env_var,
-        TermControl,
     },
-    Error,
-    ErrorGeneric,
-    ErrorKind,
-    ErrorTrait,
-    Result,
 };
+
+use crate::help::{HelpTopic, help};
 
 static SOCKET_SLEEP_DURATION: Duration = Duration::from_micros(500);
 
-#[derive(Debug)]
+#[derive(ThisError, Debug)]
 enum ExecError {
+    #[error("Namespace nesting has been known in the past to enable container escape vulnerabilities.")]
     NestedNamespaceEnablement,
+    #[error("Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details.")]
     ConsoleSessionRetention,
+    #[error("Disabling seccomp filtering can allow for sandbox escape.")]
     SeccompDisablement,
-}
-
-impl_error!(ExecError);
-
-impl Display for ExecError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        match self {
-            Self::SeccompDisablement => write!(fmter, "Disabling seccomp filtering can allow for sandbox escape."),
-            Self::NestedNamespaceEnablement =>
-                write!(fmter, "Namespace nesting has been known in the past to enable container escape vulnerabilities."),
-            Self::ConsoleSessionRetention => write!(
-                fmter,
-                "Retaining a console session is known to allow for container escape. See CVE-2017-5226 for details."
-            ),
-        }
-    }
 }
 
 enum ExecParams<'a> {
     FakeRoot(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
     Container(i8, bool, Vec<&'a str>, ContainerHandle<'a>),
+    Nonce,
 }
 
 impl<'a> ExecParams<'a> {
@@ -130,6 +117,10 @@ impl<'a> ExecParams<'a> {
                 Op::Long("root") | Op::Short('r') => root = true,
                 Op::Long("shell") | Op::Short('s') => shell = true,
                 Op::Long("verbose") | Op::Short('v') => verbosity += 1,
+                Op::Long("help") | Op::Short('h') => {
+                    help(args, &HelpTopic::Execute)?;
+                    return Ok(Self::Nonce);
+                }
                 Op::LongPos(_, str) | Op::ShortPos(_, str) | Op::Value(str) =>
                     if container.is_none() {
                         container = Some(str);
@@ -141,12 +132,12 @@ impl<'a> ExecParams<'a> {
 
         let handle = match container {
             Some(container) => config::provide_handle(container)?,
-            None => err!(InvalidArgument::TargetUnspecified)?,
+            None => Err(InvalidArgument::TargetUnspecified)?,
         };
         let runtime = args.into_inner(pos);
 
         if let (Slice, false, ..) = (handle.metadata().container_type(), root, shell) {
-            err!(ErrorKind::Message("Execution in container filesystem segments is not supported."))?
+            Err(ErrorKind::Message("Execution in container filesystem segments is not supported."))?
         }
 
         check_root()?;
@@ -163,6 +154,7 @@ pub fn execute<'a>(args: &'a mut Arguments<'a>) -> Result<()> {
         ExecParams::FakeRoot(verbosity, false, args, handle) => execute_fakeroot(&handle, Some(args), verbosity),
         ExecParams::Container(verbosity, true, _, handle) => execute_container(&handle, vec!["bash"], true, verbosity),
         ExecParams::Container(verbosity, false, args, handle) => execute_container(&handle, args, false, verbosity),
+        ExecParams::Nonce => Ok(()),
     }
 }
 
@@ -179,12 +171,12 @@ fn execute_container(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, v
 
     match !cfg.enable_userns() {
         true => exec.push_env(Argument::DisableNamespaces),
-        false => error!(ExecError::NestedNamespaceEnablement).warn(),
+        false => eprintln_warn!("{}", ExecError::NestedNamespaceEnablement),
     }
 
     match !cfg.retain_session() {
         true => exec.push_env(Argument::NewSession),
-        false => error!(ExecError::ConsoleSessionRetention).warn(),
+        false => eprintln_warn!("{}", ExecError::ConsoleSessionRetention),
     }
 
     match shell && *IS_COLOR_TERMINAL {
@@ -214,7 +206,7 @@ fn execute_container(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, v
     let sec_fd = match cfg.seccomp() {
         true => provide_bpf_program(configure_bpf_program(cfg), &sec_pipe.0, sec_pipe.1).unwrap(),
         false => {
-            error!(ExecError::SeccompDisablement).warn();
+            eprintln_warn!("{}", ExecError::SeccompDisablement);
             0
         }
     };
@@ -257,22 +249,18 @@ fn execute_container(ins: &ContainerHandle, arguments: Vec<&str>, shell: bool, v
     }
 
     check_path(ins, &arguments, path_vec)?;
-
-    match proc.args(arguments).spawn() {
-        Ok(child) => wait_on_container(
-            child,
-            term_control,
-            decode_info_json(info_pipe)?,
-            *cfg.allow_forking(),
-            match !jobs.is_empty() {
-                true => Some(jobs),
-                false => None,
-            },
-            signal_trap,
-            cleanup,
-        ),
-        Err(err) => err!(ErrorKind::ProcessInitFailure(BWRAP_EXECUTABLE, err.kind())),
-    }
+    wait_on_container(
+        proc.args(arguments).spawn().context_path(BWRAP_EXECUTABLE)?,
+        term_control,
+        decode_info_json(info_pipe)?,
+        *cfg.allow_forking(),
+        match !jobs.is_empty() {
+            true => Some(jobs),
+            false => None,
+        },
+        signal_trap,
+        cleanup,
+    )
 }
 
 fn execute_fakeroot(ins: &ContainerHandle, arguments: Option<Vec<&str>>, verbosity: i8) -> Result<()> {
@@ -313,66 +301,53 @@ fn instantiate_dbus_proxy(per: &[Box<dyn Dbus>], args: &mut ExecutionArgs, verbo
     let mut dbus = Command::new(DBUS_PROXY_EXECUTABLE);
 
     register_dbus(per, args)?;
-    create_placeholder(&DBUS_SOCKET)?;
+    File::create(&*DBUS_SOCKET)?;
     dbus.arg(dbus_session).arg(&*DBUS_SOCKET);
 
     if verbosity > 1 {
         dbus.arg("--log");
     }
 
-    match dbus.arg("--filter").args(args.get_dbus()).spawn() {
-        Ok(mut child) => {
-            let mut increment: u8 = 0;
+    let mut child = dbus.arg("--filter").args(args.get_dbus()).spawn()?;
 
-            args.robind(&DBUS_SOCKET, &dbus_socket_path);
-            args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
-            args.env("DBUS_SESSION_BUS_ADDRESS", &format!("unix:path={dbus_socket_path}"));
+    let mut increment: u8 = 0;
 
-            /*
-             * This blocking code is required to prevent a downstream race condition with
-             * bubblewrap. Unless xdg-dbus-proxy is passed improper parameters, this while loop
-             * shouldn't almost ever increment more than once or twice.
-             *
-             * With a sleep duration of 500 microseconds, we check the socket 200 times before failure.
-             *
-             * ADDENDUM: Upon further examination of bubblewrap's code, it is not possible to ask bubblewrap
-             * to wait on a FD prior to instantiating the filesystem bindings.
-             */
+    args.bind(&ReadOnly, &DBUS_SOCKET, &dbus_socket_path);
+    args.symlink(&dbus_socket_path, "/run/dbus/system_bus_socket");
+    args.env("DBUS_SESSION_BUS_ADDRESS", &format!("unix:path={dbus_socket_path}"));
 
-            while !check_socket(&DBUS_SOCKET, &increment, &mut child)? {
-                increment += 1;
-            }
+    /*
+     * This blocking code is required to prevent a downstream race condition with
+     * bubblewrap. Unless xdg-dbus-proxy is passed improper parameters, this while loop
+     * shouldn't almost ever increment more than once or twice.
+     *
+     * With a sleep duration of 500 microseconds, we check the socket 200 times before failure.
+     *
+     * ADDENDUM: Upon further examination of bubblewrap's code, it is not possible to ask bubblewrap
+     * to wait on a FD prior to instantiating the filesystem bindings.
+     */
 
-            Ok(child)
-        }
-        Err(error) => err!(ErrorKind::ProcessInitFailure(DBUS_PROXY_EXECUTABLE, error.kind()))?,
+    while !check_socket(&DBUS_SOCKET, &increment, &mut child)? {
+        increment += 1;
     }
+
+    Ok(child)
 }
 
 fn check_socket(socket: &String, increment: &u8, process_child: &mut Child) -> Result<bool> {
     if increment == &200 {
         process_child.kill().ok();
-        remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
-        err!(ExecutionError::SocketTimeout(socket.into()))?
+        remove_file(&*DBUS_SOCKET)?;
+        Err(ExecutionError::SocketTimeout(socket.into()))?
     }
 
     thread::sleep(SOCKET_SLEEP_DURATION);
     Ok(utils::check_socket(socket))
 }
 
-fn create_placeholder(path: &str) -> Result<()> {
-    match File::create(path) {
-        Ok(file) => {
-            drop(file);
-            Ok(())
-        }
-        Err(error) => err!(ErrorKind::IOError(path.into(), error.kind())),
-    }
-}
-
 fn cleanup() -> Result<()> {
     if Path::new(&*DBUS_SOCKET).exists() {
-        remove_file(&*DBUS_SOCKET).prepend_io(|| DBUS_SOCKET.to_string())?;
+        remove_file(&*DBUS_SOCKET).context_path(&*DBUS_SOCKET)?;
     }
 
     Ok(())

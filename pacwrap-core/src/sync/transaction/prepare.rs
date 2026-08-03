@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -17,11 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use crate::{
+    Result,
     config::{ContainerHandle, ContainerType},
     constants::UNIX_TIMESTAMP,
-    err,
     sync::{
         self,
+        SyncError,
         schema::{self, *},
         transaction::{
             SyncState::*,
@@ -33,10 +34,7 @@ use crate::{
             TransactionState::{self, *},
             TransactionType::*,
         },
-        SyncError,
     },
-    Error,
-    Result,
 };
 
 #[derive(Debug)]
@@ -71,7 +69,7 @@ impl Transaction for Prepare {
                     for dep in deps.iter().rev() {
                         match ag.cache().get_instance_option(dep) {
                             Some(dep_handle) => handle.enumerate_package_lists(&sync::instantiate_alpm(dep_handle, ag.flags())?),
-                            None => err!(SyncError::DependentContainerMissing(dep.to_string()))?,
+                            None => Err(SyncError::DependentContainerMissing(dep.to_string()))?,
                         }
                     }
 
@@ -87,10 +85,10 @@ impl Transaction for Prepare {
 
                 if let Upgrade(upgrade, ..) = action {
                     if !upgrade && handle.meta.queue.is_empty() {
-                        err!(SyncError::NothingToDo)?
+                        Err(SyncError::NothingToDo)?
                     }
                 } else if handle.meta.queue.is_empty() {
-                    err!(SyncError::NothingToDo)?
+                    Err(SyncError::NothingToDo)?
                 }
 
                 if handle.meta.queue.is_empty() {

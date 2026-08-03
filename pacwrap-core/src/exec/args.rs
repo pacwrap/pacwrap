@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -19,6 +19,8 @@
 
 use std::fmt::{Debug, Formatter};
 
+use crate::config::filesystem::Permission;
+
 #[derive(Debug)]
 pub enum Argument {
     Directory(String),
@@ -27,13 +29,13 @@ pub enum Argument {
     EnvVar(String, String),
     SymbolicLink(String, String),
     Device(String),
+    TmpFs(String),
     DevFs,
     DieWithParent,
     DisableNamespaces,
     HostNetworking,
     ProcFs,
     NewSession,
-    TmpFs,
     UnshareAll,
 }
 
@@ -48,6 +50,7 @@ impl Argument {
     fn to_vec(&self) -> Vec<&str> {
         match self {
             Self::Directory(val) => vec!["--dir", val],
+            Self::TmpFs(val) => vec!["--tmpfs", val],
             Self::Bind(src, dest) => vec!["--bind", src, dest],
             Self::RoBind(src, dest) => vec!["--ro-bind", src, dest],
             Self::SymbolicLink(src, dest) => vec!["--symlink", src, dest],
@@ -59,7 +62,6 @@ impl Argument {
             Self::HostNetworking => vec!["--share-net"],
             Self::ProcFs => vec!["--proc", "/proc"],
             Self::NewSession => vec!["--new-session"],
-            Self::TmpFs => vec!["--tmpfs", "/tmp"],
             Self::UnshareAll => vec!["--unshare-all"],
         }
     }
@@ -75,22 +77,25 @@ impl ExecutionArgs {
     pub fn new() -> Self {
         Self {
             dbus: Vec::new(),
-            bind: vec![Argument::TmpFs],
+            bind: vec![Argument::TmpFs("/tmp".into())],
             sys: vec![Argument::DevFs, Argument::ProcFs],
             env: vec![Argument::UnshareAll],
         }
+    }
+
+    pub fn tmp(&mut self, dest: &str) {
+        self.bind.push(Argument::TmpFs(dest.into()));
     }
 
     pub fn dir(&mut self, dest: &str) {
         self.bind.push(Argument::Directory(dest.into()));
     }
 
-    pub fn bind(&mut self, src: &str, dest: &str) {
-        self.bind.push(Argument::Bind(src.into(), dest.into()));
-    }
-
-    pub fn robind(&mut self, src: &str, dest: &str) {
-        self.bind.push(Argument::RoBind(src.into(), dest.into()));
+    pub fn bind(&mut self, permission: &Permission, src: &str, dest: &str) {
+        match permission {
+            Permission::ReadOnly => self.bind.push(Argument::RoBind(src.into(), dest.into())),
+            Permission::ReadWrite => self.bind.push(Argument::Bind(src.into(), dest.into())),
+        }
     }
 
     pub fn symlink(&mut self, src: &str, dest: &str) {
@@ -152,5 +157,123 @@ impl Debug for ExecutionArgs {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ExecutionArgs;
+    use crate::config::filesystem::Permission::*;
+
+    #[test]
+    fn bind() {
+        let mut args = ExecutionArgs::default();
+
+        args.bind(&ReadOnly, "/test", "/");
+        args.bind(&ReadWrite, "/test/dir", "/test");
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--ro-bind",
+                "/test",
+                "/",
+                "--bind",
+                "/test/dir",
+                "/test",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--unshare-all"
+            ]
+        );
+    }
+
+    #[test]
+    fn env() {
+        let mut args = ExecutionArgs::default();
+
+        args.env("KEY", "VALUE");
+
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--unshare-all",
+                "--setenv",
+                "KEY",
+                "VALUE"
+            ]
+        );
+    }
+
+    #[test]
+    fn dev() {
+        let mut args = ExecutionArgs::default();
+
+        args.dev("/dev/nvidiactl");
+
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--dev-bind-try",
+                "/dev/nvidiactl",
+                "/dev/nvidiactl",
+                "--unshare-all"
+            ]
+        );
+    }
+
+    #[test]
+    fn dbus() {
+        let mut args = ExecutionArgs::default();
+
+        args.dbus("TALK", "org.test.socket");
+
+        assert_eq!(args.get_dbus(), ["--TALK=org.test.socket"]);
+    }
+
+    #[test]
+    fn symlink() {
+        let mut args = ExecutionArgs::default();
+
+        args.symlink("/test-src", "/test-dest");
+
+        assert_eq!(
+            args.arguments(),
+            [
+                "--tmpfs",
+                "/tmp",
+                "--symlink",
+                "/test-src",
+                "/test-dest",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--unshare-all"
+            ]
+        );
+    }
+
+    #[test]
+    fn default() {
+        assert_eq!(
+            ExecutionArgs::default().arguments(),
+            ["--tmpfs", "/tmp", "--dev", "/dev", "--proc", "/proc", "--unshare-all"]
+        );
     }
 }

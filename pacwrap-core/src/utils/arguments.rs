@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -23,9 +23,11 @@ use std::{
     ops::Index,
 };
 
-use crate::{err, error::*, impl_error};
+use thiserror::Error;
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+use crate::{error::*, impl_error};
+
+#[derive(Default, PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Operand<'a> {
     Short(char),
     ShortPos(char, &'a str),
@@ -33,6 +35,7 @@ pub enum Operand<'a> {
     LongPos(&'a str, &'a str),
     Value(&'a str),
     ShortEmpty,
+    #[default]
     Nothing,
 }
 
@@ -44,7 +47,7 @@ pub struct Arguments<'a> {
     cur: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Error, Debug, Clone)]
 pub enum InvalidArgument {
     InvalidOperand(String),
     UnsuppliedOperand(&'static str, &'static str),
@@ -125,7 +128,7 @@ impl<'a> Arguments<'a> {
             }
         }
 
-        err!(InvalidArgument::TargetUnspecified)
+        Err(InvalidArgument::TargetUnspecified)?
     }
 
     pub fn set_index(&mut self, index: usize) {
@@ -135,8 +138,8 @@ impl<'a> Arguments<'a> {
 
     pub fn invalid_operand(&self) -> Result<()> {
         match self.operands.get(self.cur) {
-            Some(oper) => err!(InvalidArgument::InvalidOperand(oper.to_string())),
-            None => err!(InvalidArgument::OperationUnspecified),
+            Some(oper) => Err(InvalidArgument::InvalidOperand(oper.to_string()))?,
+            None => Err(InvalidArgument::OperationUnspecified)?,
         }
     }
 
@@ -198,11 +201,5 @@ impl Display for Operand<'_> {
 impl Default for &Operand<'_> {
     fn default() -> Self {
         &Operand::Nothing
-    }
-}
-
-impl Default for Operand<'_> {
-    fn default() -> Self {
-        Self::Nothing
     }
 }

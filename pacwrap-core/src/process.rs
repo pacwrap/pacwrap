@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,12 +22,12 @@ use std::{
     error::Error as StdError,
     ffi::OsString,
     fmt::Write,
-    fs::{read_dir, DirEntry, File},
+    fs::{DirEntry, File, read_dir},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
     result::Result as StdResult,
 };
 
-use crate::{config::ContainerCache, constants::CONTAINER_DIR, utils::print_warning, ErrorGeneric, Result};
+use crate::{PathContext, Result, config::ContainerCache, constants::CONTAINER_DIR, eprintln_warn};
 use indexmap::IndexMap;
 
 pub struct ProcessList {
@@ -101,7 +101,7 @@ impl Process {
     }
 
     pub fn exec(&self) -> &str {
-        match self.cmd[0].char_indices().filter(|c| c.1 == '/').last() {
+        match self.cmd[0].char_indices().rfind(|c| c.1 == '/') {
             Some((index, ..)) => self.cmd[0].split_at(index + 1).1,
             None => &self.cmd[0],
         }
@@ -197,7 +197,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList> {
             Some(vec) => vec.push(pid),
             None => {
                 if cache.get_instance_option(&ins).is_none() {
-                    print_warning(&format!("Container {ins} doesn't exist."));
+                    eprintln_warn!("Container {ins} doesn't exist.");
                 }
 
                 groups.insert(ins.clone(), vec![pid]);
@@ -212,7 +212,7 @@ pub fn list<'a>(cache: &'a ContainerCache<'a>) -> Result<ProcessList> {
 
 fn procfs() -> Result<Vec<(i32, u64)>> {
     Ok(read_dir("/proc/")
-        .prepend_io(|| "/proc/".into())?
+        .context_path("/proc/")?
         .filter_map(StdResult::ok)
         .filter_map(|s| procfs_meta(s).unwrap_or(None))
         .filter_map(|(name, mtime)| {

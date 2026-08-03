@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,40 +22,31 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    ErrorExt,
+    Result,
     config::{load_config, save},
     constants::CONFIG_FILE,
     sync::event::summary::SummaryKind,
-    Result,
 };
 
 static CONFIG: OnceLock<Global> = OnceLock::new();
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub enum Verbosity {
     None,
     Basic,
+    #[default]
     Verbose,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub enum ProgressKind {
     Simple,
     Condensed,
+    #[default]
     CondensedForeign,
     CondensedLocal,
     Verbose,
-}
-
-impl Default for Verbosity {
-    fn default() -> Self {
-        Self::Verbose
-    }
-}
-
-impl Default for ProgressKind {
-    fn default() -> Self {
-        Self::CondensedForeign
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -150,7 +141,7 @@ impl AlpmConfiguration {
     }
 
     pub fn sig_level(&self) -> Vec<String> {
-        self.sig_level.split(" ").map(|a| a.into()).collect()
+        self.sig_level.split_whitespace().map(|a| a.into()).collect()
     }
 
     pub fn download_timeout(&self) -> bool {
@@ -210,9 +201,9 @@ pub fn global() -> Result<&'static Global> {
         Some(f) => f,
         None => {
             let cfg = match load_config() {
-                Ok(config) => Ok(config),
-                Err(error) => error.fatal(),
-            }?;
+                Ok(cfg) => cfg,
+                Err(err) => err.error(),
+            };
 
             CONFIG.get_or_init(|| cfg)
         }

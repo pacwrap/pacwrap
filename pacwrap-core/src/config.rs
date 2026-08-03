@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -18,20 +18,19 @@
  */
 
 use std::{
-    fmt::{Display, Formatter},
     fs::File,
     io::{ErrorKind::NotFound, Write},
     path::Path,
 };
 
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::{
+    ErrorKind,
     constants::{BOLD, CONFIG_FILE, RESET},
-    err,
     error::*,
     impl_error,
-    ErrorKind,
 };
 
 pub use self::{
@@ -39,7 +38,7 @@ pub use self::{
     container::{Container, ContainerHandle, ContainerType},
     dbus::Dbus,
     filesystem::{BindError, Filesystem},
-    global::{global, Global},
+    global::{Global, global},
     permission::{PermError, Permission},
     vars::ContainerVariables,
 };
@@ -54,36 +53,31 @@ pub mod permission;
 pub mod register;
 pub mod vars;
 
-#[derive(Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum ConfigError {
+    #[error("Failed to register filesystem module '{0}': {1}'")]
     Permission(&'static str, PermError),
+    #[error("Failed to register permission module '{0}': {1}")]
     Filesystem(&'static str, BindError),
+    #[error("Failed to save '{0}': {1}")]
     Save(String, String),
+    #[error("Failed to load '{0}': {1}")]
     Load(String, String),
+    #[error("Container '{bold}{0}{reset}' already exists.", bold=*BOLD, reset=*RESET)]
     AlreadyExists(String),
-    ConfigNotFound(String),
+    #[error("Configuration not found: {0}")]
+    ConfigNotFound(std::io::Error),
+    #[error("Internal error: {0}")]
+    InternalError(String),
 }
 
 impl_error!(ConfigError);
 
-impl Display for ConfigError {
-    fn fmt(&self, fmter: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        match self {
-            Self::Filesystem(module, err) => write!(fmter, "Failed to register filesystem '{}': {} ", module, err),
-            Self::Permission(module, err) => write!(fmter, "Failed to register permission '{}': {} ", module, err),
-            Self::Load(ins, error) => write!(fmter, "Failed to load '{ins}': {error}"),
-            Self::Save(ins, error) => write!(fmter, "Failed to save '{ins}': {error}"),
-            Self::AlreadyExists(ins) => write!(fmter, "Container '{}{ins}{}' already exists.", *BOLD, *RESET),
-            Self::ConfigNotFound(path) => write!(fmter, "'{path}': Configuration not found."),
-        }
-    }
-}
-
-pub fn provide_handle(instance: &str) -> Result<ContainerHandle> {
+pub fn provide_handle<'a>(instance: &str) -> Result<ContainerHandle<'a>> {
     let vars = ContainerVariables::new(instance);
 
     if !Path::new(vars.root()).exists() {
-        err!(ErrorKind::InstanceNotFound(instance.into()))?
+        Err(ErrorKind::InstanceNotFound(instance.into()))?
     }
 
     handle(vars)
@@ -96,7 +90,7 @@ pub fn compose_handle<'a>(instance: &'a str, path: Option<&'a str>) -> Result<Co
     };
 
     if Path::new(vars.root()).exists() {
-        err!(ConfigError::AlreadyExists(instance.into()))?
+        Err(ConfigError::AlreadyExists(instance.into()))?
     }
 
     Ok(handle(vars)?.stamp().create())
@@ -109,7 +103,7 @@ pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: V
             Ok(handle.create())
         }
         Err(err) => {
-            if let Ok(ConfigError::ConfigNotFound(..)) = err.downcast::<ConfigError>() {
+            if let ErrorType::Config(ConfigError::ConfigNotFound(..)) = err.error {
                 let cfg = Container::new(instype, deps, vec![]);
                 let vars = ContainerVariables::new(instance);
 
@@ -122,36 +116,30 @@ pub fn provide_new_handle<'a>(instance: &'a str, instype: ContainerType, deps: V
 }
 
 fn save<T: Serialize>(obj: &T, path: &str) -> Result<()> {
-    let mut f = File::create(path).prepend_io(|| path.into())?;
-    let config = match serde_yaml::to_string(&obj) {
-        Ok(file) => file,
-        Err(error) => err!(ConfigError::Save(path.into(), error.to_string()))?,
-    };
+    let mut f = File::create(path).context_path(path)?;
+    let config = serde_yaml::to_string(&obj).map_err(|err| ConfigError::Save(path.into(), err.to_string()))?;
 
-    write!(f, "{}", config).prepend_io(|| path.into())
+    Ok(write!(f, "{}", config)?)
 }
 
 #[inline]
 fn handle<'a>(vars: ContainerVariables) -> Result<ContainerHandle<'a>> {
-    match File::open(vars.config_path()) {
-        Ok(file) => {
-            let config = match serde_yaml::from_reader(&file) {
-                Ok(file) => file,
-                Err(error) => err!(ConfigError::Load(vars.instance().into(), error.to_string()))?,
-            };
+    let file = File::open(vars.config_path()).context_path(vars.config_path());
+    let file = match file {
+        Ok(file) => file,
+        Err(err) =>
+            if let NotFound = err.kind() {
+                Err(ConfigError::ConfigNotFound(err))?
+            } else {
+                Err(err)?
+            },
+    };
+    let config = serde_yaml::from_reader(&file).map_err(|err| ConfigError::Load(vars.instance().into(), err.to_string()))?;
 
-            Ok(ContainerHandle::new(config, vars))
-        }
-        Err(error) => match error.kind() {
-            NotFound => err!(ConfigError::ConfigNotFound(vars.config_path().into()))?,
-            _ => err!(ErrorKind::IOError(vars.config_path().into(), error.kind()))?,
-        },
-    }
+    Ok(ContainerHandle::new(config, vars))
 }
 
 fn load_config() -> Result<Global> {
-    match serde_yaml::from_reader(File::open(*CONFIG_FILE).prepend_io(|| CONFIG_FILE.to_string())?) {
-        Ok(file) => Ok(file),
-        Err(error) => err!(ConfigError::Load(CONFIG_FILE.to_string(), error.to_string()))?,
-    }
+    Ok(serde_yaml::from_reader(File::open(*CONFIG_FILE).context_path(*CONFIG_FILE)?)
+        .map_err(|err| ConfigError::Load(CONFIG_FILE.to_string(), err.to_string()))?)
 }

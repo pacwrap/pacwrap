@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -23,12 +23,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{
+        Permission,
+        filesystem::Permission::ReadOnly,
         permission::{
             Condition::{Success, SuccessWarn},
             PermError::Fail,
             *,
         },
-        Permission,
     },
     constants::{WAYLAND_DISPLAY, WAYLAND_SOCKET, X11_DISPLAY, XAUTHORITY, XDG_RUNTIME_DIR},
     exec::args::ExecutionArgs,
@@ -40,7 +41,7 @@ struct Display;
 
 #[typetag::serde(name = "display")]
 impl Permission for Display {
-    fn check(&self) -> Result<Option<Condition>, PermError> {
+    fn qualify(&self) -> Result<Option<Condition>, PermError> {
         let (wayland, xorg) = (validate_wayland_socket()?, validate_xorg_socket()?);
 
         if wayland.is_some() {
@@ -92,14 +93,6 @@ fn validate_xorg_socket() -> Result<Option<Condition>, PermError> {
         Err(Fail(format!("Expected value with colon delimiter: `DISPLAY={}`.", *X11_DISPLAY)))?
     }
 
-    if XAUTHORITY.is_empty() {
-        Err(Fail("XAUTHORITY environment variable unspecified.".into()))?
-    }
-
-    if !Path::new(*XAUTHORITY).exists() {
-        Err(Fail(format!("Xauthority file '{}' not found.", *XAUTHORITY)))?
-    }
-
     let display: Vec<&str> = X11_DISPLAY.split(":").collect();
     let xorg_socket = format!("/tmp/.X11-unix/X{}", display[1]);
 
@@ -122,7 +115,7 @@ fn configure_wayland(args: &mut ExecutionArgs) {
     let wayland_socket = format!("{}/wayland-0", *XDG_RUNTIME_DIR);
 
     args.env("WAYLAND_DISPLAY", "wayland-0");
-    args.robind(&WAYLAND_SOCKET, &wayland_socket);
+    args.bind(&ReadOnly, &WAYLAND_SOCKET, &wayland_socket);
 }
 
 fn configure_xorg(args: &mut ExecutionArgs) {
@@ -131,10 +124,13 @@ fn configure_xorg(args: &mut ExecutionArgs) {
     let container_xauth = format!("{}/Xauthority", *XDG_RUNTIME_DIR);
 
     args.env("DISPLAY", *X11_DISPLAY);
-    args.env("XAUTHORITY", &container_xauth);
-    args.robind(*XAUTHORITY, &container_xauth);
+
+    if Path::new(*XAUTHORITY).exists() {
+        args.env("XAUTHORITY", &container_xauth);
+        args.bind(&ReadOnly, *XAUTHORITY, &container_xauth);
+    }
 
     if display[0].is_empty() || display[0] == "unix" {
-        args.robind(&xorg_socket, &xorg_socket);
+        args.bind(&ReadOnly, &xorg_socket, &xorg_socket);
     }
 }

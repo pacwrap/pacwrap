@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -22,27 +22,29 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Result,
     config::{
-        filesystem::{BindError, Filesystem},
         ContainerVariables,
+        filesystem::{BindError, Filesystem, Permission::ReadWrite},
     },
     exec::args::ExecutionArgs,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Home;
 
 #[typetag::serde(name = "home")]
 impl Filesystem for Home {
-    fn check(&self, vars: &ContainerVariables) -> Result<(), BindError> {
+    fn qualify(&self, vars: &ContainerVariables) -> Result<()> {
         if !Path::new(vars.home()).exists() {
             Err(BindError::Fail("Specified home directory not found.".into()))?
         }
+
         Ok(())
     }
 
     fn register(&self, args: &mut ExecutionArgs, vars: &ContainerVariables) {
-        args.bind(vars.home(), vars.home_mount());
+        args.bind(&ReadWrite, vars.home(), vars.home_mount());
         args.env("HOME", vars.home_mount());
         args.env("USER", vars.user());
     }

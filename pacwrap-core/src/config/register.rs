@@ -1,7 +1,7 @@
 /*
  * pacwrap-core
  *
- * Copyright (C) 2023-2024 Xavier Moffett <sapphirus@azorium.net>
+ * Copyright (C) 2023-2026 Xavier Moffett <sapphirus@azorium.net>
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * This library is free software: you can redistribute it and/or modify
@@ -19,28 +19,29 @@
 
 use crate::{
     config::{
-        filesystem::{BindError, Filesystem},
-        permission::*,
         ConfigError,
         ContainerVariables,
         Dbus,
         Permission,
+        filesystem::{BindError, Filesystem},
+        permission::*,
     },
-    err,
-    error,
+    eprintln_warn,
     error::*,
     exec::args::ExecutionArgs,
-    utils::print_warning,
 };
 
-pub fn register_filesystems(per: &[Box<dyn Filesystem>], vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
-    for p in per.iter() {
-        match p.check(vars) {
-            Ok(_) => p.register(args, vars),
-            Err(condition) => match condition {
-                BindError::Warn(_) => error!(ConfigError::Filesystem(p.module(), condition)).warn(),
-                BindError::Fail(_) => err!(ConfigError::Filesystem(p.module(), condition))?,
-            },
+pub fn register_filesystems(per: &Vec<Box<dyn Filesystem>>, vars: &ContainerVariables, args: &mut ExecutionArgs) -> Result<()> {
+    for filesystem in per {
+        match filesystem.qualify(vars) {
+            Ok(_) => filesystem.register(args, vars),
+            Err(condition) =>
+                if let ErrorType::Bind(condition) = condition.error {
+                    match condition {
+                        BindError::Warn(_) => ConfigError::Filesystem(filesystem.module(), condition).warn(),
+                        BindError::Fail(_) => Err(ConfigError::Filesystem(filesystem.module(), condition))?,
+                    }
+                },
         }
     }
 
@@ -49,20 +50,20 @@ pub fn register_filesystems(per: &[Box<dyn Filesystem>], vars: &ContainerVariabl
 
 pub fn register_permissions(per: &[Box<dyn Permission>], args: &mut ExecutionArgs) -> Result<()> {
     for p in per.iter() {
-        match p.check() {
+        match p.qualify() {
             Ok(condition) => match condition {
                 Some(b) => {
                     p.register(args);
 
                     if let Condition::SuccessWarn(warning) = b {
-                        print_warning(&format!("{}: {} ", p.module(), warning));
+                        eprintln_warn!("{}: {} ", p.module(), warning);
                     }
                 }
                 None => continue,
             },
             Err(condition) => match condition {
-                PermError::Warn(_) => error!(ConfigError::Permission(p.module(), condition)).warn(),
-                PermError::Fail(_) => err!(ConfigError::Permission(p.module(), condition))?,
+                PermError::Warn(_) => ConfigError::Permission(p.module(), condition).warn(),
+                PermError::Fail(_) => Err(ConfigError::Permission(p.module(), condition))?,
             },
         }
     }
